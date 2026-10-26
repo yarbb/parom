@@ -325,6 +325,25 @@ def trust_tests(exe, server, password):
     print("  trust store tests passed")
 
 
+def pace_test(exe, server, password):
+    """pace_ms spaces a session's commands out for rate-limited hosts."""
+    d = Daemon(exe)
+    d.error("session.open", dict(server, password=password, pace_ms=-1), -32602)
+    sid = d.ok("session.open", dict(server, password=password, pace_ms=500))["session"]
+    d.ok("remote.list", {"session": sid})
+    start = time.monotonic()
+    first = d.send("remote.list", {"session": sid})
+    second = d.send("remote.list", {"session": sid})
+    assert "result" in d.wait_response(first)
+    assert "result" in d.wait_response(second)
+    elapsed = time.monotonic() - start
+    print(f"  two paced listings took {elapsed:.2f}s")
+    assert elapsed >= 0.9, elapsed  # each waits 500 ms after the previous command
+    d.ok("session.close", {"session": sid})
+    d.ok("daemon.shutdown")
+    d.proc.wait(timeout=15)
+
+
 def main():
     # Test output includes non-ASCII names; the CI console is not UTF-8 by default.
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -395,6 +414,7 @@ def main():
     d.ok("daemon.shutdown")
     assert d.proc.wait(timeout=15) == 0
     trust_tests(args.exe, server, args.password)
+    pace_test(args.exe, server, args.password)
     print("all daemon RPC tests passed")
 
 

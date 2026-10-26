@@ -360,6 +360,12 @@ struct Session
 	std::map<int, std::unique_ptr<CAsyncRequestNotification>> requests;
 	/// Certificates the user trusted in this session, by leaf fingerprint.
 	std::set<std::string> trusted_certs;
+	/// Minimum time between the end of one command and the start of the next,
+	/// for hosts that rate-limit requests ("pace_ms" in session.open).
+	std::chrono::milliseconds pace{0};
+	std::chrono::steady_clock::time_point last_done{};
+	/// A paced command is waiting for its turn.
+	bool waiting{};
 
 	// Last member: destroyed first, before the state its callback relies on.
 	std::unique_ptr<CFileZillaEngine> engine;
@@ -712,6 +718,10 @@ private:
 			credentials.SetPass(wide(get_string(params, "password", "")));
 		}
 
+		auto const pace = get_int(params, "pace_ms", 0);
+		if (pace < 0 || pace > 10000) {
+			throw RpcError{invalid_params, "pace_ms must be between 0 and 10000"};
+		}
 		auto const timeout = get_int(params, "timeout", 0);
 		if (timeout > 0) {
 			// Engine-wide setting; the last session to set it wins.
@@ -721,6 +731,7 @@ private:
 		int const sid = next_session_++;
 		auto s = std::make_unique<Session>();
 		s->id = sid;
+		s->pace = std::chrono::milliseconds(pace);
 		s->engine = std::make_unique<CFileZillaEngine>(context_, [this, sid](CFileZillaEngine*) {
 			post([this, sid] { drain(sid); });
 		});
@@ -910,7 +921,26 @@ private:
 
 	void start_next(Session& s)
 	{
-		while (!s.running && !s.current && !s.queue.empty()) {
+		while (!s.running && !s.current && !s.waiting && !s.queue.empty()) {
+			if (s.pace.count() > 0) {
+				auto const due = s.last_done + s.pace;
+				auto const now = std::chrono::steady_clock::now();
+				if (now < due) {
+					s.waiting = true;
+					int const sid = s.id;
+					std::thread([this, sid, wait = due - now] {
+						std::this_thread::sleep_for(wait);
+						post([this, sid] {
+							auto it = sessions_.find(sid);
+							if (it != sessions_.end()) {
+								it->second->waiting = false;
+								start_next(*it->second);
+							}
+						});
+					}).detach();
+					return;
+				}
+			}
 			s.current = std::move(s.queue.front());
 			s.queue.pop_front();
 			if (s.current->before) {
@@ -930,6 +960,7 @@ private:
 	// Answers the current command. Returns true if the session is being closed.
 	bool finish(Session& s, int reply)
 	{
+		s.last_done = std::chrono::steady_clock::now();
 		Pending p = std::move(*s.current);
 		s.current.reset();
 		s.running = false;

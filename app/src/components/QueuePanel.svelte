@@ -8,19 +8,38 @@
   let skipped = $derived(connection.transfers.filter((x) => x.skipped).length);
 
   const percent = (offset: number, total: number) => (total > 0 ? Math.min(100, Math.round((offset / total) * 100)) : 0);
+
+  // Follow new rows while the list is scrolled to the bottom; leave it alone
+  // when the user scrolled up to look at something.
+  let rows: HTMLDivElement;
+  let pinned = true;
+
+  function onscroll() {
+    pinned = rows.scrollTop + rows.clientHeight >= rows.scrollHeight - 4;
+  }
+
+  $effect(() => {
+    void connection.transfers.length;
+    if (pinned && rows) {
+      rows.scrollTop = rows.scrollHeight;
+    }
+  });
 </script>
 
 <section class="queue">
   <div class="section-label head">
     <span>{t('queue.header', { queued: running, failed, succeeded: done })}{skipped ? ` · ${t('queue.skipped_count', { count: skipped })}` : ''}</span>
     <span class="buttons">
-      <button class="control small" disabled={running === 0} onclick={() => connection.cancelAll()}>{t('queue.cancel_all')}</button>
+      <button class="control small" disabled={running === 0 && connection.walks === 0} onclick={() => connection.cancelAll()}>{t('queue.cancel_all')}</button>
       <button class="control small" disabled={running === connection.transfers.length} onclick={() => connection.clearFinished()}>
         {t('queue.clear')}
       </button>
     </span>
   </div>
-  <div class="rows">
+  {#if connection.walks}
+    <div class="scanning mono muted">{t('queue.scanning', { count: connection.scanned })}</div>
+  {/if}
+  <div class="rows" bind:this={rows} {onscroll}>
     {#each connection.transfers as tr (tr.id)}
       {@const pct = percent(tr.offset, tr.total)}
       <div class="row">
@@ -56,6 +75,13 @@
     display: flex;
     flex-direction: column;
     border-top: 1px solid var(--line);
+  }
+
+  .scanning {
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--line-row);
+    font-size: 11.5px;
+    flex: none;
   }
 
   .rows {

@@ -88,6 +88,12 @@ class Connection {
   message = $state<{ level: string; text: string } | null>(null);
   /** Recent engine log lines (not reactive; for a log panel later). */
   log: { time: number; level: string; text: string }[] = [];
+  /** Folder uploads or downloads still walking their tree. */
+  walks = $state(0);
+  /** Files found by the folder walks in progress. */
+  scanned = $state(0);
+  /** Bumped by "Cancel all" so folder walks in progress stop. */
+  #abort = 0;
   /** "File exists" answer chosen with "apply to all"; cleared when the queue drains. */
   existsAll = $state<string | null>(null);
 
@@ -217,6 +223,7 @@ class Connection {
       host: site.host.trim(),
       port: site.port,
       timeout: site.timeout ?? prefs.value.connectTimeout,
+      pace_ms: site.pace ?? 0,
     };
     if (site.logon !== 'anonymous') {
       params.user = site.user;
@@ -361,7 +368,7 @@ class Connection {
       tr.state = isCanceled(e) ? 'canceled' : 'failed';
       tr.error = describeError(e);
     }
-    if (!this.transfers.some((x) => x.state === 'running')) {
+    if (!this.transfers.some((x) => x.state === 'running') && this.walks === 0) {
       this.existsAll = null;
     }
     this.onTransferDone?.(tr);
@@ -389,8 +396,9 @@ class Connection {
     }
   }
 
-  /** Cancels everything still running, newest first so nothing new starts meanwhile. */
+  /** Cancels everything still running, newest first so nothing new starts meanwhile, and stops folder walks. */
   async cancelAll(): Promise<void> {
+    this.#abort++;
     const running = this.transfers.filter((x) => x.state === 'running').reverse();
     for (const tr of running) {
       await this.cancel(tr);
@@ -418,19 +426,33 @@ class Connection {
     if (session === null) {
       return;
     }
-    let tree: { dirs: string[]; files: string[] };
+    const gen = this.#abort;
+    this.walks++;
+    let rows: { rel: string; row: Transfer }[] = [];
+    const root = remoteJoin(remotePath, name);
     try {
-      tree = await localWalk(localDir);
+      const tree = await localWalk(localDir);
+      if (gen !== this.#abort) {
+        return;
+      }
+      // Every file is in the queue before anything moves, so the count is final.
+      rows = tree.files.map((rel) => ({ rel, row: this.#addRow(false, `${name}/${rel}`) }));
+      for (const dir of [root, ...tree.dirs.map((d) => remoteJoin(root, d))]) {
+        if (gen !== this.#abort) {
+          break;
+        }
+        // Existing folders make mkdir fail; that is fine.
+        await call('remote.mkdir', { session, path: dir }).catch(() => {});
+      }
     } catch (e) {
       this.remoteError = String(e);
       return;
+    } finally {
+      this.#walkDone();
     }
-    const root = remoteJoin(remotePath, name);
-    // Show every file in the queue right away; creating the folders can take a while.
-    const rows = tree.files.map((rel) => ({ rel, row: this.#addRow(false, `${name}/${rel}`) }));
-    for (const dir of [root, ...tree.dirs.map((d) => remoteJoin(root, d))]) {
-      // Existing folders make mkdir fail; that is fine.
-      await call('remote.mkdir', { session, path: dir }).catch(() => {});
+    if (gen !== this.#abort) {
+      rows.forEach(({ row }) => (row.state = 'canceled'));
+      return;
     }
     const toLocal = (rel: string) => localJoin(localDir, rel.split('/').join(separator), separator);
     await Promise.all(
@@ -442,43 +464,60 @@ class Connection {
     );
   }
 
-  /** Downloads a remote folder into `localDir`, walking it breadth first. */
+  /**
+   * Downloads a remote folder into `localDir`. The whole tree is listed first
+   * (the queue header shows the count growing), then every file is queued at
+   * once, so the queue's total is right from the first transfer.
+   */
   async downloadFolder(remotePath: string, name: string, localDir: string, separator: string): Promise<void> {
     const session = this.session;
     if (session === null) {
       return;
     }
-    const jobs: Promise<unknown>[] = [];
+    const gen = this.#abort;
+    this.walks++;
+    const files: { remote: string; name: string; local: string; rel: string }[] = [];
     const pending: { remote: string; local: string; rel: string }[] = [
       { remote: remoteJoin(remotePath, name), local: localJoin(localDir, name, separator), rel: name },
     ];
-    while (pending.length) {
-      const dir = pending.shift()!;
-      try {
-        await localMkdir(dir.local);
-        const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session, path: dir.remote });
-        for (const e of res.entries) {
-          if (e.link && e.dir) {
-            continue; // Do not follow links to folders: they can loop.
+    try {
+      while (pending.length && gen === this.#abort) {
+        const dir = pending.shift()!;
+        try {
+          await localMkdir(dir.local);
+          const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session, path: dir.remote });
+          for (const e of res.entries) {
+            if (e.link && e.dir) {
+              continue; // Do not follow links to folders: they can loop.
+            }
+            const next = { remote: remoteJoin(dir.remote, e.name), local: localJoin(dir.local, e.name, separator), rel: `${dir.rel}/${e.name}` };
+            if (e.dir) {
+              pending.push(next);
+            } else {
+              files.push({ remote: dir.remote, name: e.name, local: next.local, rel: next.rel });
+              this.scanned++;
+            }
           }
-          const next = {
-            remote: remoteJoin(dir.remote, e.name),
-            local: localJoin(dir.local, e.name, separator),
-            rel: `${dir.rel}/${e.name}`,
-          };
-          if (e.dir) {
-            pending.push(next);
-          } else {
-            jobs.push(this.transfer(true, next.rel, { remote_path: dir.remote, remote_name: e.name, local: next.local }));
-          }
+        } catch (e) {
+          this.remoteError = `${dir.rel}: ${describeError(e)}`;
         }
-      } catch (e) {
-        this.remoteError = `${dir.rel}: ${describeError(e)}`;
       }
+    } finally {
+      this.#walkDone();
     }
-    await Promise.all(jobs);
+    if (gen !== this.#abort) {
+      return;
+    }
+    const rows = files.map((f) => ({ f, row: this.#addRow(true, f.rel) }));
+    await Promise.all(rows.map(({ f, row }) => this.#run(row, { remote_path: f.remote, remote_name: f.name, local: f.local })));
   }
 
+  #walkDone(): void {
+    this.walks--;
+    if (this.walks === 0) {
+      this.scanned = 0;
+    }
+  }
   /** Runs a remote file operation in the current folder and refreshes it. */
   async #remoteOp(op: (session: number, path: string) => Promise<unknown>): Promise<boolean> {
     const session = this.session;

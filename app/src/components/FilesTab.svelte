@@ -225,7 +225,7 @@
   <RemotePane onDownload={download} />
 </div>
 
-{#if connection.transfers.length}
+{#if connection.transfers.length || connection.walks}
   <QueuePanel />
 {/if}
 

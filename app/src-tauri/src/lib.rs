@@ -249,7 +249,7 @@ pub fn run() {
                 window.set_title(&name)?;
             }
 
-            // Temp copies of edited server files; left-overs of an earlier run go first.
+            // Temp copies of edited server files; day-old left-overs go first.
             let edits = edit::Edits::new(std::env::temp_dir().join(format!("{name}-edit")));
             edits.cleanup();
             let saved = app.handle().clone();

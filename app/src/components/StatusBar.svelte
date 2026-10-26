@@ -20,10 +20,12 @@
 </footer>
 
 <style>
+  /* Equal outer columns keep the message centred in the window. */
   footer {
     height: 24px;
     flex: none;
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
     align-items: center;
     gap: 16px;
     padding: 0 14px;
@@ -32,13 +34,18 @@
   }
 
   .side {
-    flex: none;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  .right {
+    text-align: right;
+  }
+
   .message {
-    flex: 1;
-    min-width: 0;
+    max-width: 50vw;
     text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;

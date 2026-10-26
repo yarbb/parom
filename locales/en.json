@@ -319,5 +319,9 @@
   "queue.skipped_count": "{count, plural, other {Skipped #}}",
   "sync.target": "Folder",
   "sync.preparing": "Preparing the sync: comparing folders {progress}",
-  "sync.checking_progress": "Checking the server... {progress}"
+  "sync.checking_progress": "Checking the server... {progress}",
+  "queue.scanning": "{count, plural, one {Scanning folders... # file found} other {Scanning folders... # files found}}",
+  "sites.pace": "Pause between requests",
+  "sites.pace.none": "None",
+  "sites.pace_hint": "For hosts that refuse connections with \"too many requests\". Each command and transfer waits this long after the previous one."
 }
