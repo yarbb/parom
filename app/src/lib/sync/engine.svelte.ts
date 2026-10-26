@@ -5,7 +5,7 @@ import { call } from '../daemon';
 import { remoteJoin } from '../files';
 import { prefs } from '../prefs.svelte';
 import { sites, type Site } from '../sites.svelte';
-import { git, host, joinLocal, type RepoStatus } from './host';
+import { backupsRoot, git, host, joinLocal, type RepoStatus } from './host';
 import { classify, parseRules, type Rules } from './managed';
 import { lockActive, markerName, newNonce, parseMarker, serializeMarker, treeFingerprint, type Marker } from './marker';
 import {
@@ -40,7 +40,7 @@ export interface Check {
   edits: Edits;
   /** Commits HEAD has that the server's commit does not ("behind"). */
   behind: number;
-  /** Managed files with uncommitted changes; sync refuses while there are any. */
+  /** Managed files with uncommitted changes; a sync deploys the commit, not these. */
   dirtyManaged: string[];
   rules: Rules;
 }
@@ -299,10 +299,7 @@ class SyncEngine {
     if (!c || this.run) {
       return;
     }
-    if (c.dirtyManaged.length) {
-      this.error = `Commit or stash your changes first (${c.dirtyManaged.length} changed file${c.dirtyManaged.length === 1 ? '' : 's'}).`;
-      return;
-    }
+
     const plan = await this.#plan(c);
     const ask = {
       versionsDiffer: prefs.value.syncAskVersionsDiffer,
@@ -339,6 +336,7 @@ class SyncEngine {
     const who = await this.#who();
     let previous: Marker | null = null;
     let locked = false;
+    let exportDir = '';
 
     const fail = (key: Step['key'], message: string) => {
       step(key).state = 'failed';
@@ -383,9 +381,8 @@ class SyncEngine {
       let backupDir = '';
       if (backup && toBackup.length) {
         step('backup').state = 'running';
-        const paths = await host.paths();
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        backupDir = joinLocal(paths.backups, c.site.id, `${stamp}-${(previous?.sha ?? 'unknown').slice(0, 7)}`);
+        backupDir = joinLocal(await backupsRoot(prefs.value.backupDir), c.site.id, `${stamp}-${(previous?.sha ?? 'unknown').slice(0, 7)}`);
         for (const p of toBackup) {
           if (this.#cancel) {
             throw new Error('Canceled');
@@ -410,9 +407,12 @@ class SyncEngine {
         step('backup').state = 'skipped';
       }
 
-      // 4. Upload: temp name, then rename, so the server never runs half a file.
+      // 4. Upload the committed version (not whatever is on disk): exported from
+      //    git, sent under a temp name, then renamed so the server never runs half a file.
       step('upload').state = 'running';
       run.total = plan.upload.length;
+      exportDir = joinLocal((await host.paths()).data, 'tmp', `export-${newNonce()}`);
+      await git.export(dir, head, plan.upload, exportDir);
       for (const f of foldersFor(plan.upload)) {
         await call('remote.mkdir', { session: this.#session(), path: remoteJoin(c.root, f) }).catch(() => {});
       }
@@ -425,7 +425,7 @@ class SyncEngine {
         const name = p.slice(i + 1);
         run.current = remoteJoin(remoteDir, name);
         const tr = await connection.transfer(false, p, {
-          local: joinLocal(dir, p),
+          local: joinLocal(exportDir, p),
           remote_path: remoteDir,
           remote_name: `${name}.totzilla-part`,
           exists: 'overwrite',
@@ -486,6 +486,9 @@ class SyncEngine {
         // Leave the server as it was: the old marker without our lock.
         await this.#writeMarker(c.root, { ...previous, lock: null }).catch(() => {});
       }
+      if (exportDir) {
+        await host.removeBackup(exportDir).catch(() => {});
+      }
       run.finished = true;
       await this.refresh();
     }
@@ -501,7 +504,7 @@ class SyncEngine {
 
   /** Keeps the newest `backupKeep` backups of a site. */
   async #pruneBackups(siteId: string) {
-    const { backups } = await host.paths();
+    const backups = await backupsRoot(prefs.value.backupDir);
     const { listLocal } = await import('../local');
     const listing = await listLocal(joinLocal(backups, siteId)).catch(() => null);
     if (!listing) {

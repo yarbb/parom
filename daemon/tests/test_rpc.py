@@ -179,9 +179,15 @@ def transfers(d, sid, root):
     asked = d.file_exists_requests[0]
     assert asked["remote_file"] == "big.bin" and not asked["download"] and "id" in asked, asked
 
-    # A preset answer skips the question.
+    # A preset answer skips the question; the result says whether anything moved.
     d.file_exists_action = None
-    d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "exists": "overwrite"})
+    res = d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "exists": "overwrite"})
+    assert res["skipped"] is False, res
+    res = d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "exists": "skip"})
+    assert res["skipped"] is True, res
+    # The server copy was written after the local file, so "newer" skips it.
+    res = d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "exists": "overwrite_newer"})
+    assert res["skipped"] is True, res
 
     # Download and compare.
     back = os.path.join(work, "back.bin")

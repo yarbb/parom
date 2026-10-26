@@ -29,6 +29,8 @@ export interface Transfer {
   state: 'running' | 'done' | 'failed' | 'canceled';
   /** Handed to the daemon (otherwise still waiting in the UI, e.g. during a folder walk). */
   sent: boolean;
+  /** Done, but the "file exists" answer meant nothing was transferred. */
+  skipped?: boolean;
   error?: string;
 }
 
@@ -330,8 +332,13 @@ class Connection {
     const preset = this.site && this.site.exists !== 'ask' ? this.site.exists : prefs.value.existsDefault;
     const exists = preset !== 'ask' ? { exists: preset } : {};
     try {
-      const res = await call<{ size: number }>(tr.download ? 'transfer.download' : 'transfer.upload', { session, ...exists, ...params }, tr.id);
+      const res = await call<{ size: number; skipped?: boolean }>(
+        tr.download ? 'transfer.download' : 'transfer.upload',
+        { session, ...exists, ...params },
+        tr.id,
+      );
       tr.state = 'done';
+      tr.skipped = !!res.skipped;
       tr.offset = tr.total = res.size;
     } catch (e) {
       tr.state = isCanceled(e) ? 'canceled' : 'failed';

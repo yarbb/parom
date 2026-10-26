@@ -4,14 +4,15 @@
 
   let running = $derived(connection.transfers.filter((x) => x.state === 'running').length);
   let failed = $derived(connection.transfers.filter((x) => x.state === 'failed').length);
-  let done = $derived(connection.transfers.filter((x) => x.state === 'done').length);
+  let done = $derived(connection.transfers.filter((x) => x.state === 'done' && !x.skipped).length);
+  let skipped = $derived(connection.transfers.filter((x) => x.skipped).length);
 
   const percent = (offset: number, total: number) => (total > 0 ? Math.min(100, Math.round((offset / total) * 100)) : 0);
 </script>
 
 <section class="queue">
   <div class="section-label head">
-    <span>{t('queue.header', { queued: running, failed, succeeded: done })}</span>
+    <span>{t('queue.header', { queued: running, failed, succeeded: done })}{skipped ? ` · ${t('queue.skipped_count', { count: skipped })}` : ''}</span>
     <span class="buttons">
       <button class="control small" disabled={running === 0} onclick={() => connection.cancelAll()}>{t('queue.cancel_all')}</button>
       <button class="control small" disabled={running === connection.transfers.length} onclick={() => connection.clearFinished()}>
@@ -25,7 +26,9 @@
       <div class="row">
         <span class="name mono">{tr.name} → {tr.download ? t('files.local_short') : t('files.remote_short')}</span>
         <div class="bar" aria-hidden="true"><i style:width="{tr.state === 'done' ? 100 : pct}%"></i></div>
-        {#if tr.state === 'done'}
+        {#if tr.state === 'done' && tr.skipped}
+          <span class="state mono muted" title={t('queue.skipped_hint')}>{t('queue.skipped')}</span>
+        {:else if tr.state === 'done'}
           <span class="state mono status-new">{t('queue.done')}</span>
         {:else if tr.state === 'failed'}
           <span class="state mono status-removed" title={tr.error}>{t('queue.failed')}</span>

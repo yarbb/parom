@@ -273,7 +273,7 @@
   "sync.state.unknown_commit": "Synced from a commit you do not have",
   "sync.state.no_marker": "Not tracked",
   "sync.state.unsynced": "Tracked, not synced yet",
-  "sync.uncommitted": "{count, plural, one {# uncommitted change} other {# uncommitted changes}}",
+  "sync.uncommitted": "{count, plural, one {# uncommitted change, not deployed} other {# uncommitted changes, not deployed}}",
   "sync.marker.body": "TOTzilla can keep one small file, {path} (about 300 bytes), on this server. It records which commit was last deployed, so you and your teammates can tell when the server is out of date. Your files are not touched.",
   "sync.marker.after_first_sync": "after the first sync",
   "sync.marker.you": "you",
@@ -312,5 +312,9 @@
   "prefs.ask_someone_else": "The server was synced by someone else",
   "prefs.ask_local_only": "There are only local changes (normal update)",
   "prefs.known_servers": "Sync marker per server",
-  "prefs.history_folder": "History folder on this computer"
+  "prefs.history_folder": "History folder on this computer",
+  "prefs.backup_folder": "Backup folder",
+  "queue.skipped": "skipped",
+  "queue.skipped_hint": "Not transferred: the \"file exists\" answer kept the existing file",
+  "queue.skipped_count": "{count, plural, other {Skipped #}}"
 }

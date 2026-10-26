@@ -7,7 +7,7 @@
   import { listLocal, openInEditor } from '../lib/local';
   import { prefs } from '../lib/prefs.svelte';
   import { sync } from '../lib/sync/engine.svelte';
-  import { host, joinLocal } from '../lib/sync/host';
+  import { backupsRoot, host, joinLocal } from '../lib/sync/host';
   import Modal from './Modal.svelte';
 
   // Board Bk: backups of the current site, kept on this computer.
@@ -37,8 +37,7 @@
       return;
     }
     try {
-      const { backups } = await host.paths();
-      folder = joinLocal(backups, site.id);
+      folder = joinLocal(await backupsRoot(prefs.value.backupDir), site.id);
       const listing = await listLocal(folder).catch(() => null);
       const out: Backup[] = [];
       for (const row of listing?.rows.filter((r) => r.dir) ?? []) {

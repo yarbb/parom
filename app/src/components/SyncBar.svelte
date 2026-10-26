@@ -36,7 +36,7 @@
       <span class="mono"><span class="muted">{t('sync.local')}</span> {short(c.repo.head)}</span>
       <span class:status-modified={warn} class:status-new={c.state === 'up-to-date' && !warn}>{stateText}</span>
       {#if c.dirtyManaged.length}
-        <span class="status-modified" title={c.dirtyManaged.join('\n')}>{t('sync.uncommitted', { count: c.dirtyManaged.length })}</span>
+        <span class="status-modified" title={c.dirtyManaged.join('\n')}>{t('sync.uncommitted', { count: c.dirtyManaged.length })}: {c.dirtyManaged.slice(0, 2).join(', ')}{c.dirtyManaged.length > 2 ? ', ...' : ''}</span>
       {/if}
     {:else if sync.error}
       <span class="status-removed" title={sync.error}>{sync.error}</span>
