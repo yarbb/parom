@@ -19,7 +19,11 @@ Requests on one session run in order; a response arrives when the engine finishe
 | `remote.rmdir` | `session`, `path`, `name` | `{}` |
 | `remote.rename` | `session`, `from_path`, `from_name`, `to_path`, `to_name` | `{}` |
 | `remote.chmod` | `session`, `path`, `name`, `mode` (e.g. `"755"`) | `{}` |
+| `transfer.upload` | `session`, `local` (local file path), `remote_path`, `remote_name`? (default: local file name), `exists`? | `{size}` |
+| `transfer.download` | `session`, `remote_path`, `remote_name`, `local` (local file path), `exists`? | `{size}` (local size after the transfer) |
 | `request.reply` | `session`, `request`, answer fields (below) | `{}` |
+
+`exists` decides what happens when the target file already exists: `ask` (default; sends a `file_exists` request), or one of the `file_exists` actions below except `rename`. Transfers run in the session's queue like any other command; `session.cancel` aborts the running one.
 
 `time` is UTC: `YYYY-MM-DDTHH:MM:SSZ`, or `YYYY-MM-DD` when the server only reports a date. `size` is -1 when unknown.
 
@@ -28,7 +32,8 @@ Requests on one session run in order; a response arrives when the engine finishe
 | Method | Params |
 |---|---|
 | `log` | `session`, `level` (`status`, `error`, `command`, `reply`, `listing`, `debug`), `message` |
-| `request` | `session`, `request`, `type`, type-specific fields (below) |
+| `request` | `session`, `request`, `id` (JSON-RPC id of the command that triggered it), `type`, type-specific fields (below) |
+| `transfer.progress` | `session`, `id` (JSON-RPC id of the transfer), `offset`, `start` (resume offset), `total` (-1 if unknown). Sent about every 200 ms while bytes move |
 | `session.disconnected` | `session` (the server dropped the connection; the session stays open) |
 | `session.closed` | `session` |
 
