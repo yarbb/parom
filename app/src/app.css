@@ -1,0 +1,134 @@
+/* One token set, two themes. Values follow docs/design (Fd = dark, Main = light). */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #000;
+  --panel: #0a0a0a;
+  --line: #1c1c1c;
+  --line-row: #1a1a1a;
+  --line-control: #2a2a2a;
+  --text: #e8e8e8;
+  --text-strong: #fff;
+  --muted: #8a8a8a;
+  --primary-bg: #ededed;
+  --primary-fg: #000;
+  --selected-bg: #141414;
+  --selected-mark: #ededed;
+  --modified: #e5a935;
+  --new: #5fd38d;
+  --removed: #ff6b6b;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #fff;
+  --panel: #fafafa;
+  --line: #e2e2e2;
+  --line-row: #ececec;
+  --line-control: #d0d0d0;
+  --text: #111;
+  --text-strong: #000;
+  --muted: #666;
+  --primary-bg: #111;
+  --primary-fg: #fff;
+  --selected-bg: #efefef;
+  --selected-mark: #111;
+  --modified: #b45309;
+  --new: #15803d;
+  --removed: #dc2626;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-size: 12.5px;
+  overflow: hidden;
+}
+
+.mono {
+  font-family: Consolas, 'Cascadia Code', ui-monospace, monospace;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.status-modified {
+  color: var(--modified);
+}
+
+.status-new {
+  color: var(--new);
+}
+
+.status-removed {
+  color: var(--removed);
+}
+
+button.control {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line-control);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button.control:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+button.control.primary {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-fg);
+  font-weight: 600;
+}
+
+button.control:focus-visible,
+input.field:focus-visible {
+  outline: 1px solid var(--selected-mark);
+  outline-offset: 1px;
+}
+
+input.field {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line-control);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+input.field::placeholder {
+  color: var(--muted);
+}
+
+.section-label {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line-row);
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
