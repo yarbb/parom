@@ -2,6 +2,8 @@
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
   import { recentLabel, type RecentServer } from '../lib/recent';
+  import { sites, type Site } from '../lib/sites.svelte';
+  import { ui } from '../lib/ui.svelte';
 
   // Top bar server selector: the current server, plus recent ones to reconnect.
   let { hideAddress }: { hideAddress: boolean } = $props();
@@ -17,6 +19,11 @@
   function choose(s: RecentServer) {
     open = false;
     void connection.pick(s);
+  }
+
+  function chooseSite(s: Site) {
+    open = false;
+    connection.pickedSite = { site: s };
   }
 
   function onWindowClick(e: MouseEvent) {
@@ -39,6 +46,15 @@
   <button class="control mono" aria-haspopup="menu" aria-expanded={open} onclick={() => (open = !open)}>{current} ▾</button>
   {#if open}
     <div class="list" role="menu">
+      <button class="pick" role="menuitem" onclick={() => ((open = false), (ui.siteManager = true))}>{t('sites.title')}...</button>
+      {#if sites.list.length}
+        <div class="title">{t('sites.sites')}</div>
+        {#each sites.list as s (s.id)}
+          <button class="pick mono" role="menuitem" onclick={() => chooseSite(s)}>
+            {s.folder ? `${s.folder} / ` : ''}{s.name}{hideAddress ? '' : `  ·  ${s.host}`}
+          </button>
+        {/each}
+      {/if}
       <div class="title">{t('topbar.recent')}</div>
       {#each connection.recent as s (recentLabel(s, false, ''))}
         <div class="item">

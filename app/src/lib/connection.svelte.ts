@@ -6,6 +6,7 @@ import { localMkdir, localWalk } from './local';
 import { t } from './i18n';
 import { addRecent, credentialKey, loadRecent, removeRecent, saveRecent, sameServer, type RecentServer } from './recent';
 import { deleteSecret, setSecret } from './secrets';
+import type { Site } from './sites.svelte';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
@@ -87,6 +88,12 @@ class Connection {
   recent = $state<RecentServer[]>(loadRecent());
   /** A server picked in the top bar menu; the Files tab fills its connect bar from it. */
   picked = $state<RecentServer | null>(null);
+  /** A saved site to connect to; the Files tab gets its password and calls connectSite(). */
+  pickedSite = $state<{ site: Site; password?: string } | null>(null);
+  /** The site of the current session, if it came from the Site Manager. */
+  site = $state<Site | null>(null);
+  /** Local folder the site wants shown; the Files tab opens it. */
+  localDirRequest = $state<string | null>(null);
 
   #nextTransfer = 1;
   #started = false;
@@ -135,6 +142,7 @@ class Connection {
   #lost(reason = ''): void {
     this.state = 'disconnected';
     this.session = null;
+    this.site = null;
     this.requests = [];
     this.remoteRows = [];
     this.remotePath = '';
@@ -166,6 +174,39 @@ class Connection {
       const port = Number.isFinite(target.port) ? target.port : undefined;
       await this.#remember({ protocol: target.protocol, host: target.host, port, user }, params);
       await this.list();
+    } catch (e) {
+      this.state = 'disconnected';
+      this.session = null;
+      this.error = t('files.error.connect', { reason: describeError(e) });
+    }
+  }
+
+  /** Connects with a saved site's settings. `password` is ignored for key and anonymous logons. */
+  async connectSite(site: Site, password: string): Promise<void> {
+    if (this.state !== 'disconnected' || !site.host.trim()) {
+      return;
+    }
+    this.state = 'connecting';
+    this.error = '';
+    this.label = `${site.name} (${site.user ? `${site.user}@` : ''}${site.host}${site.port ? `:${site.port}` : ''})`;
+    const params: Record<string, unknown> = { protocol: site.protocol, host: site.host.trim(), port: site.port, timeout: site.timeout };
+    if (site.logon !== 'anonymous') {
+      params.user = site.user;
+    }
+    if (site.logon === 'key') {
+      params.keyfile = site.keyfile;
+    } else if (site.logon !== 'anonymous') {
+      params.password = password;
+    }
+    try {
+      const res = await call<{ session: number }>('session.open', params);
+      this.session = res.session;
+      this.state = 'connected';
+      this.site = site;
+      await this.list(site.remoteDir.trim() || undefined);
+      if (site.localDir.trim()) {
+        this.localDirRequest = site.localDir.trim();
+      }
     } catch (e) {
       this.state = 'disconnected';
       this.session = null;
@@ -275,8 +316,10 @@ class Connection {
       return;
     }
     tr.sent = true;
+    // A site can answer "file exists" for all its transfers.
+    const exists = this.site && this.site.exists !== 'ask' ? { exists: this.site.exists } : {};
     try {
-      const res = await call<{ size: number }>(tr.download ? 'transfer.download' : 'transfer.upload', { session, ...params }, tr.id);
+      const res = await call<{ size: number }>(tr.download ? 'transfer.download' : 'transfer.upload', { session, ...exists, ...params }, tr.id);
       tr.state = 'done';
       tr.offset = tr.total = res.size;
     } catch (e) {

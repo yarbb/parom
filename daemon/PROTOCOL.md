@@ -11,6 +11,8 @@ Requests on one session run in order; a response arrives when the engine finishe
 | `daemon.hello` | – | `{name, version, engine, protocol}` |
 | `daemon.init` | `data_dir` (UTF-8 path; created if missing) | `{}`; loads `trust.json` from it. Call once before opening sessions; without it trusted keys live in memory only |
 | `daemon.shutdown` | – | `{}`, then the daemon exits |
+| `store.get` | `name` (`[a-z0-9_-]`, not `trust`) | `{value}`: the stored JSON document, or null |
+| `store.set` | `name`, `value` (any JSON) | `{}`; written to `<data_dir>/<name>.json` atomically. Used for `sites` and `preferences` |
 | `session.open` | `protocol` (`sftp` default, `ftp`, `ftps`, `ftpes`, `ftp-insecure`), `host`, `port`?, `user`?, `password`?, `keyfile`?, `timeout`? (seconds) | `{session}` once connected |
 | `session.close` | `session` | `{}`; followed by the `session.closed` event |
 | `session.cancel` | `session` | `{}`; the running command fails with flag `canceled` |
@@ -67,3 +69,4 @@ Standard JSON-RPC codes (-32700, -32600, -32601, -32602) plus:
 | -32001 | Unknown session |
 | -32002 | Unknown request |
 | -32003 | Session is closing or closed |
+| -32004 | Store error (no `daemon.init` yet, damaged or unwritable document) |

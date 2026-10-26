@@ -21,10 +21,12 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <fstream>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -50,6 +52,7 @@ int constexpr engine_error = -32000;
 int constexpr unknown_session = -32001;
 int constexpr unknown_request = -32002;
 int constexpr session_closing = -32003;
+int constexpr store_error = -32004;
 
 struct RpcError
 {
@@ -494,6 +497,44 @@ private:
 				throw RpcError{invalid_params, "Cannot create data_dir: " + ec.message()};
 			}
 			trust_.open(path / "trust.json");
+			data_dir_ = path;
+			send_result(id, json::object());
+		}
+		else if (method == "store.get") {
+			auto const file = store_file(params);
+			json value;
+			std::error_code ec;
+			if (std::filesystem::exists(file, ec)) {
+				std::ifstream in(file, std::ios::binary);
+				try {
+					value = json::parse(in);
+				}
+				catch (json::exception const&) {
+					throw RpcError{store_error, "Stored document is damaged: " + get_string(params, "name")};
+				}
+			}
+			send_result(id, json{{"value", value}});
+		}
+		else if (method == "store.set") {
+			auto const file = store_file(params);
+			auto v = params.find("value");
+			if (v == params.end()) {
+				throw RpcError{invalid_params, "Missing parameter: value"};
+			}
+			auto tmp = file;
+			tmp += ".tmp";
+			{
+				std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+				out << v->dump(2) << '\n';
+				if (!out) {
+					throw RpcError{store_error, "Cannot write " + get_string(params, "name")};
+				}
+			}
+			std::error_code ec;
+			std::filesystem::rename(tmp, file, ec);
+			if (ec) {
+				throw RpcError{store_error, "Cannot save " + get_string(params, "name") + ": " + ec.message()};
+			}
 			send_result(id, json::object());
 		}
 		else if (method == "daemon.shutdown") {
@@ -567,6 +608,21 @@ private:
 		else {
 			throw RpcError{method_not_found, "Method not found: " + method};
 		}
+	}
+
+	/// <data_dir>/<name>.json for store.get / store.set; names are [a-z0-9_-].
+	std::filesystem::path store_file(json const& params) const
+	{
+		if (data_dir_.empty()) {
+			throw RpcError{store_error, "Call daemon.init first"};
+		}
+		auto const name = get_string(params, "name");
+		bool const ok = !name.empty() && name.size() <= 40 &&
+			std::all_of(name.begin(), name.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-'; });
+		if (!ok || name == "trust") {
+			throw RpcError{invalid_params, "Invalid store name"};
+		}
+		return data_dir_ / (name + ".json");
 	}
 
 	void open_session(json const& id, json const& params)
@@ -1137,6 +1193,7 @@ private:
 	Utf8Encoding encoding_;
 	CFileZillaEngineContext context_;
 	TrustStore trust_;
+	std::filesystem::path data_dir_;
 
 	int next_session_{1};
 	std::map<int, std::unique_ptr<Session>> sessions_;
