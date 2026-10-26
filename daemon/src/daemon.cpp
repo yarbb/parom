@@ -310,7 +310,34 @@ struct Pending
 	// for "file exists" skips asking the client.
 	bool transfer{};
 	std::optional<CFileExistsNotification::OverwriteAction> exists_action;
+	/// The "file exists" answer means nothing is transferred.
+	bool skipped{};
 };
+
+/// Whether an answer to "file exists" skips the file, following the engine's
+/// rules (ControlSocket::SetFileExistsAction): unknown times or sizes transfer.
+bool will_skip(CFileExistsNotification const& n)
+{
+	auto const& source = n.download ? n.remoteTime : n.localTime;
+	auto const& target = n.download ? n.localTime : n.remoteTime;
+	auto const sourceSize = n.download ? n.remoteSize : n.localSize;
+	auto const targetSize = n.download ? n.localSize : n.remoteSize;
+	bool const knownTimes = !source.empty() && !target.empty();
+	bool const newer = !knownTimes || source.compare(target) > 0;
+	bool const sameSize = sourceSize >= 0 && sourceSize == targetSize;
+	switch (n.overwriteAction) {
+	case CFileExistsNotification::skip:
+		return true;
+	case CFileExistsNotification::overwriteNewer:
+		return !newer;
+	case CFileExistsNotification::overwriteSize:
+		return sameSize;
+	case CFileExistsNotification::overwriteSizeOrNewer:
+		return sameSize && !newer;
+	default:
+		return false;
+	}
+}
 
 Pending make_pending(json const& id, std::unique_ptr<CCommand> command)
 {
@@ -906,7 +933,11 @@ private:
 		s.running = false;
 
 		try {
-			send_result(p.id, p.done(s, reply));
+			json result = p.done(s, reply);
+			if (p.transfer && result.is_object()) {
+				result["skipped"] = p.skipped;
+			}
+			send_result(p.id, result);
 		}
 		catch (RpcError const& e) {
 			send_error(p.id, e.code, e.message, e.data);
@@ -978,7 +1009,9 @@ private:
 			case nId_asyncrequest: {
 				std::unique_ptr<CAsyncRequestNotification> req(static_cast<CAsyncRequestNotification*>(n.release()));
 				if (req->GetRequestID() == reqId_fileexists && s.current && s.current->exists_action) {
-					static_cast<CFileExistsNotification&>(*req).overwriteAction = *s.current->exists_action;
+					auto& fe = static_cast<CFileExistsNotification&>(*req);
+					fe.overwriteAction = *s.current->exists_action;
+					s.current->skipped = will_skip(fe);
 					s.engine->SetAsyncRequestReply(std::move(req));
 					break;
 				}
@@ -1151,6 +1184,9 @@ private:
 			r.overwriteAction = overwrite_action(get_string(params, "action", "skip"));
 			if (r.overwriteAction == CFileExistsNotification::rename) {
 				r.newName = wide(get_name(params, "new_name"));
+			}
+			if (s.current) {
+				s.current->skipped = will_skip(r);
 			}
 			break;
 		}

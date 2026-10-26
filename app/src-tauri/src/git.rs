@@ -147,3 +147,21 @@ pub fn read_file(dir: &str, rev: &str, path: &str) -> Result<String, String> {
     let blob = repo.find_blob(entry.id()).map_err(|e| e.message().to_string())?;
     Ok(String::from_utf8_lossy(blob.content()).into_owned())
 }
+
+/// Writes the committed version of `paths` below `dest` (same relative
+/// layout), so a sync deploys exactly the commit, whatever is on disk.
+pub fn export(dir: &str, rev: &str, paths: &[String], dest: &str) -> Result<(), String> {
+    let repo = open(dir)?;
+    let commit = repo.find_commit(commit_oid(&repo, rev)?).map_err(|e| e.message().to_string())?;
+    let tree = commit.tree().map_err(|e| e.message().to_string())?;
+    for path in paths {
+        let entry = tree.get_path(std::path::Path::new(path)).map_err(|e| format!("{path}: {}", e.message()))?;
+        let blob = repo.find_blob(entry.id()).map_err(|e| format!("{path}: {}", e.message()))?;
+        let target = std::path::Path::new(dest).join(path);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        std::fs::write(&target, blob.content()).map_err(|e| format!("{}: {e}", target.display()))?;
+    }
+    Ok(())
+}

@@ -79,6 +79,16 @@
   }
 
   let historyFolder = $state('');
+  let defaultBackups = $state('');
+
+  async function browseBackups() {
+    if (isTauri()) {
+      const dir = await openDialog({ multiple: false, directory: true, defaultPath: draft.backupDir || defaultBackups || undefined });
+      if (typeof dir === 'string') {
+        draft.backupDir = dir;
+      }
+    }
+  }
 
   /** The marker choice per site is saved right away, like the Site Manager. */
   async function setMarker(id: string, marker: 'ask' | 'on' | 'off') {
@@ -88,7 +98,7 @@
   onMount(() => {
     void loadTrusted();
     if (isTauri()) {
-      void host.paths().then((p) => (historyFolder = p.history)).catch(() => {});
+      void host.paths().then((p) => ((historyFolder = p.history), (defaultBackups = p.backups))).catch(() => {});
     }
     if (isTauri()) {
       void getVersion().then((v) => (version = v));
@@ -257,6 +267,10 @@
             <select class="field" bind:value={draft.backupKeep}>
               {#each [1, 3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}
             </select>
+          </label>
+          <label class="row"><span>{t('prefs.backup_folder')}</span>
+            <input class="field mono grow" placeholder={defaultBackups} bind:value={draft.backupDir} />
+            <button class="control" onclick={browseBackups}>{t('files.browse')}</button>
           </label>
           <div class="section-label inline">{t('prefs.ask_before_sync')}</div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncAskVersionsDiffer} label={t('prefs.ask_versions_differ')} /></div>

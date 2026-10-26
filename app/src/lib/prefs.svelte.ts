@@ -40,6 +40,8 @@ export interface Prefs {
   syncAskLocalOnly: boolean;
   /** Backups kept per site; older ones are deleted. */
   backupKeep: number;
+  /** Folder for backups; empty uses the app's data folder. */
+  backupDir: string;
 }
 
 export const defaultPrefs: Prefs = {
@@ -68,6 +70,7 @@ export const defaultPrefs: Prefs = {
   syncAskSomeoneElse: true,
   syncAskLocalOnly: false,
   backupKeep: 5,
+  backupDir: '',
 };
 
 /** Applies the parts of the preferences that change the page itself. */

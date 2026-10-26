@@ -19,6 +19,8 @@ export const git = {
   commitsBetween: (dir: string, from: string, to: string) => invoke<number>('git_commits_between', { dir, from, to }),
   diff: (dir: string, from: string, to: string) => invoke<Change[]>('git_diff', { dir, from, to }),
   readFile: (dir: string, rev: string, path: string) => invoke<string>('git_read_file', { dir, rev, path }),
+  /** Writes the committed version of paths below dest. */
+  export: (dir: string, rev: string, paths: string[], dest: string) => invoke<void>('git_export', { dir, rev, paths, dest }),
 };
 
 export interface AppPaths {
@@ -37,6 +39,11 @@ export const host = {
   machineName: () => invoke<string>('machine_name'),
   runCommand: (command: string, cwd: string) => invoke<{ code: number | null; output: string }>('run_command', { command, cwd }),
 };
+
+/** Where backups go: the folder from Preferences, or the app's own data folder. */
+export async function backupsRoot(custom: string): Promise<string> {
+  return custom.trim() || (await host.paths()).backups;
+}
 
 /** Joins local path parts with the separator the base path already uses. */
 export function joinLocal(base: string, ...parts: string[]): string {

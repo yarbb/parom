@@ -135,6 +135,11 @@ async fn git_read_file(dir: String, rev: String, path: String) -> Result<String,
     blocking(move || git::read_file(&dir, &rev, &path)).await
 }
 
+#[tauri::command]
+async fn git_export(dir: String, rev: String, paths: Vec<String>, dest: String) -> Result<(), String> {
+    blocking(move || git::export(&dir, &rev, &paths, &dest)).await
+}
+
 #[derive(serde::Serialize)]
 struct AppPaths {
     data: String,
@@ -310,6 +315,7 @@ pub fn run() {
             git_commits_between,
             git_diff,
             git_read_file,
+            git_export,
             app_paths,
             read_small_file,
             write_small_file,
