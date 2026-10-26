@@ -25,6 +25,10 @@ export interface Prefs {
   existsDefault: ExistsDefault;
   /** Seconds. */
   connectTimeout: number;
+  /** Program for editing server files; empty uses the system's choice. */
+  editorPath: string;
+  editUploadOnSave: boolean;
+  editAsk: boolean;
 }
 
 export const defaultPrefs: Prefs = {
@@ -43,6 +47,9 @@ export const defaultPrefs: Prefs = {
   lastLocalDir: '',
   existsDefault: 'ask',
   connectTimeout: 20,
+  editorPath: '',
+  editUploadOnSave: true,
+  editAsk: true,
 };
 
 /** Applies the parts of the preferences that change the page itself. */

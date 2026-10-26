@@ -1,4 +1,5 @@
 mod daemon;
+mod edit;
 mod local;
 mod secrets;
 
@@ -67,6 +68,31 @@ fn local_roots() -> Vec<String> {
     local::roots()
 }
 
+#[tauri::command]
+fn edit_new_dir(edits: tauri::State<'_, edit::Edits>) -> Result<String, String> {
+    edits.new_dir()
+}
+
+#[tauri::command]
+fn edit_open(path: String, editor: Option<String>) -> Result<(), String> {
+    edit::open(&path, editor.as_deref())
+}
+
+#[tauri::command]
+fn edit_watch(edits: tauri::State<'_, edit::Edits>, path: String) {
+    edits.watch(&path);
+}
+
+#[tauri::command]
+fn edit_unwatch(edits: tauri::State<'_, edit::Edits>, path: String) {
+    edits.unwatch(&path);
+}
+
+#[tauri::command]
+fn edit_cleanup(edits: tauri::State<'_, edit::Edits>) {
+    edits.cleanup();
+}
+
 /// Credentials are filed under the product name, so renaming the app only
 /// needs the one productName in tauri.conf.json.
 fn secret_service(app: &tauri::AppHandle) -> String {
@@ -127,6 +153,15 @@ pub fn run() {
                 window.set_title(&name)?;
             }
 
+            // Temp copies of edited server files; left-overs of an earlier run go first.
+            let edits = edit::Edits::new(std::env::temp_dir().join(format!("{name}-edit")));
+            edits.cleanup();
+            let saved = app.handle().clone();
+            edits.start(move |path| {
+                let _ = saved.emit("edit-saved", path);
+            });
+            app.manage(edits);
+
             let events = app.handle().clone();
             let exits = app.handle().clone();
             match Daemon::spawn(
@@ -171,7 +206,12 @@ pub fn run() {
             local_roots,
             secret_get,
             secret_set,
-            secret_delete
+            secret_delete,
+            edit_new_dir,
+            edit_open,
+            edit_watch,
+            edit_unwatch,
+            edit_cleanup
         ])
         .run(tauri::generate_context!())
         .expect("error while running the application");
