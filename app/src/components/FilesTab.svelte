@@ -14,6 +14,9 @@
   import QueuePanel from './QueuePanel.svelte';
   import RemotePane from './RemotePane.svelte';
   import RequestDialog from './RequestDialog.svelte';
+  import SyncBar from './SyncBar.svelte';
+  import SyncDialogs from './SyncDialogs.svelte';
+  import { sync } from '../lib/sync/engine.svelte';
 
   let { engine }: { engine: EngineState } = $props();
 
@@ -123,6 +126,12 @@
     }
   });
 
+  // Sites with a local repository get their server compared on connect.
+  $effect(() => {
+    const ready = connection.state === 'connected' && !!connection.site?.localDir.trim();
+    untrack(() => (ready ? void sync.refresh() : sync.reset()));
+  });
+
   onMount(() => {
     connection.start();
     edits.start();
@@ -209,6 +218,8 @@
   {/if}
 </form>
 
+<SyncBar />
+
 <div class="panes">
   <LocalPane bind:this={localPane} bind:path={localPath} bind:separator={localSeparator} canUpload={connected} onUpload={upload} />
   <RemotePane onDownload={download} />
@@ -219,6 +230,7 @@
 {/if}
 
 <RequestDialog />
+<SyncDialogs />
 
 {#if edits.asking.length}
   {@const f = edits.asking[0]}

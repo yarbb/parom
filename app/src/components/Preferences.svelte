@@ -7,6 +7,9 @@
   import { availableLocales, currentLocale, t } from '../lib/i18n';
   import { prefs, type Prefs } from '../lib/prefs.svelte';
   import Checkbox from './Checkbox.svelte';
+  import { sites } from '../lib/sites.svelte';
+  import { host } from '../lib/sync/host';
+  import { openInEditor } from '../lib/local';
 
   // Boards P1-P12. Pages whose features exist are live; the rest show their
   // settings disabled until the feature lands, so nothing pretends to work.
@@ -34,7 +37,6 @@
   const later: Partial<Record<Page, string>> = {
     account: 'prefs.later.github',
     repositories: 'prefs.later.github',
-    marker_history: 'prefs.later.sync',
     logging: 'prefs.later.logging',
   };
 
@@ -76,8 +78,18 @@
     await loadTrusted();
   }
 
+  let historyFolder = $state('');
+
+  /** The marker choice per site is saved right away, like the Site Manager. */
+  async function setMarker(id: string, marker: 'ask' | 'on' | 'off') {
+    await sites.save(sites.folders, sites.list.map((s) => (s.id === id ? { ...s, marker } : s))).catch((e) => (error = String(e)));
+  }
+
   onMount(() => {
     void loadTrusted();
+    if (isTauri()) {
+      void host.paths().then((p) => (historyFolder = p.history)).catch(() => {});
+    }
     if (isTauri()) {
       void getVersion().then((v) => (version = v));
     }
@@ -238,8 +250,33 @@
         {:else if page === 'account' || page === 'repositories'}
           <div class="row"><span>{t('prefs.sign_in_method')}</span><select class="field" disabled><option>{t('github.sign_in_browser')}</option></select></div>
         {:else if page === 'marker_history'}
-          <div class="row"><span></span><Checkbox checked={true} disabled label={t('prefs.create_marker')} /></div>
-          <div class="row"><span></span><Checkbox checked={true} disabled label={t('prefs.backup_first')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncDetectEdits} label={t('prefs.detect_edits')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncLock} label={t('prefs.lock_server')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncBackup} label={t('prefs.backup_first')} /></div>
+          <label class="row"><span>{t('prefs.backup_keep')}</span>
+            <select class="field" bind:value={draft.backupKeep}>
+              {#each [1, 3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}
+            </select>
+          </label>
+          <div class="section-label inline">{t('prefs.ask_before_sync')}</div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncAskVersionsDiffer} label={t('prefs.ask_versions_differ')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncAskSomeoneElse} label={t('prefs.ask_someone_else')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncAskLocalOnly} label={t('prefs.ask_local_only')} /></div>
+          <div class="section-label inline">{t('prefs.known_servers')}</div>
+          {#each sites.list as s (s.id)}
+            <label class="row list-row">
+              <span class="grow">{s.name}</span>
+              <select class="field" value={s.marker} onchange={(e) => setMarker(s.id, e.currentTarget.value as 'ask' | 'on' | 'off')}>
+                {#each ['ask', 'on', 'off'] as m (m)}<option value={m}>{t(`sites.marker.${m}`)}</option>{/each}
+              </select>
+            </label>
+          {:else}
+            <p class="muted">{t('sites.empty')}</p>
+          {/each}
+          <div class="row"><span>{t('prefs.history_folder')}</span>
+            <span class="mono grow path">{historyFolder}</span>
+            <button class="control small" disabled={!historyFolder} onclick={() => openInEditor(historyFolder, '')}>{t('backups.open')}</button>
+          </div>
         {:else if page === 'logging'}
           <div class="row"><span></span><Checkbox checked={true} disabled label={t('prefs.write_log')} /></div>
         {:else if page === 'updates'}
@@ -396,6 +433,11 @@
   .grow {
     flex: 1;
     min-width: 0;
+  }
+
+  .path {
+    font-size: 11.5px;
+    word-break: break-all;
   }
 
   .fp {

@@ -10,6 +10,7 @@
   import { sites } from './lib/sites.svelte';
   import { ui } from './lib/ui.svelte';
   import { prefs } from './lib/prefs.svelte';
+  import { sync } from './lib/sync/engine.svelte';
   import Preferences from './components/Preferences.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
@@ -74,7 +75,8 @@
     state={engine === 'unavailable'
       ? t('status.engine_unavailable')
       : connection.state === 'connected'
-        ? t('status.connected_to', { server: hideAddress ? t('topbar.address_hidden') : connection.label })
+        ? t('status.connected_to', { server: hideAddress ? t('topbar.address_hidden') : connection.label }) +
+          (sync.check?.marker?.sha ? `  ·  ${t('status.marker', { sha: sync.check.marker.sha.slice(0, 7) })}` : '')
         : t(`status.${connection.state}`)}
     error={engine === 'unavailable'}
     ok={engine === 'ready' && connection.state === 'connected'}
