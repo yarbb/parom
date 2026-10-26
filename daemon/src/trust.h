@@ -23,7 +23,8 @@ public:
 	/// Loads `file` if it exists; later changes are written there.
 	void open(std::filesystem::path file);
 
-	/// "ssh" or "tls", plus host and port; host names compare case-insensitively.
+	/// "ssh", "tls" or "plain" (unencrypted FTP allowed), plus host and port;
+	/// host names compare case-insensitively.
 	static std::string key(std::string const& kind, std::string const& host, unsigned int port);
 
 	std::optional<std::string> get(std::string const& key) const;

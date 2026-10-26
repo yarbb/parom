@@ -13,6 +13,8 @@
   let applyToAll = $state(false);
   /** Keep a trusted host key or certificate for future sessions. */
   let remember = $state(true);
+  /** Off by default: allowing plain FTP for good is a deliberate choice. */
+  let rememberPlain = $state(false);
 
   $effect(() => {
     if (req) {
@@ -20,6 +22,7 @@
       secret = '';
       applyToAll = false;
       remember = true;
+      rememberPlain = false;
     }
   });
 
@@ -142,9 +145,10 @@
     <Modal title={t('dialog.insecure.title')} onCancel={() => reply(r, { allow: false })}>
       <p>{t('dialog.insecure.body', { host: String(r.host), port: String(r.port) })}</p>
       <p class="status-modified">{t('dialog.insecure.warning')}</p>
+      <Checkbox bind:checked={rememberPlain} label={t('dialog.insecure.remember')} />
       {#snippet actions()}
         <button class="control primary" onclick={() => reply(r, { allow: false })}>{t('common.cancel')}</button>
-        <button class="control" onclick={() => reply(r, { allow: true })}>{t('dialog.insecure.allow')}</button>
+        <button class="control" onclick={() => reply(r, { allow: true, remember: rememberPlain })}>{t('dialog.insecure.allow')}</button>
       {/snippet}
     </Modal>
   {:else if r.type === 'tls_no_resumption'}

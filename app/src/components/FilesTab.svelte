@@ -4,7 +4,9 @@
   import { edits } from '../lib/edits.svelte';
   import { localJoin } from '../lib/files';
   import { t } from '../lib/i18n';
-  import { credentialKey } from '../lib/recent';
+  import { credentialKey, recentLabel } from '../lib/recent';
+  import { prefs } from '../lib/prefs.svelte';
+  import { sites } from '../lib/sites.svelte';
   import { getSecret } from '../lib/secrets';
   import Checkbox from './Checkbox.svelte';
   import Modal from './Modal.svelte';
@@ -117,6 +119,26 @@
   }
   let busy = $derived(connection.state === 'connecting');
 
+  // With an empty connect bar, Connect becomes Reconnect to the last server.
+  let lastTarget = $derived.by(() => {
+    const last = prefs.value.lastConnection;
+    if (last?.type === 'site') {
+      const site = sites.list.find((s) => s.id === last.id);
+      return site ? { label: `${site.name} (${site.host})`, site, recent: null } : null;
+    }
+    const recent = connection.recent[0];
+    return recent ? { label: recentLabel(recent, false, ''), site: null, recent } : null;
+  });
+
+  function reconnect() {
+    const target = lastTarget;
+    if (target?.site) {
+      connection.pickedSite = { site: target.site };
+    } else if (target?.recent) {
+      void connection.pick(target.recent);
+    }
+  }
+
   let editDontAsk = $state(false);
 
   // Edited temp files stop syncing back once the session is gone.
@@ -208,6 +230,10 @@
   <Checkbox bind:checked={remember} label={t('files.connect.remember')} title={t('files.connect.remember_hint')} disabled={connected || busy} />
   {#if connected}
     <button class="control" type="submit">{t('common.disconnect')}</button>
+  {:else if lastTarget && !host.trim() && !busy}
+    <button class="control primary" type="button" disabled={engine !== 'ready'} title={lastTarget.label} onclick={reconnect}>
+      {t('files.reconnect')}
+    </button>
   {:else}
     <button class="control primary" type="submit" disabled={engine !== 'ready' || busy || !host.trim()}>
       {busy ? t('status.connecting') : t('common.connect')}

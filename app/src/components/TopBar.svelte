@@ -31,8 +31,11 @@
     <ServerMenu {hideAddress} />
     <button class="control icon" aria-label={t('prefs.title')} title="{t('prefs.title')} (Ctrl+,)" onclick={() => (ui.preferences = true)}>
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
-        <circle cx="8" cy="8" r="2.2" />
-        <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+        <!-- Sliders: reads as "settings", unlike a gear that looks like a sun. -->
+        <path d="M2 4h7M12 4h2M2 8h2M7 8h7M2 12h9" />
+        <circle cx="10.5" cy="4" r="1.5" />
+        <circle cx="5.5" cy="8" r="1.5" />
+        <circle cx="12.5" cy="12" r="1.5" />
       </svg>
     </button>
     <button

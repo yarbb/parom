@@ -1051,6 +1051,15 @@ private:
 				// Known host keys and certificates need no question. A stored
 				// fingerprint that no longer matches is reported as "changed".
 				std::optional<std::string> previous;
+				if (req->GetRequestID() == reqId_insecure_connection) {
+					// "Do not ask again for this server" was chosen before.
+					auto& r = static_cast<CInsecureConnectionNotification&>(*req);
+					if (trust_.get(TrustStore::key("plain", u8(r.server_.GetHost()), r.server_.GetPort())) == std::string("allow")) {
+						r.allow_ = true;
+						s.engine->SetAsyncRequestReply(std::move(req));
+						break;
+					}
+				}
 				if (req->GetRequestID() == reqId_hostkey) {
 					auto& r = static_cast<CHostKeyNotification&>(*req);
 					auto const fingerprint = r.hostkey_ ? r.hostkey_->fingerprint() : std::string();
@@ -1247,9 +1256,14 @@ private:
 		case reqId_otp:
 			static_cast<OtpRequest&>(req).otp_ = get_string(params, "otp", "");
 			break;
-		case reqId_insecure_connection:
-			static_cast<CInsecureConnectionNotification&>(req).allow_ = get_bool(params, "allow", false);
+		case reqId_insecure_connection: {
+			auto& r = static_cast<CInsecureConnectionNotification&>(req);
+			r.allow_ = get_bool(params, "allow", false);
+			if (r.allow_ && get_bool(params, "remember", false)) {
+				trust_.set(TrustStore::key("plain", u8(r.server_.GetHost()), r.server_.GetPort()), "allow");
+			}
 			break;
+		}
 		case reqId_certificate: {
 			auto& r = static_cast<CCertificateNotification&>(req);
 			r.trusted_ = get_bool(params, "trust", false);

@@ -202,6 +202,7 @@ class Connection {
       this.state = 'connected';
       const port = Number.isFinite(target.port) ? target.port : undefined;
       await this.#remember({ protocol: target.protocol, host: target.host, port, user }, params);
+      void prefs.set('lastConnection', { type: 'quick' });
       await this.list();
     } catch (e) {
       this.state = 'disconnected';
@@ -238,6 +239,7 @@ class Connection {
       this.session = res.session;
       this.state = 'connected';
       this.site = site;
+      void prefs.set('lastConnection', { type: 'site', id: site.id });
       await this.list(site.remoteDir.trim() || undefined);
       this.siteRoot = this.remotePath;
       if (site.localDir.trim()) {
