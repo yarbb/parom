@@ -1,23 +1,25 @@
-# M0a: build the FileZilla engine (no GUI) on Windows.
-# M0b: build a console spike against it and run it against a local SFTP server.
+# Windows build: FileZilla engine (no GUI), the M0b spike and totzillad,
+# each tested against a local SFTP server (tests/sftp_test_server.py).
 # libfilezilla and fzssh come prebuilt from MSYS2 (UCRT64); MSYS2 also packages
 # FileZilla 3.71.1 against them, so the versions are known to work together.
-name: M0 engine build
+name: Build
 on:
   workflow_dispatch:
   push:
     paths:
       - third_party/filezilla/**
       - spike/**
-      - .github/workflows/m0a-engine.yml
+      - daemon/**
+      - tests/**
+      - .github/workflows/build.yml
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     defaults:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -26,9 +28,10 @@ jobs:
             make tar xz
           pacboy: >-
             toolchain:p autotools:p pkgconf:p
-            libfilezilla:p fzssh:p gnutls:p nettle:p sqlite3:p boost:p python-paramiko:p
+            libfilezilla:p fzssh:p gnutls:p nettle:p sqlite3:p boost:p
+            nlohmann-json:p python-paramiko:p
       - name: Dependency versions
-        run: pacman -Q | grep -E 'libfilezilla|fzssh|gnutls|nettle|gcc '
+        run: pacman -Q | grep -E 'libfilezilla|fzssh|gnutls|nettle|nlohmann|gcc '
       - name: Verify FileZilla source tarball
         run: |
           # Same hash as the MSYS2 and Arch Linux packages of FileZilla 3.71.1.
@@ -44,7 +47,7 @@ jobs:
             --with-pugixml=builtin
       - name: Build engine
         run: make -j"$(nproc)" -C build-fz/src
-      - name: Collect output
+      - name: Collect engine output
         if: always()
         run: |
           mkdir -p out/bin out/lib out/include
@@ -61,14 +64,18 @@ jobs:
             spike/m0b/main.cpp -o out/bin/fzspike.exe \
             -Lbuild-fz/src/engine/.libs -lfzclient-private \
             $(pkg-config --libs libfilezilla libfzssh-client)
-      - name: Run M0b spike (connect, list, upload)
+      - name: Build totzillad
+        run: |
+          sh daemon/build.sh src-fz build-fz out/bin "0.1.0-dev+${GITHUB_SHA::7}"
+          PATH="$PWD/out/bin:$PATH" totzillad.exe --version
+      - name: Test M0b spike (connect, list, upload)
         timeout-minutes: 5
         env:
           TOTZILLA_PASSWORD: test
         run: |
           export PATH="$PWD/out/bin:$PATH"
           mkdir sftproot && echo "already on the server" > sftproot/existing.txt
-          python spike/m0b/sftp_test_server.py --root sftproot --port 3373 --password "$TOTZILLA_PASSWORD" &
+          python tests/sftp_test_server.py --root sftproot --port 3373 --password "$TOTZILLA_PASSWORD" &
           SERVER_PID=$!
           trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
           sleep 5
@@ -77,8 +84,19 @@ jobs:
             --upload "$(cygpath -w "$PWD/upload.txt")" --timeout 20
           cmp upload.txt sftproot/upload.txt
           echo "server copy matches"
-      - uses: actions/upload-artifact@v5
+      - name: Test totzillad JSON-RPC
+        timeout-minutes: 5
+        run: |
+          export PATH="$PWD/out/bin:$PATH"
+          mkdir sftproot-daemon
+          python tests/sftp_test_server.py --root sftproot-daemon --port 3374 --password test &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          sleep 5
+          python daemon/tests/test_rpc.py "$(cygpath -w "$PWD/out/bin/totzillad.exe")" \
+            --port 3374 --password test --root sftproot-daemon
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: m0a-engine
+          name: windows-build
           path: out/

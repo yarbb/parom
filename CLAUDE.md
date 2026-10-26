@@ -18,8 +18,10 @@ Cross-platform SFTP/FTP client built on the FileZilla 3.71.1 engine, with a GitH
 ## Layout
 ```
 third_party/filezilla/   FileZilla 3.71.1 source tarball (verified SHA-256 in NOTICE)
-daemon/                  totzillad: C++ wrapper around the engine, JSON-RPC (planned)
-app/                     Tauri (Rust) + web UI (planned)
+daemon/                  totzillad: C++ wrapper around the engine, JSON-RPC over stdio (see daemon/PROTOCOL.md)
+spike/m0b/               console spike: SFTP connect, list, upload via the engine API
+tests/                   shared test helpers (paramiko SFTP test server)
+app/                     Tauri 2 (Rust) + Svelte/TypeScript UI (planned)
 docs/design/             static HTML mockups of every screen (open index.html)
 locales/                 en.json (+ community translations)
 .github/workflows/       CI
