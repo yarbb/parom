@@ -4,3 +4,6 @@ node_modules/
 target/
 *.log
 HANDOFF_PRIVATE.md
+app/dist/
+app/src-tauri/gen/
+app/src-tauri/daemon/

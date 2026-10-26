@@ -11,6 +11,8 @@ on:
       - spike/**
       - daemon/**
       - tests/**
+      - app/**
+      - locales/**
       - .github/workflows/build.yml
 jobs:
   windows:
@@ -95,8 +97,71 @@ jobs:
           sleep 5
           python daemon/tests/test_rpc.py "$(cygpath -w "$PWD/out/bin/totzillad.exe")" \
             --port 3374 --password test --root sftproot-daemon
+      - name: Bundle totzillad with its DLLs
+        run: |
+          mkdir -p out/daemon
+          cp out/bin/totzillad.exe out/daemon/
+          # Every non-system DLL the daemon loads, resolved with the engine on PATH.
+          PATH="$PWD/out/bin:$PATH" ldd out/daemon/totzillad.exe \
+            | awk '$3 ~ /^\// {print $3}' | grep -vi '^/c/windows' | sort -u \
+            | while read -r dll; do cp "$dll" out/daemon/; done
+          ls -la out/daemon
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: windows-build
           path: out/
+
+  app:
+    needs: windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-build
+          path: native
+      - name: Place bundled daemon
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force app/src-tauri/daemon | Out-Null
+          Copy-Item native/daemon/* app/src-tauri/daemon/
+          Get-ChildItem app/src-tauri/daemon
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+      - name: Check frontend
+        working-directory: app
+        run: npm run check
+      - name: Build app and installer
+        working-directory: app
+        run: npx tauri build --bundles nsis
+      - name: Install silently and self-test
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem app/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          Write-Host "Installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
+          Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S'
+          $dir = Join-Path $env:LOCALAPPDATA 'TOTzilla'
+          Get-ChildItem -Recurse $dir | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 200
+          $exe = Get-ChildItem $dir -Filter *.exe | Where-Object Name -notmatch 'uninstall' | Select-Object -First 1
+          $report = Join-Path $env:RUNNER_TEMP 'self-test.json'
+          $p = Start-Process -Wait -PassThru -FilePath $exe.FullName -ArgumentList '--self-test', $report
+          Get-Content $report
+          if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-installer
+          path: |
+            app/src-tauri/target/release/bundle/nsis/*-setup.exe
+            app/src-tauri/Cargo.lock
