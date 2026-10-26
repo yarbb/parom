@@ -34,4 +34,6 @@ export const localRoots = () => invoke<string[]>('local_roots');
 
 /** All folders and files below `path`, relative with "/" (folders parents first). */
 export const localWalk = (path: string) => invoke<{ dirs: string[]; files: string[] }>('local_walk', { path });
-export const localMkdir = (path: string) => invoke<void>('local_mkdir', { path });
+export const localMkdir = (path: string) => invoke<void>('local_mkdir', { path });export const localRename = (from: string, to: string) => invoke<void>('local_rename', { from, to });
+/** Moves to the system trash (Recycle Bin). */
+export const localTrash = (paths: string[]) => invoke<void>('local_trash', { paths });

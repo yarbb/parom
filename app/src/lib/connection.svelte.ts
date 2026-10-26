@@ -400,6 +400,63 @@ class Connection {
     await Promise.all(jobs);
   }
 
+  /** Runs a remote file operation in the current folder and refreshes it. */
+  async #remoteOp(op: (session: number, path: string) => Promise<unknown>): Promise<boolean> {
+    const session = this.session;
+    if (session === null) {
+      return false;
+    }
+    const path = this.remotePath;
+    let failure = '';
+    try {
+      await op(session, path);
+    } catch (e) {
+      failure = describeError(e);
+    }
+    await this.list(path);
+    // list() clears the error line; show why the operation failed.
+    if (failure) {
+      this.remoteError = failure;
+    }
+    return !failure;
+  }
+
+  renameRemote(from: string, to: string): Promise<boolean> {
+    return this.#remoteOp((session, path) =>
+      call('remote.rename', { session, from_path: path, from_name: from, to_path: path, to_name: to }),
+    );
+  }
+
+  mkdirRemote(name: string): Promise<boolean> {
+    return this.#remoteOp((session, path) => call('remote.mkdir', { session, path: remoteJoin(path, name) }));
+  }
+
+  /** Deletes files and whole folders (contents first, deepest folders last). */
+  deleteRemote(rows: FileRow[]): Promise<boolean> {
+    return this.#remoteOp(async (session, path) => {
+      const files = rows.filter((r) => !r.dir || r.link).map((r) => r.name);
+      if (files.length) {
+        await call('remote.delete', { session, path, names: files });
+      }
+      for (const dir of rows.filter((r) => r.dir && !r.link)) {
+        await this.#deleteTree(session, path, dir.name);
+      }
+    });
+  }
+
+  async #deleteTree(session: number, parent: string, name: string): Promise<void> {
+    const dir = remoteJoin(parent, name);
+    const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session, path: dir });
+    const files = res.entries.filter((e) => !e.dir || e.link).map((e) => e.name);
+    if (files.length) {
+      await call('remote.delete', { session, path: dir, names: files });
+    }
+    for (const sub of res.entries.filter((e) => e.dir && !e.link)) {
+      await this.#deleteTree(session, dir, sub.name);
+    }
+    await call('remote.rmdir', { session, path: parent, name });
+  }
+
   clearFinished(): void {
     this.transfers = this.transfers.filter((x) => x.state === 'running');
   }

@@ -153,5 +153,13 @@
   "queue.cancel": "Cancel",
   "queue.cancel_all": "Cancel all",
   "queue.canceled": "canceled",
-  "dialog.exists.apply_all": "Do the same for all files in the queue"
+  "dialog.exists.apply_all": "Do the same for all files in the queue",
+  "fileop.rename.title": "Rename",
+  "fileop.mkdir.title": "New folder",
+  "fileop.delete.title": "Delete",
+  "fileop.trash": "Move to trash",
+  "fileop.copy_path": "Copy path",
+  "fileop.delete.remote": "{count, plural, one {Delete # item from the server? This cannot be undone.} other {Delete # items from the server? This cannot be undone.}}",
+  "fileop.delete.local": "{count, plural, one {Move # item to the trash?} other {Move # items to the trash?}}",
+  "fileop.delete.more": "{count, plural, one {and # more} other {and # more}}"
 }
