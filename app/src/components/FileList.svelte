@@ -25,6 +25,10 @@
     error?: string;
     emptyText?: string;
     label: string;
+    /** Right click: the rows it applies to (empty for the blank area). */
+    onContextMenu?: (e: MouseEvent, rows: FileRow[]) => void;
+    /** F2, Delete and F5 on the selection. */
+    onCommand?: (command: 'rename' | 'delete' | 'refresh', rows: FileRow[]) => void;
   }
 
   let {
@@ -38,6 +42,8 @@
     error = '',
     emptyText = '',
     label,
+    onContextMenu,
+    onCommand,
   }: Props = $props();
 
   // Only the rows in view are in the DOM, so 100k entries stay cheap.
@@ -109,6 +115,28 @@
     viewport.focus();
   }
 
+  const rowsOf = (set: Set<number>) => [...set].filter((i) => i >= offset && i < count).map((i) => sorted[i - offset]);
+
+  function contextMenu(e: MouseEvent, i: number | null) {
+    if (!onContextMenu) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (i === null) {
+      selection = new Set();
+      onContextMenu(e, []);
+      return;
+    }
+    if (!selection.has(i)) {
+      selection = new Set([i]);
+      anchor = i;
+    }
+    focusIndex = i;
+    viewport.focus();
+    onContextMenu(e, rowsOf(selection));
+  }
+
   function move(to: number, extend: boolean) {
     if (count === 0) {
       return;
@@ -147,6 +175,19 @@
         if (canGoUp) {
           onUp();
         }
+        break;
+      case 'F2':
+        if (selected.length === 1) {
+          onCommand?.('rename', selected);
+        }
+        break;
+      case 'Delete':
+        if (selected.length) {
+          onCommand?.('delete', selected);
+        }
+        break;
+      case 'F5':
+        onCommand?.('refresh', selected);
         break;
       case 'Enter': {
         const files = selected.filter((r) => !r.dir);
@@ -189,6 +230,7 @@
     bind:this={viewport}
     bind:clientHeight={height}
     onscroll={() => (scrollTop = viewport.scrollTop)}
+    oncontextmenu={(e) => contextMenu(e, null)}
     {onkeydown}
   >
     <div class="spacer" style:height="{count * rowHeight}px">
@@ -204,6 +246,7 @@
           style:transform="translateY({i * rowHeight}px)"
           onclick={(e) => click(e, i)}
           ondblclick={() => open(i)}
+          oncontextmenu={(e) => (i < offset ? e.preventDefault() : contextMenu(e, i))}
           onkeydown={() => {}}
         >
           {#if row}

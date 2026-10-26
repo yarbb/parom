@@ -2,7 +2,9 @@
   import { connection } from '../lib/connection.svelte';
   import { remoteJoin, remoteParent, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileList from './FileList.svelte';
+  import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
 
   interface Props {
     onDownload: (items: { name: string; remotePath: string; dir: boolean }[]) => void;
@@ -21,6 +23,51 @@
 
   function download(files: FileRow[]) {
     onDownload(files.map((f) => ({ name: f.name, remotePath: connection.remotePath, dir: f.dir })));
+  }
+
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  let op = $state<FileOp | null>(null);
+
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir', rows: FileRow[]) {
+    if (!connected) {
+      return;
+    }
+    if (cmd === 'refresh') {
+      void connection.list(connection.remotePath);
+    } else if (cmd === 'mkdir') {
+      op = { kind: 'mkdir', onSubmit: (name) => void connection.mkdirRemote(name) };
+    } else if (cmd === 'rename' && rows.length === 1) {
+      const from = rows[0].name;
+      op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && void connection.renameRemote(from, to) };
+    } else if (cmd === 'delete' && rows.length) {
+      op = { kind: 'delete', names: rows.map((r) => r.name), remote: true, onSubmit: () => void connection.deleteRemote(rows) };
+    }
+  }
+
+  function copyPath(rows: FileRow[]) {
+    const paths = rows.length ? rows.map((r) => remoteJoin(connection.remotePath, r.name)) : [connection.remotePath];
+    void navigator.clipboard?.writeText(paths.join('\n'));
+  }
+
+  function openMenu(e: MouseEvent, rows: FileRow[]) {
+    if (!connected) {
+      return;
+    }
+    const any = rows.length > 0;
+    menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: `← ${t('files.download')}`, disabled: !any, action: () => download(rows) },
+        { separator: true, label: '' },
+        { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
+        { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+        { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
+        { label: t('fileop.copy_path'), action: () => copyPath(rows) },
+        { separator: true, label: '' },
+        { label: t('files.refresh'), hint: 'F5', action: () => command('refresh', rows) },
+      ],
+    };
   }
 </script>
 
@@ -48,5 +95,14 @@
     loading={connection.remoteLoading}
     error={connection.remoteError}
     emptyText={connected ? t('files.empty') : t('files.not_connected_hint')}
+    onContextMenu={openMenu}
+    onCommand={command}
   />
 </section>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}
+{#if op}
+  <FileOpDialog {op} onClose={() => (op = null)} />
+{/if}

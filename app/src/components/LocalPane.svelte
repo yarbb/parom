@@ -4,7 +4,9 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import { localJoin, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
-  import { listLocal, localHome, localRoots } from '../lib/local';
+  import { listLocal, localHome, localMkdir, localRename, localRoots, localTrash } from '../lib/local';
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+  import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
   import FileList from './FileList.svelte';
 
   interface Props {
@@ -79,6 +81,57 @@
     onUpload(files.map((f) => ({ name: f.name, local: localJoin(path, f.name, separator), dir: f.dir })));
   }
 
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  let op = $state<FileOp | null>(null);
+
+  /** Runs a local file operation, then reloads the folder; failures show in the list. */
+  async function fsOp(run: () => Promise<void>) {
+    try {
+      await run();
+      refresh();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir', rows: FileRow[]) {
+    if (atRoots) {
+      return;
+    }
+    const full = (name: string) => localJoin(path, name, separator);
+    if (cmd === 'refresh') {
+      refresh();
+    } else if (cmd === 'mkdir') {
+      op = { kind: 'mkdir', onSubmit: (name) => fsOp(() => localMkdir(full(name))) };
+    } else if (cmd === 'rename' && rows.length === 1) {
+      const from = rows[0].name;
+      op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && fsOp(() => localRename(full(from), full(to))) };
+    } else if (cmd === 'delete' && rows.length) {
+      const names = rows.map((r) => r.name);
+      op = { kind: 'delete', names, remote: false, onSubmit: () => fsOp(() => localTrash(names.map(full))) };
+    }
+  }
+
+  function openMenu(e: MouseEvent, rows: FileRow[]) {
+    if (atRoots) {
+      return;
+    }
+    const any = rows.length > 0;
+    menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: `${t('files.upload')} →`, disabled: !canUpload || !any, action: () => upload(rows) },
+        { separator: true, label: '' },
+        { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
+        { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+        { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
+        { separator: true, label: '' },
+        { label: t('files.refresh'), hint: 'F5', action: refresh },
+      ],
+    };
+  }
+
   onMount(async () => {
     if (!isTauri()) {
       error = t('files.error.desktop_only');
@@ -113,5 +166,14 @@
     {loading}
     {error}
     emptyText={t('files.empty')}
+    onContextMenu={openMenu}
+    onCommand={command}
   />
 </section>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}
+{#if op}
+  <FileOpDialog {op} onClose={() => (op = null)} />
+{/if}

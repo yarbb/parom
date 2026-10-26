@@ -118,3 +118,14 @@ pub fn walk(root: &str) -> Result<LocalTree, String> {
 pub fn mkdir(path: &str) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("{path}: {e}"))
 }
+pub fn rename(from: &str, to: &str) -> Result<(), String> {
+    if Path::new(to).exists() {
+        return Err(format!("{to}: already exists"));
+    }
+    fs::rename(from, to).map_err(|e| format!("{from}: {e}"))
+}
+
+/// Moves files and folders to the system trash (Recycle Bin), never deletes outright.
+pub fn trash(paths: &[String]) -> Result<(), String> {
+    trash::delete_all(paths).map_err(|e| e.to_string())
+}

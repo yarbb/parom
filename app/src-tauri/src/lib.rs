@@ -46,6 +46,18 @@ fn local_mkdir(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn local_rename(from: String, to: String) -> Result<(), String> {
+    local::rename(&from, &to)
+}
+
+#[tauri::command]
+async fn local_trash(paths: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || local::trash(&paths))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn local_home() -> String {
     local::home()
 }
@@ -138,6 +150,8 @@ pub fn run() {
             local_list,
             local_walk,
             local_mkdir,
+            local_rename,
+            local_trash,
             local_home,
             local_roots,
             secret_get,
