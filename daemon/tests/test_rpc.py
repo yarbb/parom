@@ -313,6 +313,8 @@ def trust_tests(exe, server, password):
 
 
 def main():
+    # Test output includes non-ASCII names; the CI console is not UTF-8 by default.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser()
     parser.add_argument("exe")
     parser.add_argument("--port", type=int, required=True)
