@@ -2,6 +2,9 @@
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
   import { sync } from '../lib/sync/engine.svelte';
+  import BackupsDialog from './BackupsDialog.svelte';
+
+  let backups = $state(false);
 
   // One line under the connect bar for sites with a local repository:
   // server commit, local commit, state, and "Sync with server".
@@ -40,6 +43,7 @@
     {/if}
     <span class="spacer"></span>
     {#if sync.error && c}<span class="status-removed err" title={sync.error}>{sync.error}</span>{/if}
+    <button class="control small" onclick={() => (backups = true)}>{t('backups.button')}</button>
     <button class="control small" disabled={sync.checking || !!sync.run} onclick={() => sync.refresh()}>{t('sync.check')}</button>
     <button
       class="control small primary"
@@ -47,6 +51,10 @@
       onclick={() => sync.start()}>{t('sync.sync_with_server')}</button
     >
   </div>
+{/if}
+
+{#if backups}
+  <BackupsDialog onClose={() => (backups = false)} />
 {/if}
 
 <style>
