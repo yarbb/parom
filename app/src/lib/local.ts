@@ -31,3 +31,7 @@ export async function listLocal(path: string): Promise<LocalListing> {
 
 export const localHome = () => invoke<string>('local_home');
 export const localRoots = () => invoke<string[]>('local_roots');
+
+/** All folders and files below `path`, relative with "/" (folders parents first). */
+export const localWalk = (path: string) => invoke<{ dirs: string[]; files: string[] }>('local_walk', { path });
+export const localMkdir = (path: string) => invoke<void>('local_mkdir', { path });

@@ -5,7 +5,7 @@
   import FileList from './FileList.svelte';
 
   interface Props {
-    onDownload: (files: { name: string; remotePath: string }[]) => void;
+    onDownload: (items: { name: string; remotePath: string; dir: boolean }[]) => void;
   }
 
   let { onDownload }: Props = $props();
@@ -20,7 +20,7 @@
   });
 
   function download(files: FileRow[]) {
-    onDownload(files.filter((f) => !f.dir).map((f) => ({ name: f.name, remotePath: connection.remotePath })));
+    onDownload(files.map((f) => ({ name: f.name, remotePath: connection.remotePath, dir: f.dir })));
   }
 </script>
 
@@ -29,7 +29,7 @@
     <span>{t('files.remote')}</span>
     <span class="buttons">
       <button class="control small" disabled={!connected} onclick={() => connection.list(connection.remotePath)}>{t('files.refresh')}</button>
-      <button class="control small" disabled={!connected || !selected.some((r) => !r.dir)} onclick={() => download(selected)}>
+      <button class="control small" disabled={!connected || selected.length === 0} onclick={() => download(selected)}>
         ← {t('files.download')}
       </button>
     </span>

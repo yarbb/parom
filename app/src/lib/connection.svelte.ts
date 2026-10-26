@@ -1,7 +1,8 @@
 // The Files tab's connection: one daemon session, its remote listing,
 // questions the engine asks (host key, passwords, file exists) and transfers.
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
-import { parseHost, parseRemoteTime, type FileRow } from './files';
+import { localJoin, parseHost, parseRemoteTime, remoteJoin, type FileRow } from './files';
+import { localMkdir, localWalk } from './local';
 import { t } from './i18n';
 import { addRecent, credentialKey, loadRecent, removeRecent, saveRecent, sameServer, type RecentServer } from './recent';
 import { deleteSecret, setSecret } from './secrets';
@@ -263,6 +264,72 @@ class Connection {
     if (server.remember) {
       void deleteSecret(credentialKey(server)).catch(() => {});
     }
+  }
+
+  /** Uploads a local folder into `remotePath`, creating the folder tree first. */
+  async uploadFolder(localDir: string, separator: string, name: string, remotePath: string): Promise<void> {
+    const session = this.session;
+    if (session === null) {
+      return;
+    }
+    let tree: { dirs: string[]; files: string[] };
+    try {
+      tree = await localWalk(localDir);
+    } catch (e) {
+      this.remoteError = String(e);
+      return;
+    }
+    const root = remoteJoin(remotePath, name);
+    for (const dir of [root, ...tree.dirs.map((d) => remoteJoin(root, d))]) {
+      // Existing folders make mkdir fail; that is fine.
+      await call('remote.mkdir', { session, path: dir }).catch(() => {});
+    }
+    const toLocal = (rel: string) => localJoin(localDir, rel.split('/').join(separator), separator);
+    await Promise.all(
+      tree.files.map((rel) => {
+        const slash = rel.lastIndexOf('/');
+        const dir = slash < 0 ? root : remoteJoin(root, rel.slice(0, slash));
+        const file = rel.slice(slash + 1);
+        return this.transfer(false, `${name}/${rel}`, { local: toLocal(rel), remote_path: dir, remote_name: file });
+      }),
+    );
+  }
+
+  /** Downloads a remote folder into `localDir`, walking it breadth first. */
+  async downloadFolder(remotePath: string, name: string, localDir: string, separator: string): Promise<void> {
+    const session = this.session;
+    if (session === null) {
+      return;
+    }
+    const jobs: Promise<void>[] = [];
+    const pending: { remote: string; local: string; rel: string }[] = [
+      { remote: remoteJoin(remotePath, name), local: localJoin(localDir, name, separator), rel: name },
+    ];
+    while (pending.length) {
+      const dir = pending.shift()!;
+      try {
+        await localMkdir(dir.local);
+        const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session, path: dir.remote });
+        for (const e of res.entries) {
+          if (e.link && e.dir) {
+            continue; // Do not follow links to folders: they can loop.
+          }
+          const next = {
+            remote: remoteJoin(dir.remote, e.name),
+            local: localJoin(dir.local, e.name, separator),
+            rel: `${dir.rel}/${e.name}`,
+          };
+          if (e.dir) {
+            pending.push(next);
+          } else {
+            jobs.push(this.transfer(true, next.rel, { remote_path: dir.remote, remote_name: e.name, local: next.local }));
+          }
+        }
+      } catch (e) {
+        this.remoteError = `${dir.rel}: ${describeError(e)}`;
+      }
+    }
+    await Promise.all(jobs);
   }
 
   clearFinished(): void {

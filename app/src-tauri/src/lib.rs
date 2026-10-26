@@ -34,6 +34,18 @@ async fn local_list(path: String) -> Result<local::LocalListing, String> {
 }
 
 #[tauri::command]
+async fn local_walk(path: String) -> Result<local::LocalTree, String> {
+    tauri::async_runtime::spawn_blocking(move || local::walk(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn local_mkdir(path: String) -> Result<(), String> {
+    local::mkdir(&path)
+}
+
+#[tauri::command]
 fn local_home() -> String {
     local::home()
 }
@@ -124,6 +136,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_call,
             local_list,
+            local_walk,
+            local_mkdir,
             local_home,
             local_roots,
             secret_get,
