@@ -4,13 +4,14 @@
   import { sync } from '../lib/sync/engine.svelte';
   import BackupsDialog from './BackupsDialog.svelte';
 
+  // One line under the connect bar for sites with a local repository:
+  // target folder, server and local commit, state, and "Sync with server".
   let backups = $state(false);
 
-  // One line under the connect bar for sites with a local repository:
-  // server commit, local commit, state, and "Sync with server".
   const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : '–');
 
   let c = $derived(sync.check);
+  let busy = $derived(sync.checking || sync.preparing || !!sync.run);
   let stateText = $derived.by(() => {
     if (!c) {
       return '';
@@ -25,31 +26,38 @@
     return edits ? `${base} · ${t('sync.edited_on_server', { count: edits })}` : base;
   });
   let warn = $derived(!!c && (c.state === 'diverged' || c.state === 'unknown-commit' || c.edits.edited.length + c.edits.missing.length > 0));
+  let activity = $derived(
+    sync.preparing ? t('sync.preparing', { progress: sync.progress }) : sync.checking ? t('sync.checking_progress', { progress: sync.progress }) : '',
+  );
 </script>
 
 {#if sync.active}
   <div class="bar">
-    {#if sync.checking && !c}
-      <span class="muted">{t('sync.checking')}</span>
-    {:else if c}
-      <span class="mono"><span class="muted">{t('sync.server')}</span> {short(c.marker?.sha)}</span>
-      <span class="mono"><span class="muted">{t('sync.local')}</span> {short(c.repo.head)}</span>
-      <span class:status-modified={warn} class:status-new={c.state === 'up-to-date' && !warn}>{stateText}</span>
-      {#if c.dirtyManaged.length}
-        <span class="status-modified" title={c.dirtyManaged.join('\n')}>{t('sync.uncommitted', { count: c.dirtyManaged.length })}: {c.dirtyManaged.slice(0, 2).join(', ')}{c.dirtyManaged.length > 2 ? ', ...' : ''}</span>
+    <div class="info">
+      {#if c}
+        <span class="mono item" title={c.root}><span class="muted">{t('sync.target')}</span> {c.root}</span>
+        <span class="mono item"><span class="muted">{t('sync.server')}</span> {short(c.marker?.sha)}</span>
+        <span class="mono item"><span class="muted">{t('sync.local')}</span> {short(c.repo.head)}</span>
+        <span class="item" class:status-modified={warn} class:status-new={c.state === 'up-to-date' && !warn}>{stateText}</span>
+        {#if c.dirtyManaged.length}
+          <span class="status-modified item cut" title={c.dirtyManaged.join('\n')}>
+            {t('sync.uncommitted', { count: c.dirtyManaged.length })}: {c.dirtyManaged.join(', ')}
+          </span>
+        {/if}
       {/if}
-    {:else if sync.error}
-      <span class="status-removed" title={sync.error}>{sync.error}</span>
-    {/if}
-    <span class="spacer"></span>
-    {#if sync.error && c}<span class="status-removed err" title={sync.error}>{sync.error}</span>{/if}
-    <button class="control small" onclick={() => (backups = true)}>{t('backups.button')}</button>
-    <button class="control small" disabled={sync.checking || !!sync.run} onclick={() => sync.refresh()}>{t('sync.check')}</button>
-    <button
-      class="control small primary"
-      disabled={!c || sync.checking || !!sync.run || connection.state !== 'connected'}
-      onclick={() => sync.start()}>{t('sync.sync_with_server')}</button
-    >
+      {#if activity}
+        <span class="muted item">{activity}</span>
+      {:else if sync.error}
+        <span class="status-removed item cut" title={sync.error}>{sync.error}</span>
+      {/if}
+    </div>
+    <div class="buttons">
+      <button class="control small" onclick={() => (backups = true)}>{t('backups.button')}</button>
+      <button class="control small" disabled={busy} onclick={() => sync.refresh()}>{t('sync.check')}</button>
+      <button class="control small primary" disabled={!c || busy || connection.state !== 'connected'} onclick={() => sync.start()}>
+        {t('sync.sync_with_server')}
+      </button>
+    </div>
   </div>
 {/if}
 
@@ -68,14 +76,34 @@
     flex: none;
   }
 
-  .spacer {
+  .info {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    overflow: hidden;
   }
 
-  .err {
-    max-width: 40%;
+  .item {
+    white-space: nowrap;
+    flex: none;
+  }
+
+  .item.cut {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 6px;
+    flex: none;
+  }
+
+  .buttons button {
     white-space: nowrap;
   }
 </style>

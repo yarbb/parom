@@ -30,12 +30,15 @@
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
-    if (op.kind === 'delete') {
+    // Keep the operation: closing clears the parent's state, and with it `op`.
+    const current = op;
+    const name = value.trim();
+    if (current.kind === 'delete') {
       onClose();
-      op.onSubmit();
+      current.onSubmit();
     } else if (!invalid) {
       onClose();
-      op.onSubmit(value.trim());
+      current.onSubmit(name);
     }
   }
 
