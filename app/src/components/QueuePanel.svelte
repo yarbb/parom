@@ -12,9 +12,12 @@
 <section class="queue">
   <div class="section-label head">
     <span>{t('queue.header', { queued: running, failed, succeeded: done })}</span>
-    <button class="control small" disabled={running === connection.transfers.length} onclick={() => connection.clearFinished()}>
-      {t('queue.clear')}
-    </button>
+    <span class="buttons">
+      <button class="control small" disabled={running === 0} onclick={() => connection.cancelAll()}>{t('queue.cancel_all')}</button>
+      <button class="control small" disabled={running === connection.transfers.length} onclick={() => connection.clearFinished()}>
+        {t('queue.clear')}
+      </button>
+    </span>
   </div>
   <div class="rows">
     {#each connection.transfers as tr (tr.id)}
@@ -26,9 +29,18 @@
           <span class="state mono status-new">{t('queue.done')}</span>
         {:else if tr.state === 'failed'}
           <span class="state mono status-removed" title={tr.error}>{t('queue.failed')}</span>
+        {:else if tr.state === 'canceled'}
+          <span class="state mono muted">{t('queue.canceled')}</span>
         {:else}
           <span class="state mono status-modified">{tr.total > 0 ? `${pct}%` : t('queue.queued')}</span>
         {/if}
+        <button
+          class="cancel"
+          aria-label={t('queue.cancel')}
+          title={t('queue.cancel')}
+          disabled={tr.state !== 'running'}
+          onclick={() => connection.cancel(tr)}>✕</button
+        >
       </div>
     {/each}
   </div>
@@ -83,5 +95,27 @@
     min-width: 58px;
     text-align: right;
     font-size: 11px;
+  }
+
+  .cancel {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .cancel:hover:not(:disabled) {
+    background: var(--selected-bg);
+    color: var(--text-strong);
+  }
+
+  .cancel:disabled {
+    visibility: hidden;
   }
 </style>

@@ -498,6 +498,9 @@ private:
 			s.engine->Cancel();
 			send_result(id, json::object());
 		}
+		else if (method == "session.cancel_request") {
+			cancel_request(id, params);
+		}
 		else if (method == "remote.list") {
 			list(id, params);
 		}
@@ -634,6 +637,36 @@ private:
 			return json{{"path", u8(s.last_listing.GetPath())}, {"entries", std::move(entries)}};
 		};
 		enqueue(s, std::move(p));
+	}
+
+	/// Cancels one earlier request by its JSON-RPC id: the running command is
+	/// aborted by the engine, a queued one is dropped before it starts. Either
+	/// way that request then fails with flag "canceled".
+	void cancel_request(json const& id, json const& params)
+	{
+		auto& s = session(params);
+		auto it = params.find("id");
+		if (it == params.end() || it->is_null()) {
+			throw RpcError{invalid_params, "Missing parameter: id"};
+		}
+		json const& target = *it;
+
+		if (s.current && s.current->id == target) {
+			s.engine->Cancel();
+			send_result(id, json{{"state", "running"}});
+			return;
+		}
+		for (auto q = s.queue.begin(); q != s.queue.end(); ++q) {
+			if (q->id == target) {
+				json const dropped = q->id;
+				s.queue.erase(q);
+				send_error(dropped, engine_error, "Operation canceled",
+					json{{"reply", FZ_REPLY_CANCELED}, {"flags", reply_flags(FZ_REPLY_CANCELED)}});
+				send_result(id, json{{"state", "queued"}});
+				return;
+			}
+		}
+		throw RpcError{unknown_request, "No such running or queued request"};
 	}
 
 	std::optional<CFileExistsNotification::OverwriteAction> exists_param(json const& params)

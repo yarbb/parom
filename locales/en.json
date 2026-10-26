@@ -149,5 +149,8 @@
   "dialog.insecure.allow": "Connect without encryption",
   "dialog.resumption.title": "TLS session resumption not supported",
   "dialog.resumption.body": "The server {host}:{port} does not resume the TLS session for file transfers, so they are less protected against tampering. Allow transfers anyway?",
-  "dialog.resumption.allow": "Allow"
+  "dialog.resumption.allow": "Allow",
+  "queue.cancel": "Cancel",
+  "queue.cancel_all": "Cancel all",
+  "queue.canceled": "canceled"
 }

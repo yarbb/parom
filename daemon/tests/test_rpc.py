@@ -34,6 +34,9 @@ class Daemon:
         # type -> function(params) returning the reply fields; seen requests by type.
         self.answers = {}
         self.seen = {}
+        # Responses to requests sent with send(), kept until wait_response().
+        self.stash = {}
+        self.async_ids = set()
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -78,7 +81,18 @@ class Daemon:
         self.send_raw(json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}))
         self.pending_replies = getattr(self, "pending_replies", set()) | {req_id}
 
+    def send(self, method, params):
+        """Sends a request without waiting; collect it later with wait_response."""
+        req_id = self.next_id
+        self.next_id += 1
+        print(f"> {method} (async {req_id})")
+        self.async_ids.add(req_id)
+        self.send_raw(json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}))
+        return req_id
+
     def wait_response(self, req_id, timeout=60):
+        if req_id in self.stash:
+            return self.stash.pop(req_id)
         deadline = time.monotonic() + timeout
         while True:
             remaining = deadline - time.monotonic()
@@ -96,6 +110,9 @@ class Daemon:
             if msg.get("id") in replies:
                 assert "result" in msg, f"request.reply failed: {msg}"
                 replies.discard(msg["id"])
+                continue
+            if msg.get("id") in self.async_ids:
+                self.stash[msg["id"]] = msg
                 continue
             raise AssertionError(f"unexpected message {msg}")
 
@@ -190,6 +207,52 @@ def transfers(d, sid, root):
     shutil.rmtree(work, ignore_errors=True)
 
 
+def mkdir_and_cancel(d, sid, root):
+    # mkdir must answer for an existing folder (the UI relies on it for folder
+    # uploads) and work for nested paths.
+    d.ok("remote.mkdir", {"session": sid, "path": "/m"})
+    again = d.call("remote.mkdir", {"session": sid, "path": "/m"})
+    print(f"  mkdir existing -> {again.get('error', again.get('result'))}")
+    d.ok("remote.mkdir", {"session": sid, "path": "/m/n"})
+    assert os.path.isdir(os.path.join(root, "m", "n"))
+
+    work = tempfile.mkdtemp(prefix="totzillad-cancel-")
+    local = os.path.join(work, "huge.bin")
+    with open(local, "wb") as f:
+        for _ in range(200):
+            f.write(os.urandom(1024 * 1024))
+
+    # Two uploads queue up in the session; cancel the waiting one, then the running one.
+    d.events.clear()
+    first = d.send("transfer.upload", {"session": sid, "local": local, "remote_path": "/m", "remote_name": "one.bin"})
+    second = d.send("transfer.upload", {"session": sid, "local": local, "remote_path": "/m", "remote_name": "two.bin"})
+    assert d.ok("session.cancel_request", {"session": sid, "id": second})["state"] == "queued"
+    dropped = d.wait_response(second)
+    assert "canceled" in dropped["error"]["data"]["flags"], dropped
+
+    while not progress_for(d, first):
+        msg = d.messages.get(timeout=30)
+        if msg is None:
+            raise AssertionError("daemon closed stdout")
+        if "method" in msg:
+            d._handle_event(msg)
+        elif msg.get("id") in d.async_ids:
+            d.stash[msg["id"]] = msg
+    assert d.ok("session.cancel_request", {"session": sid, "id": first})["state"] == "running"
+    aborted = d.wait_response(first)
+    assert "error" in aborted and "canceled" in aborted["error"]["data"]["flags"], aborted
+    assert not os.path.exists(os.path.join(root, "m", "two.bin"))
+
+    d.error("session.cancel_request", {"session": sid, "id": first}, -32002)
+    # The session still works after a cancel.
+    names_after = names(d.ok("remote.list", {"session": sid, "path": "/m"}))
+    if "one.bin" in names_after:
+        d.ok("remote.delete", {"session": sid, "path": "/m", "names": ["one.bin"]})
+    d.ok("remote.rmdir", {"session": sid, "path": "/m", "name": "n"})
+    d.ok("remote.rmdir", {"session": sid, "path": "/", "name": "m"})
+    shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("exe")
@@ -245,6 +308,7 @@ def main():
     assert os.listdir(args.root) == []
 
     transfers(d, sid, args.root)
+    mkdir_and_cancel(d, sid, args.root)
 
     d.error("remote.list", {"session": sid, "path": "/does/not/exist"}, -32000)
     d.error("remote.rmdir", {"session": sid, "path": "/", "name": "a/b"}, -32602)
