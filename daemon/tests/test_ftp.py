@@ -11,6 +11,7 @@ import argparse
 import filecmp
 import os
 import shutil
+import sys
 import tempfile
 
 from test_rpc import Daemon, names
@@ -37,6 +38,8 @@ def round_trip(d, sid, root, work, label):
 
 
 def main():
+    # Test output includes non-ASCII names; the CI console is not UTF-8 by default.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser()
     parser.add_argument("exe")
     parser.add_argument("--password", required=True)
