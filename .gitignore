@@ -1,0 +1,6 @@
+build/
+out/
+node_modules/
+target/
+*.log
+HANDOFF_PRIVATE.md

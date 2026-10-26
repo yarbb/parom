@@ -1,0 +1,26 @@
+TOTzilla (working name)
+
+This product includes software developed by the FileZilla Project:
+  FileZilla 3.71.1 (engine: src/engine, src/include, src/commonui), Copyright (C) Tim Kosse and contributors,
+  licensed under the GNU General Public License v3 or later. https://filezilla-project.org/
+  Source: third_party/filezilla/FileZilla_3.71.1_src.tar.xz
+  SHA-256 3df9b9b3e5b2c37dc6d9ecb883554aba140a02ec47c3d6b52333bf1733af4da4
+  (identical to https://sources.archlinux.org/other/filezilla/filezilla-3.71.1.tar.xz)
+
+It links against (Windows builds use the MSYS2 UCRT64 packages):
+  libfilezilla - Copyright (C) 2015-2026 Tim Kosse - GPLv2 or later
+    https://lib.filezilla-project.org/ ; source mirror: https://sources.archlinux.org/other/libfilezilla/
+  fzssh (libfzssh-client) - Copyright (C) 2025-2026 Tim Kosse and Business Follows srl. - AGPLv3 or later
+    Includes code derived from PuTTY (Copyright Simon Tatham and others, MIT license).
+    https://fzssh.filezilla-project.org/ ; source mirror: https://sources.archlinux.org/other/packages/fzssh/
+  GnuTLS - Copyright (C) 2000-2023 Free Software Foundation - LGPLv2.1 or later
+  Nettle - Copyright (C) 2001-2025 Niels Moller and others - GPLv2 or later / LGPLv3 or later
+  GMP - Copyright Free Software Foundation, Inc. - GPLv2 or later / LGPLv3 or later
+  SQLite - public domain
+(License list for the FileZilla dependencies is taken from the FileZilla 3.71.1 README.)
+
+Because fzssh is AGPLv3, distributed binaries that link it are subject to the AGPLv3 terms
+(GPLv3 section 13 allows the combination). Complete corresponding source must be offered.
+
+Modified files must carry a prominent notice of the change and keep their original copyright headers.
+"FileZilla" is a trademark of its owner; this project is not affiliated with or endorsed by the FileZilla Project.

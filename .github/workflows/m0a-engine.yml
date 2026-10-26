@@ -1,0 +1,59 @@
+# M0a: prove we can build the FileZilla engine (no GUI) on Windows.
+# libfilezilla and fzssh come prebuilt from MSYS2 (UCRT64); MSYS2 also packages
+# FileZilla 3.71.1 against them, so the versions are known to work together.
+name: M0a engine build
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - third_party/filezilla/**
+      - .github/workflows/m0a-engine.yml
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make tar xz
+          pacboy: >-
+            toolchain:p autotools:p pkgconf:p
+            libfilezilla:p fzssh:p gnutls:p nettle:p sqlite3:p
+      - name: Dependency versions
+        run: pacman -Q | grep -E 'libfilezilla|fzssh|gnutls|nettle|gcc '
+      - name: Verify FileZilla source tarball
+        run: |
+          # Same hash as the MSYS2 and Arch Linux packages of FileZilla 3.71.1.
+          echo "3df9b9b3e5b2c37dc6d9ecb883554aba140a02ec47c3d6b52333bf1733af4da4  third_party/filezilla/FileZilla_3.71.1_src.tar.xz" | sha256sum -c
+      - name: Configure FileZilla (GUI disabled)
+        run: |
+          mkdir src-fz && tar xf third_party/filezilla/FileZilla_3.71.1_src.tar.xz -C src-fz --strip-components=1
+          mkdir build-fz && cd build-fz
+          ../src-fz/configure --prefix="$MINGW_PREFIX" \
+            --build="$MINGW_CHOST" --host="$MINGW_CHOST" \
+            --enable-gui=no --disable-locales --disable-shellext --disable-storj \
+            --disable-manualupdatecheck --disable-autoupdatecheck \
+            --with-pugixml=builtin
+      - name: Build engine
+        run: make -j"$(nproc)" -C build-fz/src
+      - name: Collect output
+        if: always()
+        run: |
+          mkdir -p out/bin out/lib out/include
+          cp build-fz/config.log out/ 2>/dev/null || true
+          find build-fz/src -name '*.dll' -exec cp {} out/bin/ \;
+          find build-fz/src -name '*.dll.a' -exec cp {} out/lib/ \;
+          cp src-fz/src/include/*.h out/include/ 2>/dev/null || true
+          ls -laR out
+          test -n "$(ls out/bin/*.dll 2>/dev/null)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m0a-engine
+          path: out/
