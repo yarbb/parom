@@ -3,6 +3,9 @@
   import { connection } from '../lib/connection.svelte';
   import { localJoin } from '../lib/files';
   import { t } from '../lib/i18n';
+  import { credentialKey } from '../lib/recent';
+  import { getSecret } from '../lib/secrets';
+  import Checkbox from './Checkbox.svelte';
   import type { EngineState } from '../lib/types';
   import LocalPane from './LocalPane.svelte';
   import QueuePanel from './QueuePanel.svelte';
@@ -15,6 +18,7 @@
   let user = $state('');
   let password = $state('');
   let port = $state('');
+  let remember = $state(false);
 
   let localPath = $state('');
   let localSeparator = $state('/');
@@ -42,13 +46,32 @@
       if (!same) {
         password = '';
       }
-      if (password) {
-        void connection.connect({ host, user, password, port });
-      } else {
-        void tick().then(() => passwordInput?.focus());
-      }
+      remember = !!p.remember;
+      void fillAndConnect(p.remember ? credentialKey(p) : null);
     });
   });
+
+  /** Uses the stored password if there is one, otherwise the typed one, otherwise asks for it. */
+  async function fillAndConnect(key: string | null) {
+    if (key) {
+      try {
+        const stored = await getSecret(key);
+        if (stored !== null) {
+          password = stored;
+        } else {
+          remember = false;
+        }
+      } catch {
+        remember = false;
+      }
+    }
+    if (password) {
+      void connection.connect({ host, user, password, port, remember });
+    } else {
+      await tick();
+      passwordInput?.focus();
+    }
+  }
   let busy = $derived(connection.state === 'connecting');
 
   onMount(() => {
@@ -71,7 +94,7 @@
     if (connected) {
       void connection.disconnect();
     } else {
-      void connection.connect({ host, user, password, port });
+      void connection.connect({ host, user, password, port, remember });
     }
   }
 
@@ -112,6 +135,7 @@
     disabled={connected || busy}
     bind:value={port}
   />
+  <Checkbox bind:checked={remember} label={t('files.connect.remember')} title={t('files.connect.remember_hint')} disabled={connected || busy} />
   {#if connected}
     <button class="control" type="submit">{t('common.disconnect')}</button>
   {:else}

@@ -1,27 +1,34 @@
 // Recently used servers for the top bar menu. Only host, user and port are
-// kept, never passwords (those go to the OS credential store with the Site
-// Manager in M2). Stored per machine in the webview's storage for now.
+// stored here; a remembered password lives in the OS credential store under
+// `credentialKey()`. Stored per machine in the webview's storage for now.
 
 export interface RecentServer {
   protocol: string;
   host: string;
   port?: number;
   user: string;
+  /** A password for it is in the OS credential store. */
+  remember?: boolean;
 }
 
 const storageKey = 'recent-servers';
 export const maxRecent = 8;
 
-const same = (a: RecentServer, b: RecentServer) =>
+export const sameServer = (a: RecentServer, b: RecentServer) =>
   a.protocol === b.protocol && a.host.toLowerCase() === b.host.toLowerCase() && a.port === b.port && a.user === b.user;
+
+/** Credential store key for a server's password. */
+export function credentialKey(s: RecentServer): string {
+  return `${s.protocol}://${s.user}@${s.host.toLowerCase()}${s.port ? `:${s.port}` : ''}`;
+}
 
 /** Moves `server` to the front, dropping duplicates and the oldest entries. */
 export function addRecent(list: readonly RecentServer[], server: RecentServer): RecentServer[] {
-  return [server, ...list.filter((s) => !same(s, server))].slice(0, maxRecent);
+  return [server, ...list.filter((s) => !sameServer(s, server))].slice(0, maxRecent);
 }
 
 export function removeRecent(list: readonly RecentServer[], server: RecentServer): RecentServer[] {
-  return list.filter((s) => !same(s, server));
+  return list.filter((s) => !sameServer(s, server));
 }
 
 /** "user@host:port", or with the host masked when the address is hidden. */

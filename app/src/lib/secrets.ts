@@ -1,0 +1,18 @@
+// Passwords in the OS credential store (src-tauri/src/secrets.rs).
+import { invoke, isTauri } from '@tauri-apps/api/core';
+
+export async function getSecret(key: string): Promise<string | null> {
+  return isTauri() ? invoke<string | null>('secret_get', { key }) : null;
+}
+
+export async function setSecret(key: string, password: string): Promise<void> {
+  if (isTauri()) {
+    await invoke('secret_set', { key, password });
+  }
+}
+
+export async function deleteSecret(key: string): Promise<void> {
+  if (isTauri()) {
+    await invoke('secret_delete', { key });
+  }
+}

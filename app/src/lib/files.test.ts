@@ -13,7 +13,7 @@ import {
   type FileRow,
 } from './files';
 import { format } from './i18n';
-import { addRecent, maxRecent, recentLabel, removeRecent, type RecentServer } from './recent';
+import { addRecent, credentialKey, maxRecent, recentLabel, removeRecent, type RecentServer } from './recent';
 
 const row = (name: string, extra: Partial<FileRow> = {}): FileRow => ({
   name,
@@ -139,6 +139,12 @@ describe('recent servers', () => {
     expect(addRecent(many, a)).toHaveLength(maxRecent);
     expect(addRecent(many, a)[0]).toEqual(a);
     expect(removeRecent([a, b], a)).toEqual([b]);
+  });
+
+  it('keys credentials by protocol, user, host and port', () => {
+    expect(credentialKey(a)).toBe('sftp://u@a.example:2022');
+    expect(credentialKey({ ...a, host: 'A.EXAMPLE', remember: true })).toBe('sftp://u@a.example:2022');
+    expect(credentialKey(b)).toBe('sftp://u@b.example');
   });
 
   it('labels with or without the address', () => {

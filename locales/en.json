@@ -127,5 +127,8 @@
   "files.browse_hint": "Choose a folder in the system dialog",
   "topbar.recent": "Recent servers",
   "topbar.no_recent": "Servers you connect to appear here.",
-  "topbar.forget": "Remove from the list"
+  "topbar.forget": "Remove from the list",
+  "files.connect.remember": "Remember",
+  "files.connect.remember_hint": "Keep the password in the system credential store (never in plain text)",
+  "files.error.remember": "Connected, but the password could not be saved: {reason}"
 }

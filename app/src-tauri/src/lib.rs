@@ -1,5 +1,6 @@
 mod daemon;
 mod local;
+mod secrets;
 
 use daemon::{Daemon, BRIDGE_ERROR};
 use serde_json::{json, Value};
@@ -40,6 +41,27 @@ fn local_home() -> String {
 #[tauri::command]
 fn local_roots() -> Vec<String> {
     local::roots()
+}
+
+/// Credentials are filed under the product name, so renaming the app only
+/// needs the one productName in tauri.conf.json.
+fn secret_service(app: &tauri::AppHandle) -> String {
+    app.package_info().name.clone()
+}
+
+#[tauri::command]
+fn secret_get(app: tauri::AppHandle, key: String) -> Result<Option<String>, String> {
+    secrets::get(&secret_service(&app), &key)
+}
+
+#[tauri::command]
+fn secret_set(app: tauri::AppHandle, key: String, password: String) -> Result<(), String> {
+    secrets::set(&secret_service(&app), &key, &password)
+}
+
+#[tauri::command]
+fn secret_delete(app: tauri::AppHandle, key: String) -> Result<(), String> {
+    secrets::delete(&secret_service(&app), &key)
 }
 
 /// `--self-test <file>`: starts the bundled daemon, asks for its version and
@@ -99,7 +121,15 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![daemon_call, local_list, local_home, local_roots])
+        .invoke_handler(tauri::generate_handler![
+            daemon_call,
+            local_list,
+            local_home,
+            local_roots,
+            secret_get,
+            secret_set,
+            secret_delete
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the application");
 }

@@ -3,7 +3,8 @@
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
 import { parseHost, parseRemoteTime, type FileRow } from './files';
 import { t } from './i18n';
-import { addRecent, loadRecent, removeRecent, saveRecent, type RecentServer } from './recent';
+import { addRecent, credentialKey, loadRecent, removeRecent, saveRecent, sameServer, type RecentServer } from './recent';
+import { deleteSecret, setSecret } from './secrets';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
@@ -38,6 +39,8 @@ export interface ConnectParams {
   user: string;
   password: string;
   port: string;
+  /** Keep the password in the OS credential store. */
+  remember: boolean;
 }
 
 /** A readable reason for a failed daemon call. */
@@ -145,13 +148,38 @@ class Connection {
       this.session = res.session;
       this.state = 'connected';
       const port = Number.isFinite(target.port) ? target.port : undefined;
-      this.recent = addRecent(this.recent, { protocol: target.protocol, host: target.host, port, user });
-      saveRecent(this.recent);
+      await this.#remember({ protocol: target.protocol, host: target.host, port, user }, params);
       await this.list();
     } catch (e) {
       this.state = 'disconnected';
       this.session = null;
       this.error = t('files.error.connect', { reason: describeError(e) });
+    }
+  }
+
+  /** Updates the recent list and the stored password after a successful connect. */
+  async #remember(server: RecentServer, params: ConnectParams): Promise<void> {
+    const key = credentialKey(server);
+    let remember = params.remember && params.password !== '';
+    try {
+      if (remember) {
+        await setSecret(key, params.password);
+      } else {
+        await deleteSecret(key);
+      }
+    } catch (e) {
+      remember = false;
+      this.error = t('files.error.remember', { reason: String(e) });
+    }
+
+    const before = this.recent;
+    this.recent = addRecent(before, { ...server, remember });
+    saveRecent(this.recent);
+    // Entries pushed off the list take their passwords with them.
+    for (const old of before) {
+      if (old.remember && !this.recent.some((s) => sameServer(s, old))) {
+        void deleteSecret(credentialKey(old)).catch(() => {});
+      }
     }
   }
 
@@ -232,6 +260,9 @@ class Connection {
   forget(server: RecentServer): void {
     this.recent = removeRecent(this.recent, server);
     saveRecent(this.recent);
+    if (server.remember) {
+      void deleteSecret(credentialKey(server)).catch(() => {});
+    }
   }
 
   clearFinished(): void {
