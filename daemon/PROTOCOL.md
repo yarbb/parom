@@ -9,6 +9,7 @@ Requests on one session run in order; a response arrives when the engine finishe
 | Method | Params | Result |
 |---|---|---|
 | `daemon.hello` | – | `{name, version, engine, protocol}` |
+| `daemon.init` | `data_dir` (UTF-8 path; created if missing) | `{}`; loads `trust.json` from it. Call once before opening sessions; without it trusted keys live in memory only |
 | `daemon.shutdown` | – | `{}`, then the daemon exits |
 | `session.open` | `protocol` (`sftp` default, `ftp`, `ftps`, `ftpes`, `ftp-insecure`), `host`, `port`?, `user`?, `password`?, `keyfile`?, `timeout`? (seconds) | `{session}` once connected |
 | `session.close` | `session` | `{}`; followed by the `session.closed` event |
@@ -44,17 +45,17 @@ The engine waits until `request.reply` arrives. Fields not given mean "no".
 
 | `type` | Event fields | Reply fields |
 |---|---|---|
-| `hostkey` | `host`, `port`, `fingerprint` (`SHA256:...`), `key` (OpenSSH format) | `trust` (bool) |
+| `hostkey` | `host`, `port`, `fingerprint` (`SHA256:...`), `key` (OpenSSH format), `changed` (a different key was trusted before), `previous`? | `trust` (bool), `remember` (bool: store it in trust.json) |
 | `password` | – | `password` (omit to cancel) |
 | `interactive` | `name`, `instruction`, `prompts: [{prompt, echo}]` | `responses` (array of strings, omit to cancel) |
 | `keyfile_password` | `file`, `fingerprint`, `repeated` | `password` (omit to cancel) |
 | `otp` | – | `otp` |
 | `insecure_connection` | `host`, `port` (FTP server without TLS) | `allow` (bool) |
-| `certificate` | `host`, `port`, `tls`, `cipher`, `system_trust`, `hostname_mismatch`, `weak_algorithms`, `certificates: [{subject, issuer, alt_names, fingerprint_sha256, serial, valid_from, valid_until, key, signature, self_signed}]` (server first) | `trust` (bool) |
+| `certificate` | `host`, `port`, `tls`, `cipher`, `system_trust`, `hostname_mismatch`, `weak_algorithms`, `certificates: [{subject, issuer, alt_names, fingerprint_sha256, serial, valid_from, valid_until, key, signature, self_signed}]` (server first), `changed`, `previous`? | `trust` (bool), `remember` (bool) |
 | `tls_no_resumption` | `host`, `port` (data connection cannot resume the TLS session) | `allow` (bool) |
 | `file_exists` | `download`, `local_file`, `local_size`, `remote_path`, `remote_file`, `remote_size` | `action` (`overwrite`, `overwrite_newer`, `overwrite_size`, `overwrite_size_or_newer`, `resume`, `rename`, `skip`), `new_name` for `rename` |
 
-Certificates the operating system trusts for the host name are accepted without asking. A certificate the user trusted once is accepted again for the rest of that session (data connections, reconnects). Nothing is remembered across sessions yet.
+Certificates the operating system trusts for the host name are accepted without asking. A certificate the user trusted once is accepted again for the rest of that session (data connections, reconnects). With `remember`, host keys and certificates are stored per host and port in `<data_dir>/trust.json` and accepted silently next time; a different key for the same host comes back as a request with `changed: true`.
 
 ## Errors
 

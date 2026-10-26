@@ -253,6 +253,56 @@ def mkdir_and_cancel(d, sid, root):
     shutil.rmtree(work, ignore_errors=True)
 
 
+def trust_tests(exe, server, password):
+    """Remembered host keys survive a daemon restart; a changed key is flagged."""
+    data = tempfile.mkdtemp(prefix="totzillad-data-")
+    trust_file = os.path.join(data, "trust.json")
+    params = dict(server, password=password)
+
+    d = Daemon(exe)
+    d.ok("daemon.init", {"data_dir": data})
+    d.answers["hostkey"] = lambda p: {"trust": True, "remember": True}
+    first = d.ok("session.open", params)["session"]
+    assert d.seen["hostkey"][-1]["changed"] is False, d.seen["hostkey"]
+    d.ok("session.close", {"session": first})
+    with open(trust_file) as f:
+        stored = json.load(f)["entries"]
+    assert list(stored.values()) == [d.seen["hostkey"][-1]["fingerprint"]], stored
+
+    asked = len(d.seen["hostkey"])
+    second = d.ok("session.open", params)["session"]
+    assert len(d.seen["hostkey"]) == asked, "remembered key was asked again"
+    d.ok("session.close", {"session": second})
+    d.ok("daemon.shutdown")
+    d.proc.wait(timeout=15)
+
+    # A new daemon process reads the same file.
+    d = Daemon(exe)
+    d.ok("daemon.init", {"data_dir": data})
+    d.answers["hostkey"] = lambda p: {"trust": False}
+    third = d.ok("session.open", params)["session"]
+    assert "hostkey" not in d.seen, d.seen
+    d.ok("session.close", {"session": third})
+
+    # Pretend the server key changed: the question comes back, marked as changed.
+    key = next(iter(stored))
+    with open(trust_file, "w") as f:
+        json.dump({"version": 1, "entries": {key: "SHA256:previous-key"}}, f)
+    d.ok("daemon.shutdown")
+    d.proc.wait(timeout=15)
+    d = Daemon(exe)
+    d.ok("daemon.init", {"data_dir": data})
+    d.answers["hostkey"] = lambda p: {"trust": False}
+    d.error("session.open", params, -32000)
+    changed = d.seen["hostkey"][-1]
+    assert changed["changed"] is True and changed["previous"] == "SHA256:previous-key", changed
+    d.error("daemon.init", {"data_dir": ""}, -32602)
+    d.ok("daemon.shutdown")
+    d.proc.wait(timeout=15)
+    shutil.rmtree(data, ignore_errors=True)
+    print("  trust store tests passed")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("exe")
@@ -320,6 +370,7 @@ def main():
 
     d.ok("daemon.shutdown")
     assert d.proc.wait(timeout=15) == 0
+    trust_tests(args.exe, server, args.password)
     print("all daemon RPC tests passed")
 
 

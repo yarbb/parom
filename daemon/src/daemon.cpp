@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
+#include "trust.h"
 
 #include "FileZillaEngine.h"
 #include "directorylisting.h"
@@ -479,6 +480,22 @@ private:
 				{"protocol", protocol_version},
 			});
 		}
+		else if (method == "daemon.init") {
+			// The data folder comes over JSON (UTF-8) rather than argv, whose
+			// encoding on Windows cannot carry every user name.
+			auto const dir = get_string(params, "data_dir");
+			if (dir.empty()) {
+				throw RpcError{invalid_params, "data_dir must not be empty"};
+			}
+			std::filesystem::path const path(wide(dir));
+			std::error_code ec;
+			std::filesystem::create_directories(path, ec);
+			if (ec) {
+				throw RpcError{invalid_params, "Cannot create data_dir: " + ec.message()};
+			}
+			trust_.open(path / "trust.json");
+			send_result(id, json::object());
+		}
 		else if (method == "daemon.shutdown") {
 			send_result(id, json::object());
 			stop_ = true;
@@ -884,20 +901,41 @@ private:
 					s.engine->SetAsyncRequestReply(std::move(req));
 					break;
 				}
+				// Known host keys and certificates need no question. A stored
+				// fingerprint that no longer matches is reported as "changed".
+				std::optional<std::string> previous;
+				if (req->GetRequestID() == reqId_hostkey) {
+					auto& r = static_cast<CHostKeyNotification&>(*req);
+					auto const fingerprint = r.hostkey_ ? r.hostkey_->fingerprint() : std::string();
+					previous = trust_.get(TrustStore::key("ssh", u8(r.server_.GetHost()), r.server_.GetPort()));
+					if (previous && !fingerprint.empty() && *previous == fingerprint) {
+						r.trust_ = true;
+						s.engine->SetAsyncRequestReply(std::move(req));
+						break;
+					}
+				}
 				if (req->GetRequestID() == reqId_certificate) {
-					// Certificates the OS trusts for this hostname, or that the
-					// user already trusted in this session, need no question.
+					// Also trusted: what the OS trusts for this host name, and what
+					// the user trusted earlier in this session.
 					auto& cert = static_cast<CCertificateNotification&>(*req);
 					auto const& info = cert.info_;
 					bool const os_trusted = info.system_trust() && !info.mismatched_hostname();
 					auto const fingerprint = leaf_fingerprint(info);
-					if (os_trusted || (!fingerprint.empty() && s.trusted_certs.count(fingerprint))) {
+					previous = trust_.get(TrustStore::key("tls", info.get_host(), info.get_port()));
+					bool const known = !fingerprint.empty() && (s.trusted_certs.count(fingerprint) || previous == fingerprint);
+					if (os_trusted || known) {
 						cert.trusted_ = true;
 						s.engine->SetAsyncRequestReply(std::move(req));
 						break;
 					}
 				}
 				json ev = describe_request(*req);
+				if (ev.is_object() && (req->GetRequestID() == reqId_hostkey || req->GetRequestID() == reqId_certificate)) {
+					ev["changed"] = previous.has_value();
+					if (previous) {
+						ev["previous"] = *previous;
+					}
+				}
 				if (ev.is_object() && s.current) {
 					ev["id"] = s.current->id;
 				}
@@ -1019,9 +1057,14 @@ private:
 		auto& req = *it->second;
 
 		switch (req.GetRequestID()) {
-		case reqId_hostkey:
-			static_cast<CHostKeyNotification&>(req).trust_ = get_bool(params, "trust", false);
+		case reqId_hostkey: {
+			auto& r = static_cast<CHostKeyNotification&>(req);
+			r.trust_ = get_bool(params, "trust", false);
+			if (r.trust_ && get_bool(params, "remember", false) && r.hostkey_) {
+				trust_.set(TrustStore::key("ssh", u8(r.server_.GetHost()), r.server_.GetPort()), r.hostkey_->fingerprint());
+			}
 			break;
+		}
 		case reqId_fileexists: {
 			auto& r = static_cast<CFileExistsNotification&>(req);
 			r.overwriteAction = overwrite_action(get_string(params, "action", "skip"));
@@ -1061,7 +1104,11 @@ private:
 			auto& r = static_cast<CCertificateNotification&>(req);
 			r.trusted_ = get_bool(params, "trust", false);
 			if (r.trusted_) {
-				s.trusted_certs.insert(leaf_fingerprint(r.info_));
+				auto const fingerprint = leaf_fingerprint(r.info_);
+				s.trusted_certs.insert(fingerprint);
+				if (get_bool(params, "remember", false) && !fingerprint.empty()) {
+					trust_.set(TrustStore::key("tls", r.info_.get_host(), r.info_.get_port()), fingerprint);
+				}
 			}
 			break;
 		}
@@ -1089,6 +1136,7 @@ private:
 	Options options_;
 	Utf8Encoding encoding_;
 	CFileZillaEngineContext context_;
+	TrustStore trust_;
 
 	int next_session_{1};
 	std::map<int, std::unique_ptr<Session>> sessions_;

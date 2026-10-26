@@ -16,7 +16,7 @@ ${CXX:-g++} -std=c++17 -O2 -Wall -Wextra \
 	-DTOTZILLAD_VERSION="\"$version\"" \
 	-I"$fz_src/src/include" \
 	$(pkg-config --cflags libfilezilla libfzssh-client nlohmann_json) \
-	"$here/src/main.cpp" "$here/src/daemon.cpp" \
+	"$here/src/main.cpp" "$here/src/daemon.cpp" "$here/src/trust.cpp" \
 	-o "$out/totzillad$( [ "${OS:-}" = Windows_NT ] && echo .exe )" \
 	-L"$fz_build/src/engine/.libs" -lfzclient-private \
 	$(pkg-config --libs libfilezilla libfzssh-client) \
