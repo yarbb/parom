@@ -4,6 +4,7 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import { localJoin, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
+  import { prefs } from '../lib/prefs.svelte';
   import { listLocal, localHome, localMkdir, localRename, localRoots, localTrash } from '../lib/local';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
@@ -40,6 +41,9 @@
       rows = res.rows;
       atRoots = false;
       typed = res.path;
+      if (prefs.value.rememberDirs) {
+        void prefs.set('lastLocalDir', res.path);
+      }
     } catch (e) {
       error = String(e);
     } finally {
@@ -138,7 +142,12 @@
       return;
     }
     roots = await localRoots();
-    await load(await localHome());
+    const last = prefs.value.rememberDirs ? prefs.value.lastLocalDir : '';
+    await load(last || (await localHome()));
+    if (error && last) {
+      // The remembered folder is gone; start at home instead.
+      await load(await localHome());
+    }
   });
 </script>
 

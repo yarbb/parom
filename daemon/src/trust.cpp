@@ -59,6 +59,15 @@ void TrustStore::set(std::string const& key, std::string const& fingerprint)
 	save();
 }
 
+bool TrustStore::remove(std::string const& key)
+{
+	if (!entries_.erase(key)) {
+		return false;
+	}
+	save();
+	return true;
+}
+
 void TrustStore::save() const
 {
 	if (file_.empty()) {

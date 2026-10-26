@@ -9,6 +9,8 @@
   import SiteManager from './components/SiteManager.svelte';
   import { sites } from './lib/sites.svelte';
   import { ui } from './lib/ui.svelte';
+  import { prefs } from './lib/prefs.svelte';
+  import Preferences from './components/Preferences.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
@@ -24,6 +26,15 @@
 
   onMount(() => {
     const stopWatching = watchSystemTheme(loadTheme);
+    void prefs.load().then(() => (hideAddress = prefs.value.hideAddress));
+    // Ctrl+, opens Preferences, like most desktop apps.
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        ui.preferences = true;
+      }
+    };
+    window.addEventListener('keydown', onKey);
     let stopExit = () => {};
 
     if (isTauri()) {
@@ -44,10 +55,12 @@
     return () => {
       stopWatching();
       stopExit();
+      window.removeEventListener('keydown', onKey);
     };
   });
 </script>
 
+{#if prefs.loaded}
 <div class="app">
   <TopBar {name} {tab} onTab={(next) => (tab = next)} bind:hideAddress />
   <main>
@@ -68,9 +81,13 @@
     version={version ? t('app.version', { name, version }) : ''}
   />
 </div>
+{/if}
 
 {#if ui.siteManager}
   <SiteManager onClose={() => (ui.siteManager = false)} />
+{/if}
+{#if ui.preferences}
+  <Preferences onClose={() => (ui.preferences = false)} />
 {/if}
 
 <style>

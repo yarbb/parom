@@ -11,6 +11,8 @@ Requests on one session run in order; a response arrives when the engine finishe
 | `daemon.hello` | – | `{name, version, engine, protocol}` |
 | `daemon.init` | `data_dir` (UTF-8 path; created if missing) | `{}`; loads `trust.json` from it. Call once before opening sessions; without it trusted keys live in memory only |
 | `daemon.shutdown` | – | `{}`, then the daemon exits |
+| `trust.list` | – | `{entries: [{key, kind ("ssh" or "tls"), host, port, fingerprint}]}` |
+| `trust.forget` | `key` | `{}`; the next connection asks again |
 | `store.get` | `name` (`[a-z0-9_-]`, not `trust`) | `{value}`: the stored JSON document, or null |
 | `store.set` | `name`, `value` (any JSON) | `{}`; written to `<data_dir>/<name>.json` atomically. Used for `sites` and `preferences` |
 | `session.open` | `protocol` (`sftp` default, `ftp`, `ftps`, `ftpes`, `ftp-insecure`), `host`, `port`?, `user`?, `password`?, `keyfile`?, `timeout`? (seconds) | `{session}` once connected |
