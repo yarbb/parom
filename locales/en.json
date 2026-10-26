@@ -111,7 +111,6 @@
   "queue.failed": "failed",
   "dialog.hostkey.title": "Unknown host key",
   "dialog.hostkey.body": "The server {host}:{port} sent a host key this computer has not seen before. Check that its fingerprint matches the one your hosting provider shows.",
-  "dialog.hostkey.hint": "Trusting it lets you connect for this session.",
   "dialog.hostkey.trust": "Trust and connect",
   "dialog.password.title": "Password required",
   "dialog.keyfile.title": "Key passphrase required",
@@ -161,5 +160,10 @@
   "fileop.copy_path": "Copy path",
   "fileop.delete.remote": "{count, plural, one {Delete # item from the server? This cannot be undone.} other {Delete # items from the server? This cannot be undone.}}",
   "fileop.delete.local": "{count, plural, one {Move # item to the trash?} other {Move # items to the trash?}}",
-  "fileop.delete.more": "{count, plural, one {and # more} other {and # more}}"
+  "fileop.delete.more": "{count, plural, one {and # more} other {and # more}}",
+  "dialog.hostkey.changed": "The host key of {host}:{port} has changed since you last trusted it. Someone may be intercepting the connection, or the server was reinstalled. Connect only if you know why it changed.",
+  "dialog.hostkey.previous": "Before:",
+  "dialog.hostkey.remember": "Always trust this key for this server",
+  "dialog.cert.changed": "The certificate of {host}:{port} is not the one you trusted before. Connect only if you know why it changed.",
+  "dialog.cert.remember": "Always trust this certificate for this server"
 }

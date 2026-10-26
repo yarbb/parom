@@ -140,7 +140,22 @@ pub fn run() {
                     let _ = exits.emit("daemon-exit", ());
                 },
             ) {
-                Ok(d) => *app.state::<DaemonState>().0.lock().unwrap() = Some(d),
+                Ok(d) => {
+                    // Persistent daemon state (trusted keys) lives in the app data folder.
+                    // Done before the UI can open a session.
+                    match app.path().app_data_dir() {
+                        Ok(dir) => {
+                            let init = tauri::async_runtime::block_on(
+                                d.call("daemon.init", json!({ "data_dir": dir.display().to_string() }), None),
+                            );
+                            if let Err(err) = init {
+                                eprintln!("daemon.init failed: {err}");
+                            }
+                        }
+                        Err(err) => eprintln!("no app data folder: {err}"),
+                    }
+                    *app.state::<DaemonState>().0.lock().unwrap() = Some(d);
+                }
                 Err(err) => eprintln!("cannot start the daemon: {err}"),
             }
             Ok(())

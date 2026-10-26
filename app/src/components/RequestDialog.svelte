@@ -11,6 +11,8 @@
   let answers = $state<string[]>([]);
   let secret = $state('');
   let applyToAll = $state(false);
+  /** Keep a trusted host key or certificate for future sessions. */
+  let remember = $state(true);
   // Offer "apply to all" only when more transfers are waiting.
   let othersWaiting = $derived(connection.transfers.filter((x) => x.state === 'running').length > 1);
 
@@ -19,6 +21,7 @@
       answers = ((req.prompts as unknown[] | undefined) ?? []).map(() => '');
       secret = '';
       applyToAll = false;
+      remember = true;
     }
   });
 
@@ -46,12 +49,17 @@
   {@const r = req}
   {#if r.type === 'hostkey'}
     <Modal title={t('dialog.hostkey.title')} onCancel={() => reply(r, { trust: false })}>
-      <p>{t('dialog.hostkey.body', { host: String(r.host), port: String(r.port) })}</p>
+      {#if r.changed}
+        <p class="status-removed">{t('dialog.hostkey.changed', { host: String(r.host), port: String(r.port) })}</p>
+        <p class="mono muted">{t('dialog.hostkey.previous')} {r.previous}</p>
+      {:else}
+        <p>{t('dialog.hostkey.body', { host: String(r.host), port: String(r.port) })}</p>
+      {/if}
       <p class="mono fingerprint">{r.fingerprint}</p>
-      <p class="muted">{t('dialog.hostkey.hint')}</p>
+      <Checkbox bind:checked={remember} label={t('dialog.hostkey.remember')} />
       {#snippet actions()}
-        <button class="control" onclick={() => reply(r, { trust: false })}>{t('common.cancel')}</button>
-        <button class="control primary" onclick={() => reply(r, { trust: true })}>{t('dialog.hostkey.trust')}</button>
+        <button class="control" class:primary={!!r.changed} onclick={() => reply(r, { trust: false })}>{t('common.cancel')}</button>
+        <button class="control" class:primary={!r.changed} onclick={() => reply(r, { trust: true, remember })}>{t('dialog.hostkey.trust')}</button>
       {/snippet}
     </Modal>
   {:else if r.type === 'password' || r.type === 'keyfile_password'}
@@ -102,7 +110,11 @@
   {:else if r.type === 'certificate'}
     {@const leaf = (r.certificates as Certificate[] | undefined)?.[0]}
     <Modal title={t('dialog.cert.title')} onCancel={() => reply(r, { trust: false })}>
-      <p>{t('dialog.cert.body', { host: String(r.host), port: String(r.port) })}</p>
+      {#if r.changed}
+        <p class="status-removed">{t('dialog.cert.changed', { host: String(r.host), port: String(r.port) })}</p>
+      {:else}
+        <p>{t('dialog.cert.body', { host: String(r.host), port: String(r.port) })}</p>
+      {/if}
       <ul class="warnings status-modified">
         {#if r.hostname_mismatch || (leaf && !certCoversHost(String(r.host), leaf.alt_names))}<li>{t('dialog.cert.mismatch')}</li>{/if}
         {#if leaf?.self_signed}<li>{t('dialog.cert.self_signed')}</li>{/if}
@@ -124,10 +136,10 @@
           <dd class="mono">{r.tls} · {r.cipher}</dd>
         </dl>
       {/if}
-      <p class="muted">{t('dialog.hostkey.hint')}</p>
+      <Checkbox bind:checked={remember} label={t('dialog.cert.remember')} />
       {#snippet actions()}
-        <button class="control" onclick={() => reply(r, { trust: false })}>{t('common.cancel')}</button>
-        <button class="control primary" onclick={() => reply(r, { trust: true })}>{t('dialog.hostkey.trust')}</button>
+        <button class="control" class:primary={!!r.changed} onclick={() => reply(r, { trust: false })}>{t('common.cancel')}</button>
+        <button class="control" class:primary={!r.changed} onclick={() => reply(r, { trust: true, remember })}>{t('dialog.hostkey.trust')}</button>
       {/snippet}
     </Modal>
   {:else if r.type === 'insecure_connection'}
