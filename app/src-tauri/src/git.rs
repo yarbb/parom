@@ -30,12 +30,15 @@ pub fn status(dir: &str) -> Result<RepoStatus, String> {
     let commit = head.as_ref().and_then(|h| h.peel_to_commit().ok());
     let mut opts = StatusOptions::new();
     opts.include_untracked(false).include_ignored(false);
+    let head_tree = commit.as_ref().and_then(|c| c.tree().ok());
     let dirty = repo
         .statuses(Some(&mut opts))
         .map(|st| {
             st.iter()
                 .filter(|e| e.status() != Status::CURRENT)
-                .filter_map(|e| e.path().ok().map(str::to_owned))
+                .filter_map(|e| e.path().ok().map(str::to_owned).map(|p| (p, e.status())))
+                .filter(|(path, status)| !only_line_endings(&repo, head_tree.as_ref(), path, *status))
+                .map(|(path, _)| path)
                 .collect()
         })
         .unwrap_or_default();
@@ -46,6 +49,39 @@ pub fn status(dir: &str) -> Result<RepoStatus, String> {
         head_summary: commit.as_ref().and_then(|c| c.summary().ok().flatten().map(str::to_owned)),
         dirty,
     })
+}
+
+/// True for a file libgit2 calls modified although its content equals the
+/// committed blob once CRLF is turned into LF (or as is). git with
+/// `core.autocrlf` treats these as clean, so GitHub Desktop shows nothing.
+fn only_line_endings(repo: &Repository, head: Option<&git2::Tree<'_>>, path: &str, status: Status) -> bool {
+    if status != Status::WT_MODIFIED {
+        return false;
+    }
+    let (Some(head), Some(workdir)) = (head, repo.workdir()) else {
+        return false;
+    };
+    let Ok(entry) = head.get_path(std::path::Path::new(path)) else {
+        return false;
+    };
+    let Ok(bytes) = std::fs::read(workdir.join(path)) else {
+        return false;
+    };
+    let hash = |data: &[u8]| Oid::hash_object(ObjectType::Blob, data).ok();
+    if hash(&bytes) == Some(entry.id()) {
+        return true;
+    }
+    let mut lf = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+            i += 1;
+            continue;
+        }
+        lf.push(bytes[i]);
+        i += 1;
+    }
+    hash(&lf) == Some(entry.id())
 }
 
 #[derive(Serialize)]

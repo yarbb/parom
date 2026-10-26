@@ -98,6 +98,10 @@ class SyncEngine {
   /** Set when "Versions differ" must be confirmed before syncing. */
   confirming = $state<{ plan: Plan; backup: boolean } | null>(null);
   run = $state<Run | null>(null);
+  /** What a check or the preparation of a sync is doing right now ("" when idle). */
+  progress = $state('');
+  /** Between "Sync with server" and the confirmation or the progress dialog. */
+  preparing = $state(false);
   #askedThisSession = new Set<string>();
   #cancel = false;
 
@@ -119,17 +123,21 @@ class SyncEngine {
     return connection.session;
   }
 
-  /** Lists one remote folder; a missing folder gives an empty map. */
-  async #list(path: string): Promise<Map<string, RemoteEntry>> {
+  /** Lists one remote folder; null if it cannot be listed (usually: it does not exist). */
+  async #list(path: string): Promise<Map<string, RemoteEntry> | null> {
     try {
       const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session: this.#session(), path });
       return new Map(res.entries.map((e) => [e.name, e]));
     } catch {
-      return new Map();
+      return null;
     }
   }
 
-  /** Server size and time for repository paths, listing each folder once. */
+  /**
+   * Server size and time for repository paths, listing each folder once.
+   * Folders below a folder the server does not have are not listed at all,
+   * which keeps a first sync over FTP from walking hundreds of missing folders.
+   */
   async #serverFiles(root: string, paths: readonly string[]): Promise<Map<string, ServerFile>> {
     const byDir = new Map<string, string[]>();
     for (const p of paths) {
@@ -137,10 +145,40 @@ class SyncEngine {
       const dir = i < 0 ? '' : p.slice(0, i);
       byDir.set(dir, [...(byDir.get(dir) ?? []), p]);
     }
+    // Parents first, so a missing parent is known before its children.
+    const dirs = [...byDir.keys()].sort((a, b) => a.split('/').length - b.split('/').length);
+    const listed = new Map<string, Map<string, RemoteEntry>>();
+    const missing = new Set<string>();
+    // A folder is known to be absent if any ancestor is missing, or a listed
+    // ancestor has no such subfolder.
+    const absent = (dir: string): boolean => {
+      for (let d = dir; d; d = d.includes('/') ? d.slice(0, d.lastIndexOf('/')) : '') {
+        const parent = d.includes('/') ? d.slice(0, d.lastIndexOf('/')) : '';
+        const parentListing = listed.get(parent);
+        if (missing.has(d) || (parentListing && !parentListing.get(d.slice(d.lastIndexOf('/') + 1))?.dir)) {
+          return true;
+        }
+      }
+      return false;
+    };
     const out = new Map<string, ServerFile>();
-    for (const [dir, files] of byDir) {
-      const listing = await this.#list(dir ? remoteJoin(root, dir) : root);
-      for (const p of files) {
+    // The root listing alone rules out whole trees (e.g. a wrong remote directory).
+    const rootListing = await this.#list(root);
+    listed.set('', rootListing ?? new Map());
+    let n = 0;
+    for (const dir of dirs) {
+      n++;
+      this.progress = `${n} / ${dirs.length}`;
+      if (dir && absent(dir)) {
+        continue;
+      }
+      const listing = dir ? await this.#list(remoteJoin(root, dir)) : rootListing;
+      if (!listing) {
+        missing.add(dir);
+        continue;
+      }
+      listed.set(dir, listing);
+      for (const p of byDir.get(dir) ?? []) {
         const e = listing.get(p.slice(p.lastIndexOf('/') + 1));
         if (e && !e.dir) {
           out.set(p, { size: e.size, mtime: parse(e.time) });
@@ -156,7 +194,11 @@ class SyncEngine {
   }
 
   async #readMarker(root: string): Promise<{ marker: Marker | null; mtime: number | null }> {
-    const entry = (await this.#list(root)).get(markerName);
+    const listing = await this.#list(root);
+    if (!listing) {
+      throw new Error(`Cannot open ${root} on the server. Check the site's remote directory.`);
+    }
+    const entry = listing.get(markerName);
     if (!entry || entry.dir) {
       return { marker: null, mtime: null };
     }
@@ -243,6 +285,9 @@ class SyncEngine {
       this.error = describeError(e);
     } finally {
       this.checking = false;
+      if (!this.preparing) {
+        this.progress = '';
+      }
     }
   }
 
@@ -294,6 +339,21 @@ class SyncEngine {
 
   /** "Sync with server": confirms first when Preferences say so, then runs. */
   async start(): Promise<void> {
+    if (this.preparing || this.run) {
+      return;
+    }
+    this.preparing = true;
+    try {
+      await this.#start();
+    } catch (e) {
+      this.error = describeError(e);
+    } finally {
+      this.preparing = false;
+      this.progress = '';
+    }
+  }
+
+  async #start(): Promise<void> {
     await this.refresh();
     const c = this.check;
     if (!c || this.run) {

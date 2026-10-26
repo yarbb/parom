@@ -156,10 +156,10 @@
   "fileop.rename.title": "Rename",
   "fileop.mkdir.title": "New folder",
   "fileop.delete.title": "Delete",
-  "fileop.trash": "Move to trash",
+  "fileop.trash": "Delete",
   "fileop.copy_path": "Copy path",
   "fileop.delete.remote": "{count, plural, one {Delete # item from the server? This cannot be undone.} other {Delete # items from the server? This cannot be undone.}}",
-  "fileop.delete.local": "{count, plural, one {Move # item to the trash?} other {Move # items to the trash?}}",
+  "fileop.delete.local": "{count, plural, one {Move # item to the Recycle Bin (trash)?} other {Move # items to the Recycle Bin (trash)?}}",
   "fileop.delete.more": "{count, plural, one {and # more} other {and # more}}",
   "dialog.hostkey.changed": "The host key of {host}:{port} has changed since you last trusted it. Someone may be intercepting the connection, or the server was reinstalled. Connect only if you know why it changed.",
   "dialog.hostkey.previous": "Before:",
@@ -316,5 +316,8 @@
   "prefs.backup_folder": "Backup folder",
   "queue.skipped": "skipped",
   "queue.skipped_hint": "Not transferred: the \"file exists\" answer kept the existing file",
-  "queue.skipped_count": "{count, plural, other {Skipped #}}"
+  "queue.skipped_count": "{count, plural, other {Skipped #}}",
+  "sync.target": "Folder",
+  "sync.preparing": "Preparing the sync: comparing folders {progress}",
+  "sync.checking_progress": "Checking the server... {progress}"
 }
