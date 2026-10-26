@@ -5,7 +5,7 @@
   import { localJoin, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
   import { prefs } from '../lib/prefs.svelte';
-  import { listLocal, localHome, localMkdir, localRename, localRoots, localTrash } from '../lib/local';
+  import { listLocal, localHome, localMkdir, localRename, localRoots, localTrash, openInEditor } from '../lib/local';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
   import FileList from './FileList.svelte';
@@ -126,6 +126,11 @@
       y: e.clientY,
       items: [
         { label: `${t('files.upload')} →`, disabled: !canUpload || !any, action: () => upload(rows) },
+        {
+          label: t('edit.edit'),
+          disabled: rows.length !== 1 || rows[0].dir,
+          action: () => fsOp(() => openInEditor(localJoin(path, rows[0].name, separator), prefs.value.editorPath)),
+        },
         { separator: true, label: '' },
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
         { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
