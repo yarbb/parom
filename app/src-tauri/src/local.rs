@@ -82,3 +82,39 @@ pub fn roots() -> Vec<String> {
         vec!["/".into()]
     }
 }
+
+#[derive(Serialize, Default)]
+pub struct LocalTree {
+    /// Directories below the root, parents first, relative with "/".
+    dirs: Vec<String>,
+    /// Files below the root, relative with "/".
+    files: Vec<String>,
+}
+
+/// Everything below `root` for a folder upload. Symlinked directories are
+/// not followed, so link loops cannot recurse forever.
+pub fn walk(root: &str) -> Result<LocalTree, String> {
+    fn visit(dir: &Path, rel: &str, tree: &mut LocalTree) -> Result<(), String> {
+        let read = fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        for item in read {
+            let Ok(item) = item else { continue };
+            let Ok(kind) = item.file_type() else { continue };
+            let name = item.file_name().to_string_lossy().into_owned();
+            let child = if rel.is_empty() { name } else { format!("{rel}/{name}") };
+            if kind.is_dir() {
+                tree.dirs.push(child.clone());
+                visit(&item.path(), &child, tree)?;
+            } else if kind.is_file() || (kind.is_symlink() && item.path().is_file()) {
+                tree.files.push(child);
+            }
+        }
+        Ok(())
+    }
+    let mut tree = LocalTree::default();
+    visit(Path::new(root), "", &mut tree)?;
+    Ok(tree)
+}
+
+pub fn mkdir(path: &str) -> Result<(), String> {
+    fs::create_dir_all(path).map_err(|e| format!("{path}: {e}"))
+}

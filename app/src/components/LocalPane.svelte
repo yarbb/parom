@@ -12,7 +12,7 @@
     path?: string;
     separator?: string;
     canUpload: boolean;
-    onUpload: (files: { name: string; local: string }[]) => void;
+    onUpload: (items: { name: string; local: string; dir: boolean }[]) => void;
   }
 
   let { path = $bindable(''), separator = $bindable('/'), canUpload, onUpload }: Props = $props();
@@ -76,7 +76,7 @@
     if (!canUpload) {
       return;
     }
-    onUpload(files.filter((f) => !f.dir).map((f) => ({ name: f.name, local: localJoin(path, f.name, separator) })));
+    onUpload(files.map((f) => ({ name: f.name, local: localJoin(path, f.name, separator), dir: f.dir })));
   }
 
   onMount(async () => {
@@ -94,7 +94,7 @@
     <span>{t('files.local')}</span>
     <span class="buttons">
       <button class="control small" onclick={browse} title={t('files.browse_hint')}>{t('files.browse')}</button>
-      <button class="control small" disabled={!canUpload || !selected.some((r) => !r.dir)} onclick={() => upload(selected)}>
+      <button class="control small" disabled={!canUpload || selected.length === 0} onclick={() => upload(selected)}>
         {t('files.upload')} →
       </button>
     </span>

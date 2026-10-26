@@ -1,7 +1,8 @@
 // The Files tab's connection: one daemon session, its remote listing,
 // questions the engine asks (host key, passwords, file exists) and transfers.
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
-import { parseHost, parseRemoteTime, type FileRow } from './files';
+import { localJoin, parseHost, parseRemoteTime, remoteJoin, type FileRow } from './files';
+import { localMkdir, localWalk } from './local';
 import { t } from './i18n';
 import { addRecent, credentialKey, loadRecent, removeRecent, saveRecent, sameServer, type RecentServer } from './recent';
 import { deleteSecret, setSecret } from './secrets';
@@ -22,8 +23,15 @@ export interface Transfer {
   name: string;
   offset: number;
   total: number;
-  state: 'running' | 'done' | 'failed';
+  /** "running" covers waiting in the queue and moving bytes. */
+  state: 'running' | 'done' | 'failed' | 'canceled';
+  /** Handed to the daemon (otherwise still waiting in the UI, e.g. during a folder walk). */
+  sent: boolean;
   error?: string;
+}
+
+function isCanceled(e: unknown): boolean {
+  return e instanceof DaemonError && ((e.data as { flags?: string[] } | undefined)?.flags ?? []).includes('canceled');
 }
 
 interface RemoteEntry {
@@ -229,26 +237,64 @@ class Connection {
     }
   }
 
-  /** Queues an upload or download; the daemon runs a session's commands in order. */
-  async transfer(download: boolean, name: string, params: Record<string, unknown>): Promise<void> {
+  /** Adds a row to the queue panel; the transfer starts with #run(). */
+  #addRow(download: boolean, name: string): Transfer {
+    this.transfers.push({ id: `t${this.#nextTransfer++}`, download, name, offset: 0, total: -1, state: 'running', sent: false });
+    return this.transfers[this.transfers.length - 1];
+  }
+
+  async #run(tr: Transfer, params: Record<string, unknown>): Promise<void> {
     const session = this.session;
-    if (session === null) {
+    if (tr.state === 'canceled') {
+      this.onTransferDone?.(tr);
       return;
     }
-    const id = `t${this.#nextTransfer++}`;
-    this.transfers.push({ id, download, name, offset: 0, total: -1, state: 'running' });
-    const tr = this.transfers[this.transfers.length - 1];
+    if (session === null) {
+      tr.state = 'failed';
+      tr.error = t('status.disconnected');
+      this.onTransferDone?.(tr);
+      return;
+    }
+    tr.sent = true;
     try {
-      const res = await call<{ size: number }>(download ? 'transfer.download' : 'transfer.upload', { session, ...params }, id);
+      const res = await call<{ size: number }>(tr.download ? 'transfer.download' : 'transfer.upload', { session, ...params }, tr.id);
       tr.state = 'done';
       tr.offset = tr.total = res.size;
     } catch (e) {
-      tr.state = 'failed';
+      tr.state = isCanceled(e) ? 'canceled' : 'failed';
       tr.error = describeError(e);
     }
     this.onTransferDone?.(tr);
   }
 
+  /** Queues an upload or download; the daemon runs a session's commands in order. */
+  transfer(download: boolean, name: string, params: Record<string, unknown>): Promise<void> {
+    return this.#run(this.#addRow(download, name), params);
+  }
+
+  /** Cancels one transfer, whether it is moving bytes or still waiting. */
+  async cancel(tr: Transfer): Promise<void> {
+    if (tr.state !== 'running') {
+      return;
+    }
+    if (!tr.sent || this.session === null) {
+      tr.state = 'canceled';
+      return;
+    }
+    try {
+      await call('session.cancel_request', { session: this.session, id: tr.id });
+    } catch {
+      // Already finished; its own result stands.
+    }
+  }
+
+  /** Cancels everything still running, newest first so nothing new starts meanwhile. */
+  async cancelAll(): Promise<void> {
+    const running = this.transfers.filter((x) => x.state === 'running').reverse();
+    for (const tr of running) {
+      await this.cancel(tr);
+    }
+  }
   /** Picks a recent server; disconnects first if needed. */
   async pick(server: RecentServer): Promise<void> {
     if (this.state === 'connected') {
@@ -263,6 +309,73 @@ class Connection {
     if (server.remember) {
       void deleteSecret(credentialKey(server)).catch(() => {});
     }
+  }
+
+  /** Uploads a local folder into `remotePath`, creating the folder tree first. */
+  async uploadFolder(localDir: string, separator: string, name: string, remotePath: string): Promise<void> {
+    const session = this.session;
+    if (session === null) {
+      return;
+    }
+    let tree: { dirs: string[]; files: string[] };
+    try {
+      tree = await localWalk(localDir);
+    } catch (e) {
+      this.remoteError = String(e);
+      return;
+    }
+    const root = remoteJoin(remotePath, name);
+    // Show every file in the queue right away; creating the folders can take a while.
+    const rows = tree.files.map((rel) => ({ rel, row: this.#addRow(false, `${name}/${rel}`) }));
+    for (const dir of [root, ...tree.dirs.map((d) => remoteJoin(root, d))]) {
+      // Existing folders make mkdir fail; that is fine.
+      await call('remote.mkdir', { session, path: dir }).catch(() => {});
+    }
+    const toLocal = (rel: string) => localJoin(localDir, rel.split('/').join(separator), separator);
+    await Promise.all(
+      rows.map(({ rel, row }) => {
+        const slash = rel.lastIndexOf('/');
+        const dir = slash < 0 ? root : remoteJoin(root, rel.slice(0, slash));
+        return this.#run(row, { local: toLocal(rel), remote_path: dir, remote_name: rel.slice(slash + 1) });
+      }),
+    );
+  }
+
+  /** Downloads a remote folder into `localDir`, walking it breadth first. */
+  async downloadFolder(remotePath: string, name: string, localDir: string, separator: string): Promise<void> {
+    const session = this.session;
+    if (session === null) {
+      return;
+    }
+    const jobs: Promise<void>[] = [];
+    const pending: { remote: string; local: string; rel: string }[] = [
+      { remote: remoteJoin(remotePath, name), local: localJoin(localDir, name, separator), rel: name },
+    ];
+    while (pending.length) {
+      const dir = pending.shift()!;
+      try {
+        await localMkdir(dir.local);
+        const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session, path: dir.remote });
+        for (const e of res.entries) {
+          if (e.link && e.dir) {
+            continue; // Do not follow links to folders: they can loop.
+          }
+          const next = {
+            remote: remoteJoin(dir.remote, e.name),
+            local: localJoin(dir.local, e.name, separator),
+            rel: `${dir.rel}/${e.name}`,
+          };
+          if (e.dir) {
+            pending.push(next);
+          } else {
+            jobs.push(this.transfer(true, next.rel, { remote_path: dir.remote, remote_name: e.name, local: next.local }));
+          }
+        }
+      } catch (e) {
+        this.remoteError = `${dir.rel}: ${describeError(e)}`;
+      }
+    }
+    await Promise.all(jobs);
   }
 
   clearFinished(): void {

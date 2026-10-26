@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  certCoversHost,
   clickSelection,
   formatSize,
   formatTime,
@@ -151,5 +152,17 @@ describe('recent servers', () => {
     expect(recentLabel(a, false, 'hidden')).toBe('u@a.example:2022');
     expect(recentLabel(a, true, 'hidden')).toBe('u@hidden');
     expect(recentLabel({ ...b, protocol: 'ftp', user: '' }, false, 'hidden')).toBe('ftp://b.example');
+  });
+});
+
+describe('certCoversHost', () => {
+  it('matches exact names and one wildcard label', () => {
+    expect(certCoversHost('ftp.example.org', ['ftp.example.org'])).toBe(true);
+    expect(certCoversHost('FTP.example.org.', ['ftp.example.org'])).toBe(true);
+    expect(certCoversHost('ftp.example.org', ['*.example.org'])).toBe(true);
+    expect(certCoversHost('a.b.example.org', ['*.example.org'])).toBe(false);
+    expect(certCoversHost('example.org', ['*.example.org'])).toBe(false);
+    expect(certCoversHost('127.0.0.1', ['localhost'])).toBe(false);
+    expect(certCoversHost('x', [])).toBe(false);
   });
 });

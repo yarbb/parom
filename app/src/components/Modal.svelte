@@ -45,7 +45,7 @@
   }
 
   .dialog {
-    width: 460px;
+    width: 480px;
     max-width: calc(100vw - 32px);
     padding: 18px 20px;
     border: 1px solid var(--line-control);

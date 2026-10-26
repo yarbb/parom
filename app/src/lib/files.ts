@@ -168,3 +168,22 @@ export function parseHost(input: string, port: string): { protocol: string; host
   }
   return { protocol, host: rest, port: p };
 }
+
+/**
+ * Whether a certificate's DNS names cover the host the user connected to.
+ * Supports one leading wildcard label ("*.example.org"), like browsers.
+ */
+export function certCoversHost(host: string, names: readonly string[]): boolean {
+  const h = host.trim().toLowerCase().replace(/\.$/, '');
+  return names.some((raw) => {
+    const n = raw.trim().toLowerCase().replace(/\.$/, '');
+    if (n === h) {
+      return true;
+    }
+    if (n.startsWith('*.')) {
+      const dot = h.indexOf('.');
+      return dot > 0 && h.slice(dot + 1) === n.slice(2);
+    }
+    return false;
+  });
+}

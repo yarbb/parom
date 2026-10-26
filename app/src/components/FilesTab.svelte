@@ -77,7 +77,8 @@
   onMount(() => {
     connection.start();
     connection.onTransferDone = (tr) => {
-      if (tr.state !== 'done') {
+      // Refresh once a batch (e.g. a folder) is through, not after every file.
+      if (tr.state !== 'done' || connection.transfers.some((x) => x.state === 'running')) {
         return;
       }
       if (tr.download) {
@@ -98,19 +99,29 @@
     }
   }
 
-  function upload(files: { name: string; local: string }[]) {
-    for (const f of files) {
-      void connection.transfer(false, f.name, { local: f.local, remote_path: connection.remotePath, remote_name: f.name });
+  function upload(items: { name: string; local: string; dir: boolean }[]) {
+    const target = connection.remotePath;
+    for (const f of items) {
+      if (f.dir) {
+        void connection.uploadFolder(f.local, localSeparator, f.name, target);
+      } else {
+        void connection.transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name });
+      }
     }
   }
 
-  function download(files: { name: string; remotePath: string }[]) {
-    for (const f of files) {
-      void connection.transfer(true, f.name, {
-        remote_path: f.remotePath,
-        remote_name: f.name,
-        local: localJoin(localPath, f.name, localSeparator),
-      });
+  function download(items: { name: string; remotePath: string; dir: boolean }[]) {
+    const target = localPath;
+    for (const f of items) {
+      if (f.dir) {
+        void connection.downloadFolder(f.remotePath, f.name, target, localSeparator);
+      } else {
+        void connection.transfer(true, f.name, {
+          remote_path: f.remotePath,
+          remote_name: f.name,
+          local: localJoin(target, f.name, localSeparator),
+        });
+      }
     }
   }
 </script>

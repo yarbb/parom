@@ -27,6 +27,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -265,6 +266,13 @@ json entry_json(CDirentry const& e)
 	return j;
 }
 
+/// SHA-256 fingerprint of the server's own certificate, or "" without one.
+std::string leaf_fingerprint(fz::tls_session_info const& info)
+{
+	auto const& certs = info.get_peer_certificates();
+	return certs.empty() ? std::string() : certs.front().get_fingerprint_sha256();
+}
+
 char const* log_level(logmsg::type t)
 {
 	switch (t) {
@@ -319,6 +327,8 @@ struct Session
 	CServerPath last_listing;
 	int next_request{1};
 	std::map<int, std::unique_ptr<CAsyncRequestNotification>> requests;
+	/// Certificates the user trusted in this session, by leaf fingerprint.
+	std::set<std::string> trusted_certs;
 
 	// Last member: destroyed first, before the state its callback relies on.
 	std::unique_ptr<CFileZillaEngine> engine;
@@ -488,6 +498,9 @@ private:
 			s.engine->Cancel();
 			send_result(id, json::object());
 		}
+		else if (method == "session.cancel_request") {
+			cancel_request(id, params);
+		}
 		else if (method == "remote.list") {
 			list(id, params);
 		}
@@ -624,6 +637,36 @@ private:
 			return json{{"path", u8(s.last_listing.GetPath())}, {"entries", std::move(entries)}};
 		};
 		enqueue(s, std::move(p));
+	}
+
+	/// Cancels one earlier request by its JSON-RPC id: the running command is
+	/// aborted by the engine, a queued one is dropped before it starts. Either
+	/// way that request then fails with flag "canceled".
+	void cancel_request(json const& id, json const& params)
+	{
+		auto& s = session(params);
+		auto it = params.find("id");
+		if (it == params.end() || it->is_null()) {
+			throw RpcError{invalid_params, "Missing parameter: id"};
+		}
+		json const& target = *it;
+
+		if (s.current && s.current->id == target) {
+			s.engine->Cancel();
+			send_result(id, json{{"state", "running"}});
+			return;
+		}
+		for (auto q = s.queue.begin(); q != s.queue.end(); ++q) {
+			if (q->id == target) {
+				json const dropped = q->id;
+				s.queue.erase(q);
+				send_error(dropped, engine_error, "Operation canceled",
+					json{{"reply", FZ_REPLY_CANCELED}, {"flags", reply_flags(FZ_REPLY_CANCELED)}});
+				send_result(id, json{{"state", "queued"}});
+				return;
+			}
+		}
+		throw RpcError{unknown_request, "No such running or queued request"};
 	}
 
 	std::optional<CFileExistsNotification::OverwriteAction> exists_param(json const& params)
@@ -841,6 +884,19 @@ private:
 					s.engine->SetAsyncRequestReply(std::move(req));
 					break;
 				}
+				if (req->GetRequestID() == reqId_certificate) {
+					// Certificates the OS trusts for this hostname, or that the
+					// user already trusted in this session, need no question.
+					auto& cert = static_cast<CCertificateNotification&>(*req);
+					auto const& info = cert.info_;
+					bool const os_trusted = info.system_trust() && !info.mismatched_hostname();
+					auto const fingerprint = leaf_fingerprint(info);
+					if (os_trusted || (!fingerprint.empty() && s.trusted_certs.count(fingerprint))) {
+						cert.trusted_ = true;
+						s.engine->SetAsyncRequestReply(std::move(req));
+						break;
+					}
+				}
 				json ev = describe_request(*req);
 				if (ev.is_object() && s.current) {
 					ev["id"] = s.current->id;
@@ -911,8 +967,44 @@ private:
 			auto& r = static_cast<CInsecureConnectionNotification&>(req);
 			return json{{"type", "insecure_connection"}, {"host", u8(r.server_.GetHost())}, {"port", r.server_.GetPort()}};
 		}
+		case reqId_certificate: {
+			auto const& info = static_cast<CCertificateNotification&>(req).info_;
+			json certs = json::array();
+			for (auto const& c : info.get_certificates()) {
+				json names = json::array();
+				for (auto const& n : c.get_alt_subject_names()) {
+					names.push_back(n.name);
+				}
+				certs.push_back(json{
+					{"subject", c.get_subject()},
+					{"issuer", c.get_issuer()},
+					{"alt_names", std::move(names)},
+					{"fingerprint_sha256", c.get_fingerprint_sha256()},
+					{"serial", c.get_serial()},
+					{"valid_from", c.get_activation_time().format("%Y-%m-%dT%H:%M:%SZ", fz::datetime::utc)},
+					{"valid_until", c.get_expiration_time().format("%Y-%m-%dT%H:%M:%SZ", fz::datetime::utc)},
+					{"key", c.get_pubkey_algorithm() + " " + std::to_string(c.get_pubkey_bits())},
+					{"signature", c.get_signature_algorithm()},
+					{"self_signed", c.self_signed()},
+				});
+			}
+			return json{
+				{"type", "certificate"},
+				{"host", info.get_host()},
+				{"port", info.get_port()},
+				{"tls", info.get_protocol()},
+				{"cipher", info.get_session_cipher()},
+				{"system_trust", info.system_trust()},
+				{"hostname_mismatch", info.mismatched_hostname()},
+				{"weak_algorithms", info.get_algorithm_warnings() != 0},
+				{"certificates", std::move(certs)},
+			};
+		}
+		case reqId_tls_no_resumption: {
+			auto& r = static_cast<FtpTlsNoResumptionNotification&>(req);
+			return json{{"type", "tls_no_resumption"}, {"host", u8(r.server_.GetHost())}, {"port", r.server_.GetPort()}};
+		}
 		default:
-			// TLS certificates and resumption are declined until FTPS is supported.
 			return json();
 		}
 	}
@@ -964,6 +1056,17 @@ private:
 			break;
 		case reqId_insecure_connection:
 			static_cast<CInsecureConnectionNotification&>(req).allow_ = get_bool(params, "allow", false);
+			break;
+		case reqId_certificate: {
+			auto& r = static_cast<CCertificateNotification&>(req);
+			r.trusted_ = get_bool(params, "trust", false);
+			if (r.trusted_) {
+				s.trusted_certs.insert(leaf_fingerprint(r.info_));
+			}
+			break;
+		}
+		case reqId_tls_no_resumption:
+			static_cast<FtpTlsNoResumptionNotification&>(req).allow_ = get_bool(params, "allow", false);
 			break;
 		default:
 			break;
