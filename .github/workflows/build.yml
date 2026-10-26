@@ -105,6 +105,8 @@ jobs:
           PATH="$PWD/out/bin:$PATH" ldd out/daemon/totzillad.exe \
             | awk '$3 ~ /^\// {print $3}' | grep -vi '^/c/windows' | sort -u \
             | while read -r dll; do cp "$dll" out/daemon/; done
+          # The engine is built with -g; ship it without debug info.
+          strip --strip-unneeded out/daemon/*.exe out/daemon/*.dll
           ls -la out/daemon
       - uses: actions/upload-artifact@v7
         if: always()
