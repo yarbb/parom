@@ -31,6 +31,11 @@ public:
 	/// Stores and writes the file at once (temp file + rename).
 	void set(std::string const& key, std::string const& fingerprint);
 
+	/// Forgets one entry; returns false if it was not there.
+	bool remove(std::string const& key);
+
+	std::map<std::string, std::string> const& entries() const { return entries_; }
+
 private:
 	void save() const;
 

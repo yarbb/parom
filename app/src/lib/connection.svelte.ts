@@ -7,6 +7,7 @@ import { t } from './i18n';
 import { addRecent, credentialKey, loadRecent, removeRecent, saveRecent, sameServer, type RecentServer } from './recent';
 import { deleteSecret, setSecret } from './secrets';
 import type { Site } from './sites.svelte';
+import { prefs } from './prefs.svelte';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
@@ -168,6 +169,7 @@ class Connection {
         port: target.port,
         user,
         password: params.password,
+        timeout: prefs.value.connectTimeout,
       });
       this.session = res.session;
       this.state = 'connected';
@@ -189,7 +191,12 @@ class Connection {
     this.state = 'connecting';
     this.error = '';
     this.label = `${site.name} (${site.user ? `${site.user}@` : ''}${site.host}${site.port ? `:${site.port}` : ''})`;
-    const params: Record<string, unknown> = { protocol: site.protocol, host: site.host.trim(), port: site.port, timeout: site.timeout };
+    const params: Record<string, unknown> = {
+      protocol: site.protocol,
+      host: site.host.trim(),
+      port: site.port,
+      timeout: site.timeout ?? prefs.value.connectTimeout,
+    };
     if (site.logon !== 'anonymous') {
       params.user = site.user;
     }
@@ -317,7 +324,8 @@ class Connection {
     }
     tr.sent = true;
     // A site can answer "file exists" for all its transfers.
-    const exists = this.site && this.site.exists !== 'ask' ? { exists: this.site.exists } : {};
+    const preset = this.site && this.site.exists !== 'ask' ? this.site.exists : prefs.value.existsDefault;
+    const exists = preset !== 'ask' ? { exists: preset } : {};
     try {
       const res = await call<{ size: number }>(tr.download ? 'transfer.download' : 'transfer.upload', { session, ...exists, ...params }, tr.id);
       tr.state = 'done';

@@ -11,6 +11,7 @@
     type SortKey,
   } from '../lib/files';
   import { t } from '../lib/i18n';
+  import { prefs } from '../lib/prefs.svelte';
 
   interface Props {
     rows: FileRow[];
@@ -47,10 +48,15 @@
   }: Props = $props();
 
   // Only the rows in view are in the DOM, so 100k entries stay cheap.
-  const rowHeight = 30;
+  let rowHeight = $derived(prefs.value.density === 'compact' ? 24 : 30);
+  let decimal = $derived(prefs.value.sizeUnits === 'decimal');
+  let iso = $derived(prefs.value.dateFormat === 'iso');
 
   let sort = $state<Sort>({ key: 'name', desc: false });
-  let sorted = $derived(sortRows(rows, sort));
+  let shown = $derived(prefs.value.showHidden ? rows : rows.filter((r) => !r.name.startsWith('.')));
+  let sorted = $derived(
+    sortRows(shown, sort, { foldersFirst: prefs.value.foldersFirst, caseSensitive: prefs.value.caseSensitive }),
+  );
   let offset = $derived(canGoUp ? 1 : 0);
   let count = $derived(sorted.length + offset);
 
@@ -92,7 +98,7 @@
       onUp();
     } else if (row.dir) {
       onOpenDir(row);
-    } else {
+    } else if (prefs.value.doubleClick === 'transfer') {
       onActivate([row]);
     }
   }
@@ -244,6 +250,7 @@
           tabindex="-1"
           aria-selected={selection.has(i)}
           style:transform="translateY({i * rowHeight}px)"
+          style:height="{rowHeight}px"
           onclick={(e) => click(e, i)}
           ondblclick={() => open(i)}
           oncontextmenu={(e) => (i < offset ? e.preventDefault() : contextMenu(e, i))}
@@ -251,8 +258,8 @@
         >
           {#if row}
             <span class="col name mono" title={row.name}>{row.dir ? `▸ ${row.name}/` : row.name}</span>
-            <span class="col size mono muted">{row.dir ? '' : formatSize(row.size)}</span>
-            <span class="col time mono muted" title={formatFullTime(row.time)}>{formatTime(row.time)}</span>
+            <span class="col size mono muted">{row.dir ? '' : formatSize(row.size, decimal)}</span>
+            <span class="col time mono muted" title={formatFullTime(row.time)}>{formatTime(row.time, Date.now(), iso)}</span>
           {:else}
             <span class="col name mono">..</span>
           {/if}

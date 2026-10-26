@@ -1,12 +1,57 @@
-// Minimal message lookup until the full i18n loader (M2): English only,
-// `{name}` placeholders and ICU `{count, plural, one {...} other {...}}`.
-import en from '../../../locales/en.json';
+// Message lookup: every locales/*.json is bundled; missing keys fall back to
+// English. Values use `{name}` placeholders and ICU
+// `{count, plural, one {...} few {...} other {...}}` with the locale's rules.
+const bundled = import.meta.glob<Record<string, unknown>>('../../../locales/*.json', { eager: true, import: 'default' });
 
 type Messages = Record<string, unknown>;
 type Params = Record<string, string | number>;
 
-const messages: Messages = en;
-const locale = 'en';
+const catalogs = new Map<string, Messages>();
+for (const [file, messages] of Object.entries(bundled)) {
+  const code = /([\w-]+)\.json$/.exec(file)?.[1];
+  if (code) {
+    catalogs.set(code, messages);
+  }
+}
+
+const english: Messages = catalogs.get('en') ?? {};
+let locale = 'en';
+let messages: Messages = english;
+
+export interface LocaleInfo {
+  code: string;
+  /** The language's own name, from _meta.name. */
+  name: string;
+  /** Share of English keys translated, 0..100. */
+  coverage: number;
+}
+
+const keysOf = (m: Messages) => Object.keys(m).filter((k) => k !== '_meta');
+
+export function availableLocales(): LocaleInfo[] {
+  const total = keysOf(english).length || 1;
+  return [...catalogs.entries()]
+    .map(([code, m]) => ({
+      code,
+      name: String((m._meta as { name?: string } | undefined)?.name ?? code),
+      coverage: Math.round((keysOf(m).filter((k) => typeof m[k] === 'string' && k in english).length / total) * 100),
+    }))
+    .sort((a, b) => (a.code === 'en' ? -1 : b.code === 'en' ? 1 : a.name.localeCompare(b.name)));
+}
+
+/** Switches the language for messages formatted from now on. */
+export function setLocale(code: string): void {
+  const found = catalogs.get(code);
+  locale = found ? code : 'en';
+  messages = found ? { ...english, ...found } : english;
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
+}
+
+export function currentLocale(): string {
+  return locale;
+}
 
 function formatPlural(body: string, value: number): string {
   // body: "one {# file} other {# files}"

@@ -278,6 +278,10 @@ def trust_tests(exe, server, password):
         stored = json.load(f)["entries"]
     assert list(stored.values()) == [d.seen["hostkey"][-1]["fingerprint"]], stored
 
+    listed = d.ok("trust.list")["entries"]
+    assert len(listed) == 1 and listed[0]["kind"] == "ssh" and listed[0]["host"] == "127.0.0.1", listed
+    assert listed[0]["fingerprint"] == d.seen["hostkey"][-1]["fingerprint"], listed
+
     asked = len(d.seen["hostkey"])
     second = d.ok("session.open", params)["session"]
     assert len(d.seen["hostkey"]) == asked, "remembered key was asked again"
@@ -306,6 +310,9 @@ def trust_tests(exe, server, password):
     changed = d.seen["hostkey"][-1]
     assert changed["changed"] is True and changed["previous"] == "SHA256:previous-key", changed
     d.error("daemon.init", {"data_dir": ""}, -32602)
+    d.ok("trust.forget", {"key": key})
+    assert d.ok("trust.list")["entries"] == []
+    d.error("trust.forget", {"key": key}, -32602)
     d.ok("daemon.shutdown")
     d.proc.wait(timeout=15)
     shutil.rmtree(data, ignore_errors=True)

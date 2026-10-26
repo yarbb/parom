@@ -4,6 +4,7 @@
   import type { Tab } from '../lib/types';
   import EyeIcon from './EyeIcon.svelte';
   import ServerMenu from './ServerMenu.svelte';
+  import { ui } from '../lib/ui.svelte';
 
   interface Props {
     name: string;
@@ -28,6 +29,12 @@
   <span class="spacer"></span>
   <div class="server">
     <ServerMenu {hideAddress} />
+    <button class="control icon" aria-label={t('prefs.title')} title="{t('prefs.title')} (Ctrl+,)" onclick={() => (ui.preferences = true)}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+        <circle cx="8" cy="8" r="2.2" />
+        <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" />
+      </svg>
+    </button>
     <button
       class="control icon"
       aria-label={hideAddress ? t('topbar.show_address') : t('files.hide_address')}

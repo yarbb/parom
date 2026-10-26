@@ -500,6 +500,31 @@ private:
 			data_dir_ = path;
 			send_result(id, json::object());
 		}
+		else if (method == "trust.list") {
+			json entries = json::array();
+			for (auto const& [key, fingerprint] : trust_.entries()) {
+				// key is "<kind>:<host>:<port>"; hosts may contain ':' (IPv6).
+				auto const first = key.find(':');
+				auto const last = key.rfind(':');
+				if (first == std::string::npos || last <= first) {
+					continue; // Not written by us; ignore.
+				}
+				entries.push_back(json{
+					{"key", key},
+					{"kind", key.substr(0, first)},
+					{"host", key.substr(first + 1, last - first - 1)},
+					{"port", fz::to_integral<int>(key.substr(last + 1), 0)},
+					{"fingerprint", fingerprint},
+				});
+			}
+			send_result(id, json{{"entries", std::move(entries)}});
+		}
+		else if (method == "trust.forget") {
+			if (!trust_.remove(get_string(params, "key"))) {
+				throw RpcError{invalid_params, "Unknown trust entry"};
+			}
+			send_result(id, json::object());
+		}
 		else if (method == "store.get") {
 			auto const file = store_file(params);
 			json value;

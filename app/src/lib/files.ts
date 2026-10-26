@@ -20,12 +20,20 @@ export interface Sort {
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+const caseCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'case', caseFirst: 'upper' });
 
-/** Directories first, then by key; names break ties. Returns a new array. */
-export function sortRows(rows: readonly FileRow[], sort: Sort): FileRow[] {
+export interface SortOptions {
+  foldersFirst?: boolean;
+  caseSensitive?: boolean;
+}
+
+/** By key, folders first unless disabled; names break ties. Returns a new array. */
+export function sortRows(rows: readonly FileRow[], sort: Sort, options: SortOptions = {}): FileRow[] {
   const dir = sort.desc ? -1 : 1;
+  const names = options.caseSensitive ? caseCollator : collator;
+  const foldersFirst = options.foldersFirst ?? true;
   return [...rows].sort((a, b) => {
-    if (a.dir !== b.dir) {
+    if (foldersFirst && a.dir !== b.dir) {
       return a.dir ? -1 : 1;
     }
     let c = 0;
@@ -38,7 +46,7 @@ export function sortRows(rows: readonly FileRow[], sort: Sort): FileRow[] {
       }
     }
     if (c === 0) {
-      c = collator.compare(a.name, b.name);
+      c = names.compare(a.name, b.name);
     }
     return c * dir;
   });
@@ -73,15 +81,16 @@ export function localJoin(path: string, name: string, separator: string): string
 
 const units = ['B', 'KB', 'MB', 'GB', 'TB'];
 
-/** 1024-based, like file managers: "0 B", "18 KB", "1.4 MB". */
-export function formatSize(bytes: number): string {
+/** 1024-based by default, like file managers ("18 KB", "1.4 MB"); `decimal` uses 1000. */
+export function formatSize(bytes: number, decimal = false): string {
   if (bytes < 0) {
     return '';
   }
+  const base = decimal ? 1000 : 1024;
   let v = bytes;
   let u = 0;
-  while (v >= 1024 && u < units.length - 1) {
-    v /= 1024;
+  while (v >= base && u < units.length - 1) {
+    v /= base;
     u++;
   }
   const digits = u === 0 || v >= 10 ? 0 : 1;
@@ -92,10 +101,16 @@ const shortDate = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric'
 const longDate = new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' });
 const fullDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
 
-/** "Oct 26" within the current year, "Oct 26, 2024" otherwise. */
-export function formatTime(ms: number | null, now = Date.now()): string {
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** "Oct 26" within the current year, "Oct 26, 2024" otherwise; `iso` gives local "2026-10-26 12:04". */
+export function formatTime(ms: number | null, now = Date.now(), iso = false): string {
   if (ms === null) {
     return '';
+  }
+  if (iso) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   const sameYear = new Date(ms).getFullYear() === new Date(now).getFullYear();
   return (sameYear ? shortDate : longDate).format(ms);

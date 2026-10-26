@@ -13,7 +13,7 @@ import {
   visibleRange,
   type FileRow,
 } from './files';
-import { format } from './i18n';
+import { availableLocales, currentLocale, format, setLocale, t } from './i18n';
 import { addRecent, credentialKey, maxRecent, recentLabel, removeRecent, type RecentServer } from './recent';
 
 const row = (name: string, extra: Partial<FileRow> = {}): FileRow => ({
@@ -35,6 +35,14 @@ describe('sortRows', () => {
   it('sorts by size and time, descending keeps directories first', () => {
     expect(sortRows(rows, { key: 'size', desc: true }).map((r) => r.name)).toEqual(['dir2', 'Dir1', 'a9.txt', 'b.txt', 'a10.txt']);
     expect(sortRows(rows, { key: 'time', desc: false }).map((r) => r.name).slice(2)).toEqual(['a10.txt', 'a9.txt', 'b.txt']);
+  });
+
+  it('can mix folders in and sort case-sensitively', () => {
+    expect(sortRows(rows, { key: 'name', desc: false }, { foldersFirst: false }).map((r) => r.name)).toEqual([
+      'a9.txt', 'a10.txt', 'b.txt', 'Dir1', 'dir2',
+    ]);
+    const cased = [row('b'), row('B'), row('a')];
+    expect(sortRows(cased, { key: 'name', desc: false }, { caseSensitive: true }).map((r) => r.name)).toEqual(['a', 'B', 'b']);
   });
 
   it('does not modify its input', () => {
@@ -68,6 +76,8 @@ describe('formatting', () => {
     expect(formatSize(1023)).toBe('1023 B');
     expect(formatSize(18 * 1024)).toBe('18 KB');
     expect(formatSize(1.4 * 1024 * 1024)).toBe('1.4 MB');
+    expect(formatSize(18_000, true)).toBe('18 KB');
+    expect(formatSize(1024, true)).toBe('1.0 KB');
   });
 
   it('parses daemon times as UTC', () => {
@@ -82,6 +92,7 @@ describe('formatting', () => {
     expect(formatTime(new Date(2026, 9, 24).getTime(), now)).toBe('Oct 24');
     expect(formatTime(new Date(2024, 0, 2).getTime(), now)).toBe('Jan 2, 2024');
     expect(formatTime(null, now)).toBe('');
+    expect(formatTime(new Date(2026, 9, 26, 9, 5).getTime(), now, true)).toBe('2026-10-26 09:05');
   });
 });
 
@@ -164,5 +175,15 @@ describe('certCoversHost', () => {
     expect(certCoversHost('example.org', ['*.example.org'])).toBe(false);
     expect(certCoversHost('127.0.0.1', ['localhost'])).toBe(false);
     expect(certCoversHost('x', [])).toBe(false);
+  });
+});
+describe('i18n catalogs', () => {
+  it('bundles English completely and falls back to it', () => {
+    const en = availableLocales().find((l) => l.code === 'en');
+    expect(en).toEqual({ code: 'en', name: 'English', coverage: 100 });
+    setLocale('xx-unknown');
+    expect(currentLocale()).toBe('en');
+    expect(t('tab.files')).toBe('Files');
+    expect(t('no.such.key')).toBe('no.such.key');
   });
 });
