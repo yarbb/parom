@@ -146,7 +146,8 @@ def main():
     d.wait_event("session.closed")
 
     sid = d.ok("session.open", dict(server, password=args.password))["session"]
-    assert d.hostkeys and d.hostkeys[-1].startswith("SHA256:"), d.hostkeys
+    fp = d.hostkeys[-1] if d.hostkeys else ""
+    assert fp.startswith("SHA256:") and fp.count("SHA256:") == 1, d.hostkeys
 
     root = d.ok("remote.list", {"session": sid})
     assert root["path"] == "/", root

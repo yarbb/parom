@@ -265,6 +265,14 @@ struct Pending
 	bool close_on_error{};
 };
 
+Pending make_pending(json const& id, std::unique_ptr<CCommand> command)
+{
+	Pending p;
+	p.id = id;
+	p.command = std::move(command);
+	return p;
+}
+
 struct Session
 {
 	int id{};
@@ -424,7 +432,7 @@ private:
 		}
 		else if (method == "session.close") {
 			auto& s = session(params);
-			Pending p{id, std::make_unique<CDisconnectCommand>()};
+			Pending p = make_pending(id, std::make_unique<CDisconnectCommand>());
 			p.done = [](Session&, int) { return json::object(); };
 			p.close_after = true;
 			enqueue(s, std::move(p));
@@ -525,7 +533,7 @@ private:
 			post([this, sid] { drain(sid); });
 		});
 
-		Pending p{id, std::make_unique<CConnectCommand>(server, s->handle, credentials, false)};
+		Pending p = make_pending(id, std::make_unique<CConnectCommand>(server, s->handle, credentials, false));
 		p.done = [](Session& s, int reply) {
 			require_ok(reply);
 			return json{{"session", s.id}};
@@ -549,7 +557,7 @@ private:
 			cmd = std::make_unique<CListCommand>(flags);
 		}
 
-		Pending p{id, std::move(cmd)};
+		Pending p = make_pending(id, std::move(cmd));
 		p.before = [](Session& s) { s.last_listing.clear(); };
 		p.done = [](Session& s, int reply) {
 			require_ok(reply);
@@ -571,7 +579,7 @@ private:
 		if (!cmd->valid()) {
 			throw RpcError{invalid_params, "Invalid command parameters"};
 		}
-		Pending p{id, std::move(cmd)};
+		Pending p = make_pending(id, std::move(cmd));
 		p.done = [](Session&, int reply) {
 			require_ok(reply);
 			return json::object();
@@ -711,7 +719,7 @@ private:
 				{"port", r.server_.GetPort()},
 			};
 			if (r.hostkey_) {
-				ev["fingerprint"] = "SHA256:" + r.hostkey_->fingerprint();
+				ev["fingerprint"] = r.hostkey_->fingerprint(); // "SHA256:<base64>"
 				ev["key"] = r.hostkey_->openssh_pubkey();
 			}
 			return ev;
