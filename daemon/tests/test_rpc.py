@@ -7,11 +7,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
 """
 
 import argparse
+import filecmp
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -26,6 +29,8 @@ class Daemon:
         self.events = []
         self.next_id = 1
         self.hostkeys = []
+        self.file_exists_action = None
+        self.file_exists_requests = []
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -49,8 +54,14 @@ class Daemon:
             if params["type"] == "hostkey":
                 self.hostkeys.append(params["fingerprint"])
                 self.notify("request.reply", {"session": params["session"], "request": params["request"], "trust": True})
+            elif params["type"] == "file_exists" and self.file_exists_action:
+                self.file_exists_requests.append(params)
+                self.notify("request.reply", {"session": params["session"], "request": params["request"],
+                                              "action": self.file_exists_action})
             else:
                 raise AssertionError(f"unexpected request {params}")
+        elif method == "transfer.progress":
+            pass
         else:
             print(f"  event: {method} {params}")
 
@@ -115,6 +126,63 @@ def names(listing):
     return {e["name"]: e for e in listing["entries"]}
 
 
+def progress_for(d, req_id):
+    return [e["params"] for e in d.events
+            if e["method"] == "transfer.progress" and e["params"]["id"] == req_id]
+
+
+def transfers(d, sid, root):
+    work = tempfile.mkdtemp(prefix="totzillad-test-")
+    local = os.path.join(work, "big.bin")
+    size = 32 * 1024 * 1024
+    with open(local, "wb") as f:
+        f.write(os.urandom(size))
+
+    # Upload with progress.
+    req_id = d.next_id
+    res = d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/"})
+    assert res["size"] == size, res
+    assert filecmp.cmp(local, os.path.join(root, "big.bin"), shallow=False)
+    progress = progress_for(d, req_id)
+    print(f"  upload progress events: {len(progress)}")
+    assert progress and all(p["total"] == size for p in progress), progress
+    assert all(a["offset"] <= b["offset"] for a, b in zip(progress, progress[1:])), progress
+
+    # Uploading again asks the client what to do.
+    d.file_exists_action = "overwrite"
+    d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "remote_name": "big.bin"})
+    assert len(d.file_exists_requests) == 1, d.file_exists_requests
+    asked = d.file_exists_requests[0]
+    assert asked["remote_file"] == "big.bin" and not asked["download"] and "id" in asked, asked
+
+    # A preset answer skips the question.
+    d.file_exists_action = None
+    d.ok("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "exists": "overwrite"})
+
+    # Download and compare.
+    back = os.path.join(work, "back.bin")
+    req_id = d.next_id
+    res = d.ok("transfer.download", {"session": sid, "remote_path": "/", "remote_name": "big.bin", "local": back})
+    assert res["size"] == size, res
+    assert filecmp.cmp(local, back, shallow=False)
+    assert progress_for(d, req_id), "no download progress"
+
+    # Existing local file, preset answer.
+    d.ok("transfer.download", {"session": sid, "remote_path": "/", "remote_name": "big.bin", "local": back,
+                               "exists": "overwrite"})
+    assert filecmp.cmp(local, back, shallow=False)
+
+    # Errors.
+    d.error("transfer.upload", {"session": sid, "local": os.path.join(work, "missing.bin"), "remote_path": "/"}, -32602)
+    d.error("transfer.download", {"session": sid, "remote_path": "/", "remote_name": "missing.bin",
+                                  "local": os.path.join(work, "missing.bin")}, -32000)
+    d.error("transfer.upload", {"session": sid, "local": local, "remote_path": "/", "exists": "bogus"}, -32602)
+
+    d.ok("remote.delete", {"session": sid, "path": "/", "names": ["big.bin"]})
+    assert os.listdir(root) == [], os.listdir(root)
+    shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("exe")
@@ -168,6 +236,8 @@ def main():
     d.ok("remote.rmdir", {"session": sid, "path": "/", "name": "newdir"})
     assert names(d.ok("remote.list", {"session": sid, "path": "/"})) == {}
     assert os.listdir(args.root) == []
+
+    transfers(d, sid, args.root)
 
     d.error("remote.list", {"session": sid, "path": "/does/not/exist"}, -32000)
     d.error("remote.rmdir", {"session": sid, "path": "/", "name": "a/b"}, -32602)

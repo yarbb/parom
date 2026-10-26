@@ -12,16 +12,22 @@
 #include "engine_options.h"
 
 #include <fzssh/pubkey.hpp>
+#include <libfilezilla/aio/reader.hpp>
+#include <libfilezilla/aio/writer.hpp>
+#include <libfilezilla/local_filesys.hpp>
 #include <libfilezilla/string.hpp>
 #include <libfilezilla/time.hpp>
 
 #include <nlohmann/json.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <map>
 #include <mutex>
 #include <optional>
+#include <thread>
 #include <vector>
 
 
@@ -161,6 +167,30 @@ std::string get_name(json const& params, char const* key)
 	return name;
 }
 
+CFileExistsNotification::OverwriteAction overwrite_action(std::string const& name)
+{
+	static std::map<std::string, CFileExistsNotification::OverwriteAction> const actions{
+		{"overwrite", CFileExistsNotification::overwrite},
+		{"overwrite_newer", CFileExistsNotification::overwriteNewer},
+		{"overwrite_size", CFileExistsNotification::overwriteSize},
+		{"overwrite_size_or_newer", CFileExistsNotification::overwriteSizeOrNewer},
+		{"resume", CFileExistsNotification::resume},
+		{"rename", CFileExistsNotification::rename},
+		{"skip", CFileExistsNotification::skip},
+	};
+	auto it = actions.find(name);
+	if (it == actions.end()) {
+		throw RpcError{invalid_params, "Unknown file exists action: " + name};
+	}
+	return it->second;
+}
+
+std::wstring base_name(std::wstring const& path)
+{
+	auto const pos = path.find_last_of(L"/\\");
+	return pos == std::wstring::npos ? path : path.substr(pos + 1);
+}
+
 ServerProtocol protocol_from_name(std::string const& name)
 {
 	if (name == "sftp") {
@@ -263,6 +293,11 @@ struct Pending
 	std::function<json(Session&, int reply)> done;
 	bool close_after{};
 	bool close_on_error{};
+
+	// File transfers: progress is reported while running; a preset answer
+	// for "file exists" skips asking the client.
+	bool transfer{};
+	std::optional<CFileExistsNotification::OverwriteAction> exists_action;
 };
 
 Pending make_pending(json const& id, std::unique_ptr<CCommand> command)
@@ -322,6 +357,14 @@ public:
 
 	void run()
 	{
+		// Transfer progress is polled, as the engine only reports it on request.
+		std::thread ticker([this] {
+			while (!ticker_stop_) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(200));
+				post([this] { poll_transfers(); });
+			}
+		});
+
 		while (!stop_) {
 			std::function<void()> task;
 			{
@@ -332,6 +375,9 @@ public:
 			}
 			task();
 		}
+		ticker_stop_ = true;
+		ticker.join();
+
 		// Disconnect cleanly while the dispatcher still runs on this thread.
 		sessions_.clear();
 	}
@@ -479,6 +525,12 @@ private:
 			simple(s, id, std::make_unique<CChmodCommand>(
 				get_path(params, "path"), wide(get_name(params, "name")), wide(get_string(params, "mode"))));
 		}
+		else if (method == "transfer.upload") {
+			upload(id, params);
+		}
+		else if (method == "transfer.download") {
+			download(id, params);
+		}
 		else if (method == "request.reply") {
 			reply_request(id, params);
 		}
@@ -572,6 +624,96 @@ private:
 			return json{{"path", u8(s.last_listing.GetPath())}, {"entries", std::move(entries)}};
 		};
 		enqueue(s, std::move(p));
+	}
+
+	std::optional<CFileExistsNotification::OverwriteAction> exists_param(json const& params)
+	{
+		auto const name = get_string(params, "exists", "ask");
+		if (name == "ask") {
+			return std::nullopt;
+		}
+		auto const action = overwrite_action(name);
+		if (action == CFileExistsNotification::rename) {
+			throw RpcError{invalid_params, "exists: rename needs a name; answer the request instead"};
+		}
+		return action;
+	}
+
+	void upload(json const& id, json const& params)
+	{
+		auto& s = session(params);
+		auto const local = wide(get_string(params, "local"));
+		int64_t const size = fz::local_filesys::get_size(fz::to_native(local));
+		if (size < 0) {
+			throw RpcError{invalid_params, "Local file not found"};
+		}
+		auto const remote_path = get_path(params, "remote_path");
+		auto const name = find(params, "remote_name") ? wide(get_name(params, "remote_name")) : base_name(local);
+
+		auto cmd = std::make_unique<CFileTransferCommand>(fz::file_reader_factory(local, context_.GetThreadPool()),
+			remote_path, name, transfer_flags::none);
+		if (!cmd->valid()) {
+			throw RpcError{invalid_params, "Invalid transfer parameters"};
+		}
+		Pending p = make_pending(id, std::move(cmd));
+		p.transfer = true;
+		p.exists_action = exists_param(params);
+		p.done = [size](Session&, int reply) {
+			require_ok(reply);
+			return json{{"size", size}};
+		};
+		enqueue(s, std::move(p));
+	}
+
+	void download(json const& id, json const& params)
+	{
+		auto& s = session(params);
+		auto const local = wide(get_string(params, "local"));
+		if (local.empty() || base_name(local).empty()) {
+			throw RpcError{invalid_params, "Invalid local file name"};
+		}
+
+		auto cmd = std::make_unique<CFileTransferCommand>(fz::file_writer_factory(local, context_.GetThreadPool()),
+			get_path(params, "remote_path"), wide(get_name(params, "remote_name")), transfer_flags::download);
+		if (!cmd->valid()) {
+			throw RpcError{invalid_params, "Invalid transfer parameters"};
+		}
+		Pending p = make_pending(id, std::move(cmd));
+		p.transfer = true;
+		p.exists_action = exists_param(params);
+		p.done = [local](Session&, int reply) {
+			require_ok(reply);
+			return json{{"size", fz::local_filesys::get_size(fz::to_native(local))}};
+		};
+		enqueue(s, std::move(p));
+	}
+
+	void poll_transfers()
+	{
+		for (auto& entry : sessions_) {
+			auto& s = *entry.second;
+			if (s.running && s.current && s.current->transfer) {
+				bool changed{};
+				auto const status = s.engine->GetTransferStatus(changed);
+				if (changed) {
+					report_progress(s, status);
+				}
+			}
+		}
+	}
+
+	void report_progress(Session& s, CTransferStatus const& status)
+	{
+		if (!s.current || !s.current->transfer || status.empty()) {
+			return;
+		}
+		emit("transfer.progress", json{
+			{"session", s.id},
+			{"id", s.current->id},
+			{"offset", status.currentOffset},
+			{"start", status.startOffset},
+			{"total", status.totalSize},
+		});
 	}
 
 	void simple(Session& s, json const& id, std::unique_ptr<CCommand> cmd)
@@ -680,6 +822,11 @@ private:
 				}
 				break;
 			}
+			case nId_transferstatus: {
+				auto const& ts = static_cast<CTransferStatusNotification const&>(*n);
+				report_progress(s, ts.GetStatus());
+				break;
+			}
 			case nId_listing: {
 				auto const& listing = static_cast<CDirectoryListingNotification const&>(*n);
 				if (listing.Primary() && !listing.Failed()) {
@@ -689,7 +836,15 @@ private:
 			}
 			case nId_asyncrequest: {
 				std::unique_ptr<CAsyncRequestNotification> req(static_cast<CAsyncRequestNotification*>(n.release()));
+				if (req->GetRequestID() == reqId_fileexists && s.current && s.current->exists_action) {
+					static_cast<CFileExistsNotification&>(*req).overwriteAction = *s.current->exists_action;
+					s.engine->SetAsyncRequestReply(std::move(req));
+					break;
+				}
 				json ev = describe_request(*req);
+				if (ev.is_object() && s.current) {
+					ev["id"] = s.current->id;
+				}
 				if (ev.is_null()) {
 					// Not supported yet: the request's defaults decline it.
 					s.engine->SetAsyncRequestReply(std::move(req));
@@ -777,20 +932,7 @@ private:
 			break;
 		case reqId_fileexists: {
 			auto& r = static_cast<CFileExistsNotification&>(req);
-			static std::map<std::string, CFileExistsNotification::OverwriteAction> const actions{
-				{"overwrite", CFileExistsNotification::overwrite},
-				{"overwrite_newer", CFileExistsNotification::overwriteNewer},
-				{"overwrite_size", CFileExistsNotification::overwriteSize},
-				{"overwrite_size_or_newer", CFileExistsNotification::overwriteSizeOrNewer},
-				{"resume", CFileExistsNotification::resume},
-				{"rename", CFileExistsNotification::rename},
-				{"skip", CFileExistsNotification::skip},
-			};
-			auto a = actions.find(get_string(params, "action", "skip"));
-			if (a == actions.end()) {
-				throw RpcError{invalid_params, "Unknown action"};
-			}
-			r.overwriteAction = a->second;
+			r.overwriteAction = overwrite_action(get_string(params, "action", "skip"));
 			if (r.overwriteAction == CFileExistsNotification::rename) {
 				r.newName = wide(get_name(params, "new_name"));
 			}
@@ -839,6 +981,7 @@ private:
 	std::condition_variable cv_;
 	std::deque<std::function<void()>> tasks_;
 	bool stop_{};
+	std::atomic<bool> ticker_stop_{};
 
 	Options options_;
 	Utf8Encoding encoding_;
