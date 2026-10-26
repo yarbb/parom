@@ -2,6 +2,7 @@
   import { connection, type EngineRequest } from '../lib/connection.svelte';
   import { certCoversHost, formatSize } from '../lib/files';
   import { t } from '../lib/i18n';
+  import Checkbox from './Checkbox.svelte';
   import Modal from './Modal.svelte';
 
   // Answers the oldest pending engine request; the rest wait their turn.
@@ -9,11 +10,15 @@
 
   let answers = $state<string[]>([]);
   let secret = $state('');
+  let applyToAll = $state(false);
+  // Offer "apply to all" only when more transfers are waiting.
+  let othersWaiting = $derived(connection.transfers.filter((x) => x.state === 'running').length > 1);
 
   $effect(() => {
     if (req) {
       answers = ((req.prompts as unknown[] | undefined) ?? []).map(() => '');
       secret = '';
+      applyToAll = false;
     }
   });
 
@@ -77,7 +82,7 @@
       {/snippet}
     </Modal>
   {:else if r.type === 'file_exists'}
-    <Modal title={t('dialog.exists.title')} onCancel={() => reply(r, { action: 'skip' })}>
+    <Modal title={t('dialog.exists.title')} onCancel={() => connection.answerExists(r, 'skip', false)}>
       <p class="mono">{r.download ? r.local_file : `${r.remote_path}/${r.remote_file}`}</p>
       <p class="muted">
         {t('dialog.exists.sizes', {
@@ -85,10 +90,13 @@
           target: formatSize(Number(r.download ? r.local_size : r.remote_size)),
         })}
       </p>
+      {#if othersWaiting}
+        <Checkbox bind:checked={applyToAll} label={t('dialog.exists.apply_all')} />
+      {/if}
       {#snippet actions()}
-        <button class="control" onclick={() => reply(r, { action: 'skip' })}>{t('dialog.exists.skip')}</button>
-        <button class="control" onclick={() => reply(r, { action: 'overwrite_newer' })}>{t('dialog.exists.newer')}</button>
-        <button class="control primary" onclick={() => reply(r, { action: 'overwrite' })}>{t('dialog.exists.overwrite')}</button>
+        <button class="control" onclick={() => connection.answerExists(r, 'skip', applyToAll)}>{t('dialog.exists.skip')}</button>
+        <button class="control" onclick={() => connection.answerExists(r, 'overwrite_newer', applyToAll)}>{t('dialog.exists.newer')}</button>
+        <button class="control primary" onclick={() => connection.answerExists(r, 'overwrite', applyToAll)}>{t('dialog.exists.overwrite')}</button>
       {/snippet}
     </Modal>
   {:else if r.type === 'certificate'}

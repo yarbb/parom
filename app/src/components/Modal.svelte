@@ -13,7 +13,10 @@
 
   $effect(() => {
     // Focus the first control so Enter/Escape work immediately.
-    const first = dialog.querySelector<HTMLElement>('input, button.primary, button');
+    const first =
+      dialog.querySelector<HTMLElement>('input:not([type=checkbox])') ??
+      dialog.querySelector<HTMLElement>('button.primary') ??
+      dialog.querySelector<HTMLElement>('button');
     first?.focus();
   });
 
