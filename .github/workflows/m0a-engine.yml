@@ -1,12 +1,14 @@
-# M0a: prove we can build the FileZilla engine (no GUI) on Windows.
+# M0a: build the FileZilla engine (no GUI) on Windows.
+# M0b: build a console spike against it and run it against a local SFTP server.
 # libfilezilla and fzssh come prebuilt from MSYS2 (UCRT64); MSYS2 also packages
 # FileZilla 3.71.1 against them, so the versions are known to work together.
-name: M0a engine build
+name: M0 engine build
 on:
   workflow_dispatch:
   push:
     paths:
       - third_party/filezilla/**
+      - spike/**
       - .github/workflows/m0a-engine.yml
 jobs:
   build:
@@ -52,6 +54,34 @@ jobs:
           cp src-fz/src/include/*.h out/include/ 2>/dev/null || true
           ls -laR out
           test -n "$(ls out/bin/*.dll 2>/dev/null)"
+      - name: Build M0b spike
+        run: |
+          g++ -std=c++17 -O2 -Wall -Isrc-fz/src/include \
+            $(pkg-config --cflags libfilezilla libfzssh-client) \
+            spike/m0b/main.cpp -o out/bin/fzspike.exe \
+            -Lbuild-fz/src/engine/.libs -lfzclient-private \
+            $(pkg-config --libs libfilezilla libfzssh-client)
+      - name: Start local SFTP test server
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check sftpserver
+          python -c "import paramiko; paramiko.RSAKey.generate(2048).write_private_key_file('sftp-key.pem')"
+          New-Item -ItemType Directory sftproot | Out-Null
+          Set-Content sftproot/existing.txt 'already on the server'
+          Start-Process sftpserver -WorkingDirectory sftproot -ArgumentList '--host','127.0.0.1','--port','3373','--keyfile','../sftp-key.pem','--level','INFO' -RedirectStandardError "$PWD/sftpserver.log"
+          Start-Sleep 5
+          Get-Content sftpserver.log -ErrorAction SilentlyContinue
+      - name: Run M0b spike (connect, list, upload)
+        timeout-minutes: 5
+        env:
+          TOTZILLA_PASSWORD: test
+        run: |
+          export PATH="$PWD/out/bin:$PATH"
+          echo "uploaded by the M0b spike at $(date -u)" > upload.txt
+          fzspike.exe --host 127.0.0.1 --port 3373 --user test --trust-hostkey \
+            --upload "$(cygpath -w "$PWD/upload.txt")" --timeout 20
+          cmp upload.txt sftproot/upload.txt
+          echo "server copy matches"
       - uses: actions/upload-artifact@v5
         if: always()
         with:
