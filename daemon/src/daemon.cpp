@@ -375,6 +375,8 @@ public:
 		, context_(options_, encoding_)
 	{
 		options_.set(OPTION_RECONNECTCOUNT, 0);
+		// FTP servers drop idle control connections; NOOPs keep them open.
+		options_.set(OPTION_FTP_SENDKEEPALIVE, 1);
 	}
 
 	~Impl()

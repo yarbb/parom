@@ -78,7 +78,8 @@ One small file on the server, `/.totzilla` (~300 bytes, path configurable). Fiel
 - M2 (done): Site Manager (sites in the daemon store, passwords in the OS credential store), Preferences (live where the feature exists), themes, i18n loader, context menus (edit, download, rename, delete, new folder), edit-in-place with upload on save, remembered host keys and certificates (`trust.json`), "apply to all" for file exists.
 - Still open from M2: persistent transfer queue in the daemon (SQLite) and simultaneous transfers; message log panel.
 - M3 (done): marker on the server, server state and hand-edit detection, lock, backups (folder configurable) with restore, deploys the committed version (git export), history, Preferences: Marker and history. Not done on purpose: deleting files removed from the repo on the server; the post-sync command runs on this computer (SFTP cannot run commands).
-- Backlog (user requests): drag and drop between the panes and from the system file manager.
+- Backlog (user requests): drag and drop between the panes and from the system file manager; a full message log panel (the status bar shows the latest engine line); automatic reconnect after the server drops the connection.
+- Server load: FTP listings cost a command and a data connection each and hosts rate-limit bursts. Sync lists each folder once per operation (cache), spaces listings out, skips MKD for known folders, and does not re-walk the server after a sync. Keep it that way.
 - M3: marker + sync + backups + dialogs.
 - M4: GitHub tab.
 - M5: translations, installer, releases.

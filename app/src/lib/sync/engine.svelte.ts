@@ -123,14 +123,39 @@ class SyncEngine {
     return connection.session;
   }
 
+  // Every FTP listing costs a command and a data connection, and hosts
+  // rate-limit bursts ("too many requests"). Within one check or sync each
+  // folder is listed once, and listings are spaced out a little.
+  #cache = new Map<string, Map<string, RemoteEntry> | null>();
+  #lastList = 0;
+  static readonly listGapMs = 150;
+
   /** Lists one remote folder; null if it cannot be listed (usually: it does not exist). */
-  async #list(path: string): Promise<Map<string, RemoteEntry> | null> {
+  async #list(path: string, fresh = false): Promise<Map<string, RemoteEntry> | null> {
+    if (!fresh && this.#cache.has(path)) {
+      return this.#cache.get(path)!;
+    }
+    const wait = this.#lastList + SyncEngine.listGapMs - Date.now();
+    if (wait > 0) {
+      await new Promise((r) => setTimeout(r, wait));
+    }
+    this.#lastList = Date.now();
+    let listing: Map<string, RemoteEntry> | null;
     try {
       const res = await call<{ entries: RemoteEntry[] }>('remote.list', { session: this.#session(), path });
-      return new Map(res.entries.map((e) => [e.name, e]));
+      listing = new Map(res.entries.map((e) => [e.name, e]));
     } catch {
-      return null;
+      listing = null;
     }
+    this.#cache.set(path, listing);
+    return listing;
+  }
+
+  /** Whether a folder is known to exist from listings made in this operation. */
+  #knownFolder(root: string, rel: string): boolean {
+    const i = rel.lastIndexOf('/');
+    const parent = i < 0 ? root : remoteJoin(root, rel.slice(0, i));
+    return !!this.#cache.get(parent)?.get(rel.slice(i + 1))?.dir;
   }
 
   /**
@@ -194,7 +219,8 @@ class SyncEngine {
   }
 
   async #readMarker(root: string): Promise<{ marker: Marker | null; mtime: number | null }> {
-    const listing = await this.#list(root);
+    // Always fresh: the marker is what tells syncs apart.
+    const listing = await this.#list(root, true);
     if (!listing) {
       throw new Error(`Cannot open ${root} on the server. Check the site's remote directory.`);
     }
@@ -233,12 +259,19 @@ class SyncEngine {
     return host.machineName();
   }
 
-  /** Compares the server with the local repository. Called after connecting and after a sync. */
-  async refresh(): Promise<void> {
+  /**
+   * Compares the server with the local repository. Called after connecting,
+   * from Check, before and after a sync. `keepCache` reuses this operation's
+   * listings; `skipEdits` skips walking the folders (right after a sync).
+   */
+  async refresh(opts: { keepCache?: boolean; skipEdits?: boolean } = {}): Promise<void> {
     const site = connection.site;
     if (!this.active || !site) {
       this.reset();
       return;
+    }
+    if (!opts.keepCache) {
+      this.#cache.clear();
     }
     this.checking = true;
     this.error = '';
@@ -256,7 +289,7 @@ class SyncEngine {
       const state = serverState({ marker, head: repo.head, markerKnown: known, markerIsAncestor: ancestor });
 
       let edits: Edits = { edited: [], missing: [] };
-      if (prefs.value.syncDetectEdits && known && marker?.sha) {
+      if (prefs.value.syncDetectEdits && !opts.skipEdits && known && marker?.sha) {
         const deployed = (await git.tree(dir, marker.sha)).filter((f) => classify(f.path, rules) === 'managed');
         const server = await this.#serverFiles(root, deployed.map((f) => f.path));
         edits = detectServerEdits(deployed, server, mtime, rules);
@@ -354,7 +387,9 @@ class SyncEngine {
   }
 
   async #start(): Promise<void> {
-    await this.refresh();
+    // One fresh walk of the server for the whole sync.
+    this.#cache.clear();
+    await this.refresh({ keepCache: true });
     const c = this.check;
     if (!c || this.run) {
       return;
@@ -474,7 +509,9 @@ class SyncEngine {
       exportDir = joinLocal((await host.paths()).data, 'tmp', `export-${newNonce()}`);
       await git.export(dir, head, plan.upload, exportDir);
       for (const f of foldersFor(plan.upload)) {
-        await call('remote.mkdir', { session: this.#session(), path: remoteJoin(c.root, f) }).catch(() => {});
+        if (!this.#knownFolder(c.root, f)) {
+          await call('remote.mkdir', { session: this.#session(), path: remoteJoin(c.root, f) }).catch(() => {});
+        }
       }
       for (const p of plan.upload) {
         if (this.#cancel) {
@@ -550,7 +587,8 @@ class SyncEngine {
         await host.removeBackup(exportDir).catch(() => {});
       }
       run.finished = true;
-      await this.refresh();
+      // The uploads just made the server match; no need to walk it again.
+      await this.refresh({ skipEdits: true });
     }
   }
 
