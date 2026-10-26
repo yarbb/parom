@@ -13,8 +13,6 @@
   let applyToAll = $state(false);
   /** Keep a trusted host key or certificate for future sessions. */
   let remember = $state(true);
-  // Offer "apply to all" only when more transfers are waiting.
-  let othersWaiting = $derived(connection.transfers.filter((x) => x.state === 'running').length > 1);
 
   $effect(() => {
     if (req) {
@@ -98,9 +96,7 @@
           target: formatSize(Number(r.download ? r.local_size : r.remote_size)),
         })}
       </p>
-      {#if othersWaiting}
-        <Checkbox bind:checked={applyToAll} label={t('dialog.exists.apply_all')} />
-      {/if}
+      <Checkbox bind:checked={applyToAll} label={t('dialog.exists.apply_all')} />
       {#snippet actions()}
         <button class="control" onclick={() => connection.answerExists(r, 'skip', applyToAll)}>{t('dialog.exists.skip')}</button>
         <button class="control" onclick={() => connection.answerExists(r, 'overwrite_newer', applyToAll)}>{t('dialog.exists.newer')}</button>

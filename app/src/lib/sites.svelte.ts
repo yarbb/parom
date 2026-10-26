@@ -25,6 +25,8 @@ export interface Site {
   /** Seconds; empty uses the default. */
   timeout?: number;
   exists: ExistsDefault;
+  /** Milliseconds between requests, for hosts that rate-limit them (0 = none). */
+  pace?: number;
   // Sync and GitHub (used from M3 on).
   repo: string;
   marker: 'ask' | 'on' | 'off';

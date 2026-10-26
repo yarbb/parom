@@ -260,6 +260,12 @@
                   {#each ['ask', 'overwrite', 'overwrite_newer', 'skip'] as a (a)}<option value={a}>{t(`sites.exists.${a}`)}</option>{/each}
                 </select>
               </label>
+              <label><span>{t('sites.pace')}</span>
+                <select class="field" value={site.pace ?? 0} onchange={(e) => (site.pace = Number(e.currentTarget.value))}>
+                  {#each [0, 100, 250, 500, 1000] as ms (ms)}<option value={ms}>{ms ? `${ms} ms` : t('sites.pace.none')}</option>{/each}
+                </select>
+              </label>
+              <p class="muted note">{t('sites.pace_hint')}</p>
             {:else}
               <div class="section-label inline">{t('sites.tab.sync')}</div>
               <label><span>{t('sites.repo')}</span><input class="field mono" bind:value={site.repo} placeholder="owner/repository" /></label>
@@ -490,6 +496,12 @@
   .row2 .small .field {
     width: 70px;
     flex: none;
+  }
+
+  .note {
+    margin: 4px 0 0 144px;
+    font-size: 11.5px;
+    line-height: 1.5;
   }
 
   .small-input {

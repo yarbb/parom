@@ -67,10 +67,22 @@ impl Edits {
         self.watched.lock().unwrap().remove(path);
     }
 
-    /// Stops watching and deletes every temp copy.
+    /// Deletes temp copies older than a day. Newer ones may belong to another
+    /// window of the app that is still editing them.
     pub fn cleanup(&self) {
-        self.watched.lock().unwrap().clear();
-        let _ = fs::remove_dir_all(&self.base);
+        let Ok(entries) = fs::read_dir(&self.base) else { return };
+        let day = Duration::from_secs(24 * 60 * 60);
+        for entry in entries.flatten() {
+            let old = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|age| age > day);
+            if old {
+                let _ = fs::remove_dir_all(entry.path());
+            }
+        }
     }
 }
 
