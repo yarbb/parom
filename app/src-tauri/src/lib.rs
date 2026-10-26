@@ -1,7 +1,9 @@
 mod daemon;
 mod edit;
+mod git;
 mod local;
 mod secrets;
+mod support;
 
 use daemon::{Daemon, BRIDGE_ERROR};
 use serde_json::{json, Value};
@@ -91,6 +93,95 @@ fn edit_unwatch(edits: tauri::State<'_, edit::Edits>, path: String) {
 #[tauri::command]
 fn edit_cleanup(edits: tauri::State<'_, edit::Edits>) {
     edits.cleanup();
+}
+
+// Server sync: local git (blocking work runs off the UI thread).
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn git_status(dir: String) -> Result<git::RepoStatus, String> {
+    blocking(move || git::status(&dir)).await
+}
+
+#[tauri::command]
+async fn git_tree(dir: String, rev: String) -> Result<Vec<git::TreeFile>, String> {
+    blocking(move || git::tree(&dir, &rev)).await
+}
+
+#[tauri::command]
+async fn git_has_commit(dir: String, sha: String) -> Result<bool, String> {
+    blocking(move || git::has_commit(&dir, &sha)).await
+}
+
+#[tauri::command]
+async fn git_is_ancestor(dir: String, ancestor: String, descendant: String) -> Result<bool, String> {
+    blocking(move || git::is_ancestor(&dir, &ancestor, &descendant)).await
+}
+
+#[tauri::command]
+async fn git_commits_between(dir: String, from: String, to: String) -> Result<usize, String> {
+    blocking(move || git::commits_between(&dir, &from, &to)).await
+}
+
+#[tauri::command]
+async fn git_diff(dir: String, from: String, to: String) -> Result<Vec<git::Change>, String> {
+    blocking(move || git::diff(&dir, &from, &to)).await
+}
+
+#[tauri::command]
+async fn git_read_file(dir: String, rev: String, path: String) -> Result<String, String> {
+    blocking(move || git::read_file(&dir, &rev, &path)).await
+}
+
+#[derive(serde::Serialize)]
+struct AppPaths {
+    data: String,
+    backups: String,
+    history: String,
+}
+
+#[tauri::command]
+fn app_paths(app: tauri::AppHandle) -> Result<AppPaths, String> {
+    let data = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let s = |p: std::path::PathBuf| p.display().to_string();
+    Ok(AppPaths { backups: s(data.join("backups")), history: s(data.join("history")), data: s(data) })
+}
+
+#[tauri::command]
+fn read_small_file(path: String) -> Result<String, String> {
+    support::read_small(&path)
+}
+
+#[tauri::command]
+fn write_small_file(path: String, content: String) -> Result<(), String> {
+    support::write_small(&path, &content)
+}
+
+#[tauri::command]
+fn append_line(path: String, line: String) -> Result<(), String> {
+    support::append_line(&path, &line)
+}
+
+#[tauri::command]
+async fn remove_backup(path: String) -> Result<(), String> {
+    blocking(move || support::remove_dir(&path)).await
+}
+
+#[tauri::command]
+async fn dir_size(path: String) -> Result<u64, String> {
+    blocking(move || Ok(support::dir_size(&path))).await
+}
+
+#[tauri::command]
+fn machine_name() -> String {
+    support::machine_name()
+}
+
+#[tauri::command]
+async fn run_command(command: String, cwd: Option<String>) -> Result<support::CommandResult, String> {
+    blocking(move || support::run_command(&command, cwd.as_deref())).await
 }
 
 /// Credentials are filed under the product name, so renaming the app only
@@ -211,7 +302,22 @@ pub fn run() {
             edit_open,
             edit_watch,
             edit_unwatch,
-            edit_cleanup
+            edit_cleanup,
+            git_status,
+            git_tree,
+            git_has_commit,
+            git_is_ancestor,
+            git_commits_between,
+            git_diff,
+            git_read_file,
+            app_paths,
+            read_small_file,
+            write_small_file,
+            append_line,
+            remove_backup,
+            dir_size,
+            machine_name,
+            run_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running the application");
