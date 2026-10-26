@@ -1,5 +1,7 @@
 // Preferences, stored by the daemon as the "preferences" document. The theme
 // is mirrored in local storage so the first paint already has the right one.
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { call } from './daemon';
 import type { ExistsDefault } from './sites.svelte';
 import { setLocale } from './i18n';
@@ -57,8 +59,13 @@ export function applyPrefs(p: Prefs): void {
   applyTheme(p.theme);
   const root = document.documentElement;
   root.dataset.density = p.density;
-  // Everything is sized in px, so zoom scales the whole UI evenly.
-  (document.body.style as CSSStyleDeclaration & { zoom: string }).zoom = String(p.fontScale / 100);
+  // Webview zoom (like Ctrl+wheel in a browser) scales everything and keeps
+  // vw/vh and mouse coordinates consistent, so dialogs still fit the window.
+  if (isTauri()) {
+    void getCurrentWebview()
+      .setZoom(p.fontScale / 100)
+      .catch(() => {});
+  }
 }
 
 class PrefsStore {
