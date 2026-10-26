@@ -1,6 +1,6 @@
 <script lang="ts">
   import { connection, type EngineRequest } from '../lib/connection.svelte';
-  import { formatSize } from '../lib/files';
+  import { certCoversHost, formatSize } from '../lib/files';
   import { t } from '../lib/i18n';
   import Modal from './Modal.svelte';
 
@@ -96,7 +96,7 @@
     <Modal title={t('dialog.cert.title')} onCancel={() => reply(r, { trust: false })}>
       <p>{t('dialog.cert.body', { host: String(r.host), port: String(r.port) })}</p>
       <ul class="warnings status-modified">
-        {#if r.hostname_mismatch}<li>{t('dialog.cert.mismatch')}</li>{/if}
+        {#if r.hostname_mismatch || (leaf && !certCoversHost(String(r.host), leaf.alt_names))}<li>{t('dialog.cert.mismatch')}</li>{/if}
         {#if leaf?.self_signed}<li>{t('dialog.cert.self_signed')}</li>{/if}
         {#if leaf && Date.parse(leaf.valid_until) < Date.now()}<li>{t('dialog.cert.expired')}</li>{/if}
         {#if leaf && Date.parse(leaf.valid_from) > Date.now()}<li>{t('dialog.cert.not_yet_valid')}</li>{/if}

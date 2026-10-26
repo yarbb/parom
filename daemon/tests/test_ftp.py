@@ -81,7 +81,9 @@ def main():
     cert = d.seen["certificate"][-1]
     print(f"  certificate request: {cert}")
     assert cert["host"] == "127.0.0.1" and cert["port"] == args.ftps_port, cert
-    assert not cert["system_trust"] and cert["hostname_mismatch"], cert
+    # libfilezilla only checks the host name for chains the OS trusts, so the
+    # UI compares host and alt_names itself; here the flag just has to exist.
+    assert cert["system_trust"] is False and isinstance(cert["hostname_mismatch"], bool), cert
     leaf = cert["certificates"][0]
     assert leaf["self_signed"] and "localhost" in leaf["alt_names"], leaf
     assert len(leaf["fingerprint_sha256"]) >= 64 and leaf["valid_from"] < leaf["valid_until"], leaf
