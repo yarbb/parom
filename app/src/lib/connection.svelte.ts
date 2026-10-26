@@ -93,6 +93,8 @@ class Connection {
   pickedSite = $state<{ site: Site; password?: string } | null>(null);
   /** The site of the current session, if it came from the Site Manager. */
   site = $state<Site | null>(null);
+  /** The site's remote directory as the server resolved it (sync root). */
+  siteRoot = $state('');
   /** Local folder the site wants shown; the Files tab opens it. */
   localDirRequest = $state<string | null>(null);
 
@@ -211,6 +213,7 @@ class Connection {
       this.state = 'connected';
       this.site = site;
       await this.list(site.remoteDir.trim() || undefined);
+      this.siteRoot = this.remotePath;
       if (site.localDir.trim()) {
         this.localDirRequest = site.localDir.trim();
       }

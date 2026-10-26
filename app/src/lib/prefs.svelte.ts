@@ -31,6 +31,15 @@ export interface Prefs {
   editorPath: string;
   editUploadOnSave: boolean;
   editAsk: boolean;
+  // Server sync (Preferences: Marker and history).
+  syncLock: boolean;
+  syncDetectEdits: boolean;
+  syncBackup: boolean;
+  syncAskVersionsDiffer: boolean;
+  syncAskSomeoneElse: boolean;
+  syncAskLocalOnly: boolean;
+  /** Backups kept per site; older ones are deleted. */
+  backupKeep: number;
 }
 
 export const defaultPrefs: Prefs = {
@@ -52,6 +61,13 @@ export const defaultPrefs: Prefs = {
   editorPath: '',
   editUploadOnSave: true,
   editAsk: true,
+  syncLock: true,
+  syncDetectEdits: true,
+  syncBackup: true,
+  syncAskVersionsDiffer: true,
+  syncAskSomeoneElse: true,
+  syncAskLocalOnly: false,
+  backupKeep: 5,
 };
 
 /** Applies the parts of the preferences that change the page itself. */
