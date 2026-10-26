@@ -35,15 +35,15 @@ pub fn status(dir: &str) -> Result<RepoStatus, String> {
         .map(|st| {
             st.iter()
                 .filter(|e| e.status() != Status::CURRENT)
-                .filter_map(|e| e.path().map(str::to_owned))
+                .filter_map(|e| e.path().ok().map(str::to_owned))
                 .collect()
         })
         .unwrap_or_default();
     Ok(RepoStatus {
         head: commit.as_ref().map(|c| c.id().to_string()),
-        branch: head.as_ref().and_then(|h| h.shorthand().map(str::to_owned)),
+        branch: head.as_ref().and_then(|h| h.shorthand().ok().map(str::to_owned)),
         head_time: commit.as_ref().map(|c| c.time().seconds()),
-        head_summary: commit.as_ref().and_then(|c| c.summary().map(str::to_owned)),
+        head_summary: commit.as_ref().and_then(|c| c.summary().ok().flatten().map(str::to_owned)),
         dirty,
     })
 }
@@ -67,7 +67,7 @@ pub fn tree(dir: &str, rev: &str) -> Result<Vec<TreeFile>, String> {
         // 0o100644 / 0o100755 are regular files; 0o120000 links, 0o160000 submodules.
         let mode = entry.filemode();
         if entry.kind() == Some(ObjectType::Blob) && (mode == 0o100644 || mode == 0o100755) {
-            if let Some(name) = entry.name() {
+            if let Ok(name) = entry.name() {
                 let size = odb.read_header(entry.id()).map(|(len, _)| len as u64).unwrap_or(0);
                 files.push(TreeFile { path: format!("{root}{name}"), size, oid: entry.id().to_string() });
             }
@@ -81,7 +81,8 @@ pub fn tree(dir: &str, rev: &str) -> Result<Vec<TreeFile>, String> {
 /// Whether the commit exists in this repository.
 pub fn has_commit(dir: &str, sha: &str) -> Result<bool, String> {
     let repo = open(dir)?;
-    Ok(Oid::from_str(sha).ok().and_then(|oid| repo.find_commit(oid).ok()).is_some())
+    let found = Oid::from_str(sha).ok().and_then(|oid| repo.find_commit(oid).ok()).is_some();
+    Ok(found)
 }
 
 /// True if `ancestor` is reachable from `descendant` (or the same commit).
