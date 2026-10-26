@@ -1,0 +1,170 @@
+// Pure helpers for the Files tab: rows, sorting, paths, formatting, and the
+// visible window of a virtualized list. Unit tested in files.test.ts.
+
+/** One row in a file list, local or remote. */
+export interface FileRow {
+  name: string;
+  /** Bytes; -1 when unknown or for directories. */
+  size: number;
+  dir: boolean;
+  link: boolean;
+  /** Milliseconds since the epoch, or null. */
+  time: number | null;
+}
+
+export type SortKey = 'name' | 'size' | 'time';
+
+export interface Sort {
+  key: SortKey;
+  desc: boolean;
+}
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/** Directories first, then by key; names break ties. Returns a new array. */
+export function sortRows(rows: readonly FileRow[], sort: Sort): FileRow[] {
+  const dir = sort.desc ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    if (a.dir !== b.dir) {
+      return a.dir ? -1 : 1;
+    }
+    let c = 0;
+    if (sort.key === 'size') {
+      c = a.size - b.size;
+    } else if (sort.key === 'time') {
+      c = (a.time ?? -Infinity) - (b.time ?? -Infinity);
+      if (Number.isNaN(c)) {
+        c = 0;
+      }
+    }
+    if (c === 0) {
+      c = collator.compare(a.name, b.name);
+    }
+    return c * dir;
+  });
+}
+
+/** Parses the daemon's `YYYY-MM-DD[THH:MM:SSZ]` (UTC) into epoch ms. */
+export function parseRemoteTime(time: string | undefined): number | null {
+  if (!time) {
+    return null;
+  }
+  const ms = Date.parse(time.length === 10 ? `${time}T00:00:00Z` : time);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+export function remoteJoin(path: string, name: string): string {
+  return path.endsWith('/') ? path + name : `${path}/${name}`;
+}
+
+/** Parent of an absolute server path, or null at "/". */
+export function remoteParent(path: string): string | null {
+  const trimmed = path.length > 1 ? path.replace(/\/+$/, '') : path;
+  if (trimmed === '/' || trimmed === '') {
+    return null;
+  }
+  const i = trimmed.lastIndexOf('/');
+  return i <= 0 ? '/' : trimmed.slice(0, i);
+}
+
+export function localJoin(path: string, name: string, separator: string): string {
+  return path.endsWith('/') || path.endsWith('\\') ? path + name : path + separator + name;
+}
+
+const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+/** 1024-based, like file managers: "0 B", "18 KB", "1.4 MB". */
+export function formatSize(bytes: number): string {
+  if (bytes < 0) {
+    return '';
+  }
+  let v = bytes;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  const digits = u === 0 || v >= 10 ? 0 : 1;
+  return `${v.toFixed(digits)} ${units[u]}`;
+}
+
+const shortDate = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+const longDate = new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: 'numeric' });
+const fullDate = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' });
+
+/** "Oct 26" within the current year, "Oct 26, 2024" otherwise. */
+export function formatTime(ms: number | null, now = Date.now()): string {
+  if (ms === null) {
+    return '';
+  }
+  const sameYear = new Date(ms).getFullYear() === new Date(now).getFullYear();
+  return (sameYear ? shortDate : longDate).format(ms);
+}
+
+export function formatFullTime(ms: number | null): string {
+  return ms === null ? '' : fullDate.format(ms);
+}
+
+/** Rows [start, end) to render for a fixed row height, with overscan. */
+export function visibleRange(
+  scrollTop: number,
+  viewportHeight: number,
+  rowHeight: number,
+  count: number,
+  overscan = 8,
+): { start: number; end: number } {
+  if (count <= 0 || rowHeight <= 0) {
+    return { start: 0, end: 0 };
+  }
+  const first = Math.floor(Math.max(0, scrollTop) / rowHeight);
+  const visible = Math.ceil(Math.max(0, viewportHeight) / rowHeight) + 1;
+  const start = Math.max(0, Math.min(count, first - overscan));
+  const end = Math.max(start, Math.min(count, first + visible + overscan));
+  return { start, end };
+}
+
+/** Indexes selected by a click: plain replaces, ctrl toggles, shift extends from the anchor. */
+export function clickSelection(
+  selected: ReadonlySet<number>,
+  anchor: number | null,
+  index: number,
+  mods: { ctrl: boolean; shift: boolean },
+): Set<number> {
+  if (mods.shift && anchor !== null) {
+    const next = mods.ctrl ? new Set(selected) : new Set<number>();
+    const [a, b] = anchor < index ? [anchor, index] : [index, anchor];
+    for (let i = a; i <= b; i++) {
+      next.add(i);
+    }
+    return next;
+  }
+  if (mods.ctrl) {
+    const next = new Set(selected);
+    if (next.has(index)) {
+      next.delete(index);
+    } else {
+      next.add(index);
+    }
+    return next;
+  }
+  return new Set([index]);
+}
+
+/** Splits "sftp://host:port" style input into protocol, host and port. */
+export function parseHost(input: string, port: string): { protocol: string; host: string; port?: number } {
+  let rest = input.trim();
+  let protocol = 'sftp';
+  const scheme = /^([a-z]+):\/\//i.exec(rest);
+  if (scheme) {
+    protocol = scheme[1].toLowerCase();
+    rest = rest.slice(scheme[0].length);
+  }
+  rest = rest.replace(/\/.*$/, '');
+  let p = port.trim() ? Number(port.trim()) : undefined;
+  const hostPort = /^(.*):(\d+)$/.exec(rest);
+  if (hostPort && !rest.startsWith('[')) {
+    rest = hostPort[1];
+    p ??= Number(hostPort[2]);
+  }
+  return { protocol, host: rest, port: p };
+}

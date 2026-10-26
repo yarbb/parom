@@ -144,6 +144,9 @@ jobs:
       - name: Check frontend
         working-directory: app
         run: npm run check
+      - name: Unit tests
+        working-directory: app
+        run: npm test
       - name: Build app and installer
         working-directory: app
         run: npx tauri build --bundles nsis

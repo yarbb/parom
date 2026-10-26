@@ -75,7 +75,7 @@ One small file on the server, `/.totzilla` (~300 bytes, path configurable). Fiel
 ## Roadmap
 - M0a: engine library builds on Windows CI. M0b: console spike (SFTP connect, list, upload) built in CI.
 - M1: totzillad JSON-RPC + Tauri shell + Files tab.
-- M2: queue, Site Manager, Preferences, themes, i18n loader.
+- M2: queue, Site Manager, Preferences, themes, i18n loader; remote file context menu (edit, download, rename, delete, new folder); edit-in-place like FileZilla: download to a temp copy, open in the system or a custom editor, watch for saves, ask and upload back (Preferences: File editing).
 - M3: marker + sync + backups + dialogs.
 - M4: GitHub tab.
 - M5: translations, installer, releases.

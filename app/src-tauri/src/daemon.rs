@@ -18,13 +18,22 @@ type Reply = Result<Value, Value>;
 #[derive(Default)]
 struct Pending {
     alive: bool,
-    waiting: HashMap<u64, oneshot::Sender<Reply>>,
+    waiting: HashMap<String, oneshot::Sender<Reply>>,
 }
 
 pub struct Daemon {
     stdin: Mutex<ChildStdin>,
     pending: Arc<Mutex<Pending>>,
     next_id: AtomicU64,
+}
+
+/// Request ids are strings on our side; the daemon echoes them unchanged.
+fn id_key(id: &Value) -> Option<String> {
+    match id {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 fn bridge_error(message: impl Into<String>) -> Value {
@@ -78,7 +87,7 @@ impl Daemon {
                 let Ok(msg) = serde_json::from_str::<Value>(&line) else {
                     continue;
                 };
-                match msg.get("id").and_then(Value::as_u64) {
+                match msg.get("id").and_then(id_key) {
                     Some(id) => {
                         let tx = reader_pending.lock().unwrap().waiting.remove(&id);
                         if let Some(tx) = tx {
@@ -110,15 +119,24 @@ impl Daemon {
     }
 
     /// Sends a request and waits for its result or JSON-RPC error object.
-    pub async fn call(&self, method: &str, params: Value) -> Reply {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+    /// `id` lets the caller pick the JSON-RPC id, so it can match events that
+    /// carry it (such as `transfer.progress`); it must not start with "r".
+    pub async fn call(&self, method: &str, params: Value, id: Option<String>) -> Reply {
+        let id = match id {
+            Some(id) if !id.is_empty() && !id.starts_with('r') => id,
+            Some(_) => return Err(bridge_error("Invalid request id")),
+            None => format!("r{}", self.next_id.fetch_add(1, Ordering::Relaxed)),
+        };
         let (tx, rx) = oneshot::channel();
         {
             let mut p = self.pending.lock().unwrap();
             if !p.alive {
                 return Err(bridge_error("Daemon is not running"));
             }
-            p.waiting.insert(id, tx);
+            if p.waiting.contains_key(&id) {
+                return Err(bridge_error("Duplicate request id"));
+            }
+            p.waiting.insert(id.clone(), tx);
         }
 
         let line = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }).to_string();
