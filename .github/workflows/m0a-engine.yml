@@ -26,7 +26,7 @@ jobs:
             make tar xz
           pacboy: >-
             toolchain:p autotools:p pkgconf:p
-            libfilezilla:p fzssh:p gnutls:p nettle:p sqlite3:p boost:p
+            libfilezilla:p fzssh:p gnutls:p nettle:p sqlite3:p boost:p python-paramiko:p
       - name: Dependency versions
         run: pacman -Q | grep -E 'libfilezilla|fzssh|gnutls|nettle|gcc '
       - name: Verify FileZilla source tarball
@@ -61,22 +61,17 @@ jobs:
             spike/m0b/main.cpp -o out/bin/fzspike.exe \
             -Lbuild-fz/src/engine/.libs -lfzclient-private \
             $(pkg-config --libs libfilezilla libfzssh-client)
-      - name: Start local SFTP test server
-        shell: pwsh
-        run: |
-          python -m pip install --disable-pip-version-check sftpserver
-          python -c "import paramiko; paramiko.RSAKey.generate(2048).write_private_key_file('sftp-key.pem')"
-          New-Item -ItemType Directory sftproot | Out-Null
-          Set-Content sftproot/existing.txt 'already on the server'
-          Start-Process sftpserver -WorkingDirectory sftproot -ArgumentList '--host','127.0.0.1','--port','3373','--keyfile','../sftp-key.pem','--level','INFO' -RedirectStandardError "$PWD/sftpserver.log"
-          Start-Sleep 5
-          Get-Content sftpserver.log -ErrorAction SilentlyContinue
       - name: Run M0b spike (connect, list, upload)
         timeout-minutes: 5
         env:
           TOTZILLA_PASSWORD: test
         run: |
           export PATH="$PWD/out/bin:$PATH"
+          mkdir sftproot && echo "already on the server" > sftproot/existing.txt
+          python spike/m0b/sftp_test_server.py --root sftproot --port 3373 --password "$TOTZILLA_PASSWORD" &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          sleep 5
           echo "uploaded by the M0b spike at $(date -u)" > upload.txt
           fzspike.exe --host 127.0.0.1 --port 3373 --user test --trust-hostkey \
             --upload "$(cygpath -w "$PWD/upload.txt")" --timeout 20
