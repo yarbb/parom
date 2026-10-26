@@ -80,6 +80,7 @@
         : t(`status.${connection.state}`)}
     error={engine === 'unavailable'}
     ok={engine === 'ready' && connection.state === 'connected'}
+    message={connection.message}
     version={version ? t('app.version', { name, version }) : ''}
   />
 </div>

@@ -84,6 +84,10 @@ class Connection {
 
   requests = $state<EngineRequest[]>([]);
   transfers = $state<Transfer[]>([]);
+  /** The latest engine status line or error, for the status bar. */
+  message = $state<{ level: string; text: string } | null>(null);
+  /** Recent engine log lines (not reactive; for a log panel later). */
+  log: { time: number; level: string; text: string }[] = [];
   /** "File exists" answer chosen with "apply to all"; cleared when the queue drains. */
   existsAll = $state<string | null>(null);
 
@@ -118,6 +122,19 @@ class Connection {
   #handle(e: DaemonEvent): void {
     const p = e.params;
     switch (e.method) {
+      case 'log': {
+        const level = String(p.level);
+        const text = String(p.message);
+        this.log.push({ time: Date.now(), level, text });
+        if (this.log.length > 1000) {
+          this.log.splice(0, this.log.length - 1000);
+        }
+        // Status lines, errors and failing server replies (4xx/5xx) reach the status bar.
+        if (level === 'status' || level === 'error' || (level === 'reply' && /^[45]\d\d/.test(text))) {
+          this.message = { level, text };
+        }
+        break;
+      }
       case 'request': {
         const req = p as unknown as EngineRequest;
         if (req.type === 'file_exists' && this.existsAll) {
