@@ -31,7 +31,7 @@ jobs:
           pacboy: >-
             toolchain:p autotools:p pkgconf:p
             libfilezilla:p fzssh:p gnutls:p nettle:p sqlite3:p boost:p
-            nlohmann-json:p python-paramiko:p
+            nlohmann-json:p python-paramiko:p python-pyopenssl:p python-cryptography:p python-pip:p
       - name: Dependency versions
         run: pacman -Q | grep -E 'libfilezilla|fzssh|gnutls|nettle|nlohmann|gcc '
       - name: Verify FileZilla source tarball
@@ -97,6 +97,21 @@ jobs:
           sleep 5
           python daemon/tests/test_rpc.py "$(cygpath -w "$PWD/out/bin/totzillad.exe")" \
             --port 3374 --password test --root sftproot-daemon
+      - name: Test totzillad FTP and FTPS
+        timeout-minutes: 5
+        run: |
+          export PATH="$PWD/out/bin:$PATH"
+          # pyftpdlib is not packaged by MSYS2; pyOpenSSL and cryptography are.
+          python -m pip install --disable-pip-version-check --break-system-packages pyftpdlib
+          mkdir ftproot ftpsroot
+          python tests/ftp_test_server.py --root ftproot --port 2121 --password test &
+          FTP_PID=$!
+          python tests/ftp_test_server.py --root ftpsroot --port 2221 --password test --tls &
+          FTPS_PID=$!
+          trap 'kill $FTP_PID $FTPS_PID 2>/dev/null || true' EXIT
+          sleep 5
+          python daemon/tests/test_ftp.py "$(cygpath -w "$PWD/out/bin/totzillad.exe")" --password test \
+            --ftp-port 2121 --ftp-root ftproot --ftps-port 2221 --ftps-root ftpsroot
       - name: Bundle totzillad with its DLLs
         run: |
           mkdir -p out/daemon

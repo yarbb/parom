@@ -48,10 +48,12 @@ The engine waits until `request.reply` arrives. Fields not given mean "no".
 | `interactive` | `name`, `instruction`, `prompts: [{prompt, echo}]` | `responses` (array of strings, omit to cancel) |
 | `keyfile_password` | `file`, `fingerprint`, `repeated` | `password` (omit to cancel) |
 | `otp` | – | `otp` |
-| `insecure_connection` | `host`, `port` | `allow` (bool) |
+| `insecure_connection` | `host`, `port` (FTP server without TLS) | `allow` (bool) |
+| `certificate` | `host`, `port`, `tls`, `cipher`, `system_trust`, `hostname_mismatch`, `weak_algorithms`, `certificates: [{subject, issuer, alt_names, fingerprint_sha256, serial, valid_from, valid_until, key, signature, self_signed}]` (server first) | `trust` (bool) |
+| `tls_no_resumption` | `host`, `port` (data connection cannot resume the TLS session) | `allow` (bool) |
 | `file_exists` | `download`, `local_file`, `local_size`, `remote_path`, `remote_file`, `remote_size` | `action` (`overwrite`, `overwrite_newer`, `overwrite_size`, `overwrite_size_or_newer`, `resume`, `rename`, `skip`), `new_name` for `rename` |
 
-TLS certificate requests are declined automatically until FTPS support lands.
+Certificates the operating system trusts for the host name are accepted without asking. A certificate the user trusted once is accepted again for the rest of that session (data connections, reconnects). Nothing is remembered across sessions yet.
 
 ## Errors
 

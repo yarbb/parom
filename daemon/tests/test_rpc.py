@@ -31,6 +31,9 @@ class Daemon:
         self.hostkeys = []
         self.file_exists_action = None
         self.file_exists_requests = []
+        # type -> function(params) returning the reply fields; seen requests by type.
+        self.answers = {}
+        self.seen = {}
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -51,7 +54,11 @@ class Daemon:
             print(f"  [{params['level']}] {params['message']}")
         elif method == "request":
             print(f"  request: {params}")
-            if params["type"] == "hostkey":
+            self.seen.setdefault(params["type"], []).append(params)
+            if params["type"] in self.answers:
+                reply = self.answers[params["type"]](params)
+                self.notify("request.reply", {"session": params["session"], "request": params["request"], **reply})
+            elif params["type"] == "hostkey":
                 self.hostkeys.append(params["fingerprint"])
                 self.notify("request.reply", {"session": params["session"], "request": params["request"], "trust": True})
             elif params["type"] == "file_exists" and self.file_exists_action:

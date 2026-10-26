@@ -22,6 +22,16 @@
     echo: boolean;
   }
 
+  interface Certificate {
+    subject: string;
+    issuer: string;
+    alt_names: string[];
+    fingerprint_sha256: string;
+    valid_from: string;
+    valid_until: string;
+    self_signed: boolean;
+  }
+
   let prompts = $derived((req?.prompts as Prompt[] | undefined) ?? []);
 
   const reply = (r: EngineRequest, fields: Record<string, unknown>) => connection.answer(r, fields);
@@ -81,6 +91,54 @@
         <button class="control primary" onclick={() => reply(r, { action: 'overwrite' })}>{t('dialog.exists.overwrite')}</button>
       {/snippet}
     </Modal>
+  {:else if r.type === 'certificate'}
+    {@const leaf = (r.certificates as Certificate[] | undefined)?.[0]}
+    <Modal title={t('dialog.cert.title')} onCancel={() => reply(r, { trust: false })}>
+      <p>{t('dialog.cert.body', { host: String(r.host), port: String(r.port) })}</p>
+      <ul class="warnings status-modified">
+        {#if r.hostname_mismatch}<li>{t('dialog.cert.mismatch')}</li>{/if}
+        {#if leaf?.self_signed}<li>{t('dialog.cert.self_signed')}</li>{/if}
+        {#if leaf && Date.parse(leaf.valid_until) < Date.now()}<li>{t('dialog.cert.expired')}</li>{/if}
+        {#if leaf && Date.parse(leaf.valid_from) > Date.now()}<li>{t('dialog.cert.not_yet_valid')}</li>{/if}
+        {#if r.weak_algorithms}<li>{t('dialog.cert.weak')}</li>{/if}
+      </ul>
+      {#if leaf}
+        <dl class="details">
+          <dt>{t('dialog.cert.subject')}</dt>
+          <dd class="mono">{leaf.subject}{leaf.alt_names.length ? ` (${leaf.alt_names.join(', ')})` : ''}</dd>
+          <dt>{t('dialog.cert.issuer')}</dt>
+          <dd class="mono">{leaf.issuer}</dd>
+          <dt>{t('dialog.cert.valid')}</dt>
+          <dd class="mono">{leaf.valid_from.slice(0, 10)} – {leaf.valid_until.slice(0, 10)}</dd>
+          <dt>{t('dialog.cert.fingerprint')}</dt>
+          <dd class="mono fingerprint">{leaf.fingerprint_sha256}</dd>
+          <dt>{t('dialog.cert.connection')}</dt>
+          <dd class="mono">{r.tls} · {r.cipher}</dd>
+        </dl>
+      {/if}
+      <p class="muted">{t('dialog.hostkey.hint')}</p>
+      {#snippet actions()}
+        <button class="control" onclick={() => reply(r, { trust: false })}>{t('common.cancel')}</button>
+        <button class="control primary" onclick={() => reply(r, { trust: true })}>{t('dialog.hostkey.trust')}</button>
+      {/snippet}
+    </Modal>
+  {:else if r.type === 'insecure_connection'}
+    <Modal title={t('dialog.insecure.title')} onCancel={() => reply(r, { allow: false })}>
+      <p>{t('dialog.insecure.body', { host: String(r.host), port: String(r.port) })}</p>
+      <p class="status-modified">{t('dialog.insecure.warning')}</p>
+      {#snippet actions()}
+        <button class="control primary" onclick={() => reply(r, { allow: false })}>{t('common.cancel')}</button>
+        <button class="control" onclick={() => reply(r, { allow: true })}>{t('dialog.insecure.allow')}</button>
+      {/snippet}
+    </Modal>
+  {:else if r.type === 'tls_no_resumption'}
+    <Modal title={t('dialog.resumption.title')} onCancel={() => reply(r, { allow: false })}>
+      <p>{t('dialog.resumption.body', { host: String(r.host), port: String(r.port) })}</p>
+      {#snippet actions()}
+        <button class="control primary" onclick={() => reply(r, { allow: false })}>{t('common.cancel')}</button>
+        <button class="control" onclick={() => reply(r, { allow: true })}>{t('dialog.resumption.allow')}</button>
+      {/snippet}
+    </Modal>
   {:else}
     <Modal title={t('dialog.unsupported.title')} onCancel={() => reply(r, {})}>
       <p>{t('dialog.unsupported.body', { type: r.type })}</p>
@@ -103,6 +161,32 @@
 
   .wide {
     width: 100%;
+  }
+
+  .warnings {
+    margin: 0 0 10px;
+    padding-left: 18px;
+  }
+
+  .warnings:empty {
+    display: none;
+  }
+
+  .details {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 12px;
+    margin: 0 0 10px;
+    font-size: 11.5px;
+  }
+
+  dt {
+    color: var(--muted);
+  }
+
+  dd {
+    margin: 0;
+    word-break: break-all;
   }
 
   .prompt {
