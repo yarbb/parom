@@ -260,7 +260,16 @@ def trust_tests(exe, server, password):
     params = dict(server, password=password)
 
     d = Daemon(exe)
+    d.error("store.get", {"name": "sites"}, -32004)  # before daemon.init
     d.ok("daemon.init", {"data_dir": data})
+    # Named JSON documents (sites, preferences) round-trip through the data folder.
+    assert d.ok("store.get", {"name": "sites"})["value"] is None
+    doc = {"version": 1, "sites": [{"id": "a", "name": "Сервер", "host": "example.org"}]}
+    d.ok("store.set", {"name": "sites", "value": doc})
+    assert d.ok("store.get", {"name": "sites"})["value"] == doc
+    assert os.path.exists(os.path.join(data, "sites.json"))
+    for bad in ("../x", "Sites", "trust", ""):
+        d.error("store.get", {"name": bad}, -32602)
     d.answers["hostkey"] = lambda p: {"trust": True, "remember": True}
     first = d.ok("session.open", params)["session"]
     assert d.seen["hostkey"][-1]["changed"] is False, d.seen["hostkey"]

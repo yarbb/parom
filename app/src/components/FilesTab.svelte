@@ -6,6 +6,8 @@
   import { credentialKey } from '../lib/recent';
   import { getSecret } from '../lib/secrets';
   import Checkbox from './Checkbox.svelte';
+  import Modal from './Modal.svelte';
+  import { siteSecretKey, type Site } from '../lib/sites.svelte';
   import type { EngineState } from '../lib/types';
   import LocalPane from './LocalPane.svelte';
   import QueuePanel from './QueuePanel.svelte';
@@ -49,6 +51,43 @@
       remember = !!p.remember;
       void fillAndConnect(p.remember ? credentialKey(p) : null);
     });
+  });
+
+  // A saved site picked in the top bar or the Site Manager.
+  let sitePrompt = $state<Site | null>(null);
+  let sitePassword = $state('');
+
+  $effect(() => {
+    const p = connection.pickedSite;
+    if (!p) {
+      return;
+    }
+    connection.pickedSite = null;
+    untrack(() => void connectToSite(p.site, p.password));
+  });
+
+  async function connectToSite(site: Site, typed?: string) {
+    if (connection.state === 'connected') {
+      await connection.disconnect();
+    }
+    let pw = typed ?? '';
+    if (!pw && site.logon === 'normal' && site.savedPassword) {
+      pw = (await getSecret(siteSecretKey(site)).catch(() => null)) ?? '';
+    }
+    if (site.logon === 'ask' || (site.logon === 'normal' && !pw)) {
+      sitePassword = '';
+      sitePrompt = site;
+      return;
+    }
+    await connection.connectSite(site, pw);
+  }
+
+  $effect(() => {
+    const dir = connection.localDirRequest;
+    if (dir) {
+      connection.localDirRequest = null;
+      void localPane?.load(dir);
+    }
   });
 
   /** Uses the stored password if there is one, otherwise the typed one, otherwise asks for it. */
@@ -170,6 +209,20 @@
 
 <RequestDialog />
 
+{#if sitePrompt}
+  {@const s = sitePrompt}
+  <Modal title={t('dialog.password.title')} onCancel={() => (sitePrompt = null)}>
+    <form id="site-password" onsubmit={(e) => (e.preventDefault(), (sitePrompt = null), connection.connectSite(s, sitePassword))}>
+      <p class="mono">{s.name} · {s.user ? `${s.user}@` : ''}{s.host}</p>
+      <input class="field mono site-password" type="password" aria-label={t('files.connect.password')} bind:value={sitePassword} />
+    </form>
+    {#snippet actions()}
+      <button class="control" onclick={() => (sitePrompt = null)}>{t('common.cancel')}</button>
+      <button class="control primary" type="submit" form="site-password">{t('common.connect')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
 <style>
   .connect {
     display: flex;
@@ -203,6 +256,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
+  }
+
+  .site-password {
+    width: 100%;
   }
 
   .panes {

@@ -6,6 +6,9 @@
   import StatusBar from './components/StatusBar.svelte';
   import FilesTab from './components/FilesTab.svelte';
   import GitHubTab from './components/GitHubTab.svelte';
+  import SiteManager from './components/SiteManager.svelte';
+  import { sites } from './lib/sites.svelte';
+  import { ui } from './lib/ui.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
@@ -32,7 +35,10 @@
       onExit(() => (engine = 'unavailable')).then((un) => (stopExit = un));
     }
     call('daemon.hello')
-      .then(() => (engine = 'ready'))
+      .then(() => {
+        engine = 'ready';
+        void sites.load();
+      })
       .catch(() => (engine = 'unavailable'));
 
     return () => {
@@ -62,6 +68,10 @@
     version={version ? t('app.version', { name, version }) : ''}
   />
 </div>
+
+{#if ui.siteManager}
+  <SiteManager onClose={() => (ui.siteManager = false)} />
+{/if}
 
 <style>
   .app {
