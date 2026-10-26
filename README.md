@@ -2,9 +2,6 @@
 
 A modern SFTP/FTP client built on the FileZilla engine, with a GitHub tab (like GitHub Desktop) and one-click, version-aware server sync. Aimed at people who deploy to servers (game servers, small sites) from a git repository.
 
-> Status: pre-alpha, design finished, no code yet. See `docs/DEVLOG.md` for full project context and the next steps.
-> The name is a placeholder. Avoid "-zilla" in the final name (FileZilla trademark; "Zilla" is also taken on GitHub). Keep the product name in a single constant.
-
 ## Goals
 - Two tabs: **Files** (pure dual-pane file manager) and **GitHub** (changes, history, issues, pull requests, server backups, sync).
 - Backend = FileZilla 3.71.1 engine (`src/engine`, `src/include`, wx-free C++). Frontend = our own UI (Tauri + web tech).
