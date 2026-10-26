@@ -13,6 +13,7 @@ import {
   type FileRow,
 } from './files';
 import { format } from './i18n';
+import { addRecent, maxRecent, recentLabel, removeRecent, type RecentServer } from './recent';
 
 const row = (name: string, extra: Partial<FileRow> = {}): FileRow => ({
   name,
@@ -126,5 +127,23 @@ describe('parseHost', () => {
     expect(parseHost('sftp://203.0.113.10:2022/home', '')).toEqual({ protocol: 'sftp', host: '203.0.113.10', port: 2022 });
     expect(parseHost('ftp://example.org', '')).toEqual({ protocol: 'ftp', host: 'example.org', port: undefined });
     expect(parseHost('example.org:2022', '22')).toEqual({ protocol: 'sftp', host: 'example.org', port: 22 });
+  });
+});
+describe('recent servers', () => {
+  const a: RecentServer = { protocol: 'sftp', host: 'a.example', port: 2022, user: 'u' };
+  const b: RecentServer = { protocol: 'sftp', host: 'b.example', user: 'u' };
+
+  it('moves the latest server to the front without duplicates', () => {
+    expect(addRecent([a, b], { ...b, host: 'B.example' })).toEqual([{ ...b, host: 'B.example' }, a]);
+    const many = Array.from({ length: 20 }, (_, i) => ({ ...b, host: `h${i}` }));
+    expect(addRecent(many, a)).toHaveLength(maxRecent);
+    expect(addRecent(many, a)[0]).toEqual(a);
+    expect(removeRecent([a, b], a)).toEqual([b]);
+  });
+
+  it('labels with or without the address', () => {
+    expect(recentLabel(a, false, 'hidden')).toBe('u@a.example:2022');
+    expect(recentLabel(a, true, 'hidden')).toBe('u@hidden');
+    expect(recentLabel({ ...b, protocol: 'ftp', user: '' }, false, 'hidden')).toBe('ftp://b.example');
   });
 });

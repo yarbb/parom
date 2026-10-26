@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { connection } from '../lib/connection.svelte';
   import { localJoin } from '../lib/files';
   import { t } from '../lib/i18n';
@@ -20,7 +20,35 @@
   let localSeparator = $state('/');
   let localPane: LocalPane;
 
+  let passwordInput: HTMLInputElement;
+
   let connected = $derived(connection.state === 'connected');
+
+  // A server picked in the top bar menu fills the connect bar. The password
+  // is kept only if the same server is already typed; otherwise ask for it.
+  $effect(() => {
+    const p = connection.picked;
+    if (!p) {
+      return;
+    }
+    connection.picked = null;
+    untrack(() => {
+      const nextHost = p.protocol === 'sftp' ? p.host : `${p.protocol}://${p.host}`;
+      const nextPort = p.port ? String(p.port) : '';
+      const same = host.trim() === nextHost && user.trim() === p.user && port.trim() === nextPort;
+      host = nextHost;
+      user = p.user;
+      port = nextPort;
+      if (!same) {
+        password = '';
+      }
+      if (password) {
+        void connection.connect({ host, user, password, port });
+      } else {
+        void tick().then(() => passwordInput?.focus());
+      }
+    });
+  });
   let busy = $derived(connection.state === 'connecting');
 
   onMount(() => {
@@ -73,6 +101,7 @@
     placeholder={t('files.connect.password')}
     aria-label={t('files.connect.password')}
     disabled={connected || busy}
+    bind:this={passwordInput}
     bind:value={password}
   />
   <input

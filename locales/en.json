@@ -122,5 +122,10 @@
   "dialog.exists.newer": "Overwrite if newer",
   "dialog.exists.overwrite": "Overwrite",
   "dialog.unsupported.title": "Not supported yet",
-  "dialog.unsupported.body": "The server asked for something this version cannot answer yet ({type}). It will be declined."
+  "dialog.unsupported.body": "The server asked for something this version cannot answer yet ({type}). It will be declined.",
+  "files.browse": "Browse...",
+  "files.browse_hint": "Choose a folder in the system dialog",
+  "topbar.recent": "Recent servers",
+  "topbar.no_recent": "Servers you connect to appear here.",
+  "topbar.forget": "Remove from the list"
 }

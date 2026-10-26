@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { isTauri } from '@tauri-apps/api/core';
+  import { open } from '@tauri-apps/plugin-dialog';
   import { localJoin, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
   import { listLocal, localHome, localRoots } from '../lib/local';
@@ -60,6 +61,17 @@
     }
   }
 
+  /** Picks a folder with the system dialog and opens it. */
+  async function browse() {
+    if (!isTauri()) {
+      return;
+    }
+    const dir = await open({ directory: true, multiple: false, defaultPath: atRoots ? undefined : path || undefined });
+    if (typeof dir === 'string') {
+      await load(dir);
+    }
+  }
+
   function upload(files: FileRow[]) {
     if (!canUpload) {
       return;
@@ -80,9 +92,12 @@
 <section class="pane">
   <div class="section-label head">
     <span>{t('files.local')}</span>
-    <button class="control small" disabled={!canUpload || !selected.some((r) => !r.dir)} onclick={() => upload(selected)}>
-      {t('files.upload')} →
-    </button>
+    <span class="buttons">
+      <button class="control small" onclick={browse} title={t('files.browse_hint')}>{t('files.browse')}</button>
+      <button class="control small" disabled={!canUpload || !selected.some((r) => !r.dir)} onclick={() => upload(selected)}>
+        {t('files.upload')} →
+      </button>
+    </span>
   </div>
   <form class="pathbar" onsubmit={(e) => (e.preventDefault(), typed && load(typed))}>
     <input class="field mono" aria-label={t('files.local_path')} bind:value={typed} />

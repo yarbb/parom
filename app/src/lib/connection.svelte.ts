@@ -3,6 +3,7 @@
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
 import { parseHost, parseRemoteTime, type FileRow } from './files';
 import { t } from './i18n';
+import { addRecent, loadRecent, removeRecent, saveRecent, type RecentServer } from './recent';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
@@ -68,6 +69,11 @@ class Connection {
 
   requests = $state<EngineRequest[]>([]);
   transfers = $state<Transfer[]>([]);
+
+  /** Servers connected to before, newest first. */
+  recent = $state<RecentServer[]>(loadRecent());
+  /** A server picked in the top bar menu; the Files tab fills its connect bar from it. */
+  picked = $state<RecentServer | null>(null);
 
   #nextTransfer = 1;
   #started = false;
@@ -138,6 +144,9 @@ class Connection {
       });
       this.session = res.session;
       this.state = 'connected';
+      const port = Number.isFinite(target.port) ? target.port : undefined;
+      this.recent = addRecent(this.recent, { protocol: target.protocol, host: target.host, port, user });
+      saveRecent(this.recent);
       await this.list();
     } catch (e) {
       this.state = 'disconnected';
@@ -210,6 +219,19 @@ class Connection {
       tr.error = describeError(e);
     }
     this.onTransferDone?.(tr);
+  }
+
+  /** Picks a recent server; disconnects first if needed. */
+  async pick(server: RecentServer): Promise<void> {
+    if (this.state === 'connected') {
+      await this.disconnect();
+    }
+    this.picked = { ...server };
+  }
+
+  forget(server: RecentServer): void {
+    this.recent = removeRecent(this.recent, server);
+    saveRecent(this.recent);
   }
 
   clearFinished(): void {
