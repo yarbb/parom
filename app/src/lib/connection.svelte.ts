@@ -80,6 +80,8 @@ class Connection {
 
   requests = $state<EngineRequest[]>([]);
   transfers = $state<Transfer[]>([]);
+  /** "File exists" answer chosen with "apply to all"; cleared when the queue drains. */
+  existsAll = $state<string | null>(null);
 
   /** Servers connected to before, newest first. */
   recent = $state<RecentServer[]>(loadRecent());
@@ -104,9 +106,15 @@ class Connection {
   #handle(e: DaemonEvent): void {
     const p = e.params;
     switch (e.method) {
-      case 'request':
-        this.requests.push(p as unknown as EngineRequest);
+      case 'request': {
+        const req = p as unknown as EngineRequest;
+        if (req.type === 'file_exists' && this.existsAll) {
+          void this.answer(req, { action: this.existsAll });
+        } else {
+          this.requests.push(req);
+        }
         break;
+      }
       case 'transfer.progress': {
         const tr = this.transfers.find((x) => x.id === p.id);
         if (tr && tr.state === 'running') {
@@ -228,6 +236,17 @@ class Connection {
     }
   }
 
+  /** Answers a "file exists" question, optionally for every other one in this queue too. */
+  async answerExists(req: EngineRequest, action: string, applyToAll: boolean): Promise<void> {
+    if (applyToAll) {
+      this.existsAll = action;
+      for (const other of this.requests.filter((r) => r !== req && r.type === 'file_exists')) {
+        void this.answer(other, { action });
+      }
+    }
+    await this.answer(req, { action });
+  }
+
   async answer(req: EngineRequest, reply: Record<string, unknown>): Promise<void> {
     this.requests = this.requests.filter((r) => r !== req);
     try {
@@ -263,6 +282,9 @@ class Connection {
     } catch (e) {
       tr.state = isCanceled(e) ? 'canceled' : 'failed';
       tr.error = describeError(e);
+    }
+    if (!this.transfers.some((x) => x.state === 'running')) {
+      this.existsAll = null;
     }
     this.onTransferDone?.(tr);
   }
