@@ -213,7 +213,6 @@
   "prefs.group.github": "GitHub",
   "prefs.group.sync": "Server sync",
   "prefs.group.advanced": "Advanced",
-  "prefs.later.editing": "Editing server files arrives in a later update.",
   "prefs.later.github": "Available once the GitHub tab arrives.",
   "prefs.later.sync": "Available once server sync arrives.",
   "prefs.later.logging": "The message log arrives in a later update.",
@@ -255,5 +254,14 @@
   "prefs.backup_first": "Back up server before syncing",
   "prefs.write_log": "Write log to file",
   "prefs.current_version": "Current version",
-  "prefs.updates_source": "Updates come from the GitHub releases of this project. Nothing is sent except the version number."
+  "prefs.updates_source": "Updates come from the GitHub releases of this project. Nothing is sent except the version number.",
+  "edit.edit": "Edit",
+  "edit.saved.title": "File changed",
+  "edit.saved.body": "{name} was saved in the editor. Upload it to the server?",
+  "edit.saved.dont_ask": "Upload this file without asking from now on",
+  "edit.saved.not_now": "Not now",
+  "edit.saved.upload": "Upload",
+  "prefs.custom_editor": "Custom",
+  "prefs.custom_editor_path": "Custom editor path",
+  "prefs.edit_ask": "Ask before uploading"
 }

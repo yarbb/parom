@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { connection } from '../lib/connection.svelte';
+  import { edits } from '../lib/edits.svelte';
   import { localJoin } from '../lib/files';
   import { t } from '../lib/i18n';
   import { credentialKey } from '../lib/recent';
@@ -113,8 +114,18 @@
   }
   let busy = $derived(connection.state === 'connecting');
 
+  let editDontAsk = $state(false);
+
+  // Edited temp files stop syncing back once the session is gone.
+  $effect(() => {
+    if (connection.state === 'disconnected') {
+      void untrack(() => edits.stopAll());
+    }
+  });
+
   onMount(() => {
     connection.start();
+    edits.start();
     connection.onTransferDone = (tr) => {
       // Refresh once a batch (e.g. a folder) is through, not after every file.
       if (tr.state !== 'done' || connection.transfers.some((x) => x.state === 'running')) {
@@ -193,8 +204,8 @@
       {busy ? t('status.connecting') : t('common.connect')}
     </button>
   {/if}
-  {#if connection.error}
-    <span class="error status-removed" title={connection.error}>{connection.error}</span>
+  {#if connection.error || edits.error}
+    <span class="error status-removed" title={connection.error || edits.error}>{connection.error || edits.error}</span>
   {/if}
 </form>
 
@@ -208,6 +219,19 @@
 {/if}
 
 <RequestDialog />
+
+{#if edits.asking.length}
+  {@const f = edits.asking[0]}
+  <Modal title={t('edit.saved.title')} onCancel={() => edits.answer(false, false)}>
+    <p>{t('edit.saved.body', { name: f.name })}</p>
+    <p class="mono muted">{edits.remoteName(f)}</p>
+    <Checkbox bind:checked={editDontAsk} label={t('edit.saved.dont_ask')} />
+    {#snippet actions()}
+      <button class="control" onclick={() => edits.answer(false, editDontAsk)}>{t('edit.saved.not_now')}</button>
+      <button class="control primary" onclick={() => edits.answer(true, editDontAsk)}>{t('edit.saved.upload')}</button>
+    {/snippet}
+  </Modal>
+{/if}
 
 {#if sitePrompt}
   {@const s = sitePrompt}

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { getVersion } from '@tauri-apps/api/app';
   import { isTauri } from '@tauri-apps/api/core';
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { call } from '../lib/daemon';
   import { availableLocales, currentLocale, t } from '../lib/i18n';
   import { prefs, type Prefs } from '../lib/prefs.svelte';
@@ -31,7 +32,6 @@
     logging: 'prefs.logging', updates: 'prefs.updates',
   };
   const later: Partial<Record<Page, string>> = {
-    file_editing: 'prefs.later.editing',
     account: 'prefs.later.github',
     repositories: 'prefs.later.github',
     marker_history: 'prefs.later.sync',
@@ -39,6 +39,16 @@
   };
 
   let page = $state<Page>('interface');
+  let customEditor = $state(prefs.value.editorPath !== '');
+
+  async function browseEditor() {
+    if (isTauri()) {
+      const file = await openDialog({ multiple: false, directory: false });
+      if (typeof file === 'string') {
+        draft.editorPath = file;
+      }
+    }
+  }
   let draft = $state<Prefs>({ ...prefs.value });
   let error = $state('');
   let version = $state('');
@@ -186,8 +196,20 @@
           <div class="row"><span></span><Checkbox bind:checked={draft.rememberDirs} label={t('prefs.remember_dirs')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
         {:else if page === 'file_editing'}
-          <label class="row"><span>{t('prefs.default_editor')}</span><select class="field" disabled><option>{t('prefs.system_default')}</option></select></label>
-          <div class="row"><span></span><Checkbox checked={true} disabled label={t('prefs.upload_on_save')} /></div>
+          <div class="row"><span>{t('prefs.default_editor')}</span>
+            <span class="segmented">
+              <button class:on={!customEditor} onclick={() => ((customEditor = false), (draft.editorPath = ''))}>{t('prefs.system_default')}</button>
+              <button class:on={customEditor} onclick={() => (customEditor = true)}>{t('prefs.custom_editor')}</button>
+            </span>
+          </div>
+          {#if customEditor}
+            <label class="row"><span>{t('prefs.custom_editor_path')}</span>
+              <input class="field mono grow" bind:value={draft.editorPath} />
+              <button class="control" onclick={browseEditor}>{t('files.browse')}</button>
+            </label>
+          {/if}
+          <div class="row"><span></span><Checkbox bind:checked={draft.editUploadOnSave} label={t('prefs.upload_on_save')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.editAsk} disabled={!draft.editUploadOnSave} label={t('prefs.edit_ask')} /></div>
         {:else if page === 'sftp_keys'}
           <div class="section-label inline">{t('prefs.trusted_hosts')}</div>
           {#each trusted as e (e.key)}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { connection } from '../lib/connection.svelte';
+  import { edits } from '../lib/edits.svelte';
   import { remoteJoin, remoteParent, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
@@ -59,6 +60,11 @@
       y: e.clientY,
       items: [
         { label: `← ${t('files.download')}`, disabled: !any, action: () => download(rows) },
+        {
+          label: t('edit.edit'),
+          disabled: rows.length !== 1 || rows[0].dir,
+          action: () => edits.edit(connection.remotePath, rows[0].name),
+        },
         { separator: true, label: '' },
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
         { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },

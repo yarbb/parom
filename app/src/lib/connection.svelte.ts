@@ -310,17 +310,17 @@ class Connection {
     return this.transfers[this.transfers.length - 1];
   }
 
-  async #run(tr: Transfer, params: Record<string, unknown>): Promise<void> {
+  async #run(tr: Transfer, params: Record<string, unknown>): Promise<Transfer> {
     const session = this.session;
     if (tr.state === 'canceled') {
       this.onTransferDone?.(tr);
-      return;
+      return tr;
     }
     if (session === null) {
       tr.state = 'failed';
       tr.error = t('status.disconnected');
       this.onTransferDone?.(tr);
-      return;
+      return tr;
     }
     tr.sent = true;
     // A site can answer "file exists" for all its transfers.
@@ -338,10 +338,11 @@ class Connection {
       this.existsAll = null;
     }
     this.onTransferDone?.(tr);
+    return tr;
   }
 
   /** Queues an upload or download; the daemon runs a session's commands in order. */
-  transfer(download: boolean, name: string, params: Record<string, unknown>): Promise<void> {
+  transfer(download: boolean, name: string, params: Record<string, unknown>): Promise<Transfer> {
     return this.#run(this.#addRow(download, name), params);
   }
 
@@ -420,7 +421,7 @@ class Connection {
     if (session === null) {
       return;
     }
-    const jobs: Promise<void>[] = [];
+    const jobs: Promise<unknown>[] = [];
     const pending: { remote: string; local: string; rel: string }[] = [
       { remote: remoteJoin(remotePath, name), local: localJoin(localDir, name, separator), rel: name },
     ];
