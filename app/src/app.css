@@ -132,3 +132,48 @@ input.field::placeholder {
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
+
+/* Files tab panes (local and remote share the layout). */
+.pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+}
+
+.pane:last-child {
+  border-right: 0;
+}
+
+.section-label.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.section-label .buttons {
+  display: flex;
+  gap: 6px;
+}
+
+button.control.small {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.pathbar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-row);
+  flex: none;
+}
+
+.pathbar input {
+  width: 100%;
+}

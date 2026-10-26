@@ -1,4 +1,5 @@
 mod daemon;
+mod local;
 
 use daemon::{Daemon, BRIDGE_ERROR};
 use serde_json::{json, Value};
@@ -11,12 +12,34 @@ struct DaemonState(Mutex<Option<Arc<Daemon>>>);
 
 /// Forwards one JSON-RPC request to totzillad. Errors are JSON-RPC error objects.
 #[tauri::command]
-async fn daemon_call(state: tauri::State<'_, DaemonState>, method: String, params: Value) -> Result<Value, Value> {
+async fn daemon_call(
+    state: tauri::State<'_, DaemonState>,
+    method: String,
+    params: Value,
+    id: Option<String>,
+) -> Result<Value, Value> {
     let daemon = state.0.lock().unwrap().clone();
     match daemon {
-        Some(d) => d.call(&method, params).await,
+        Some(d) => d.call(&method, params, id).await,
         None => Err(json!({ "code": BRIDGE_ERROR, "message": "Daemon is not running" })),
     }
+}
+
+#[tauri::command]
+async fn local_list(path: String) -> Result<local::LocalListing, String> {
+    tauri::async_runtime::spawn_blocking(move || local::list(&path))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn local_home() -> String {
+    local::home()
+}
+
+#[tauri::command]
+fn local_roots() -> Vec<String> {
+    local::roots()
 }
 
 /// `--self-test <file>`: starts the bundled daemon, asks for its version and
@@ -25,8 +48,8 @@ async fn daemon_call(state: tauri::State<'_, DaemonState>, method: String, param
 fn self_test(out: &str) -> i32 {
     let result = match Daemon::spawn(|_| {}, || {}) {
         Ok(d) => tauri::async_runtime::block_on(async {
-            let hello = d.call("daemon.hello", json!({})).await;
-            let _ = d.call("daemon.shutdown", json!({})).await;
+            let hello = d.call("daemon.hello", json!({}), None).await;
+            let _ = d.call("daemon.shutdown", json!({}), None).await;
             hello
         }),
         Err(err) => Err(json!({ "code": BRIDGE_ERROR, "message": err.to_string() })),
@@ -75,7 +98,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![daemon_call])
+        .invoke_handler(tauri::generate_handler![daemon_call, local_list, local_home, local_roots])
         .run(tauri::generate_context!())
         .expect("error while running the application");
 }

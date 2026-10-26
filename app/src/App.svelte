@@ -6,6 +6,7 @@
   import StatusBar from './components/StatusBar.svelte';
   import FilesTab from './components/FilesTab.svelte';
   import GitHubTab from './components/GitHubTab.svelte';
+  import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
   import { t } from './lib/i18n';
@@ -51,8 +52,13 @@
     {/if}
   </main>
   <StatusBar
-    state={engine === 'unavailable' ? t('status.engine_unavailable') : t('status.not_connected')}
+    state={engine === 'unavailable'
+      ? t('status.engine_unavailable')
+      : connection.state === 'connected'
+        ? t('status.connected_to', { server: hideAddress ? t('topbar.address_hidden') : connection.label })
+        : t(`status.${connection.state}`)}
     error={engine === 'unavailable'}
+    ok={engine === 'ready' && connection.state === 'connected'}
     version={version ? t('app.version', { name, version }) : ''}
   />
 </div>

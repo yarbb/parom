@@ -2,14 +2,15 @@
   interface Props {
     state: string;
     error?: boolean;
+    ok?: boolean;
     version: string;
   }
 
-  let { state, error = false, version }: Props = $props();
+  let { state, error = false, ok = false, version }: Props = $props();
 </script>
 
 <footer class="mono muted">
-  <span><span class:status-removed={error} aria-hidden="true">●</span> {state}</span>
+  <span><span class:status-removed={error} class:status-new={ok} aria-hidden="true">●</span> {state}</span>
   <span>{version}</span>
 </footer>
 

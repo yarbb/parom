@@ -1,0 +1,87 @@
+<script lang="ts">
+  import { connection } from '../lib/connection.svelte';
+  import { t } from '../lib/i18n';
+
+  let running = $derived(connection.transfers.filter((x) => x.state === 'running').length);
+  let failed = $derived(connection.transfers.filter((x) => x.state === 'failed').length);
+  let done = $derived(connection.transfers.filter((x) => x.state === 'done').length);
+
+  const percent = (offset: number, total: number) => (total > 0 ? Math.min(100, Math.round((offset / total) * 100)) : 0);
+</script>
+
+<section class="queue">
+  <div class="section-label head">
+    <span>{t('queue.header', { queued: running, failed, succeeded: done })}</span>
+    <button class="control small" disabled={running === connection.transfers.length} onclick={() => connection.clearFinished()}>
+      {t('queue.clear')}
+    </button>
+  </div>
+  <div class="rows">
+    {#each connection.transfers as tr (tr.id)}
+      {@const pct = percent(tr.offset, tr.total)}
+      <div class="row">
+        <span class="name mono">{tr.name} → {tr.download ? t('files.local_short') : t('files.remote_short')}</span>
+        <div class="bar" aria-hidden="true"><i style:width="{tr.state === 'done' ? 100 : pct}%"></i></div>
+        {#if tr.state === 'done'}
+          <span class="state mono status-new">{t('queue.done')}</span>
+        {:else if tr.state === 'failed'}
+          <span class="state mono status-removed" title={tr.error}>{t('queue.failed')}</span>
+        {:else}
+          <span class="state mono status-modified">{tr.total > 0 ? `${pct}%` : t('queue.queued')}</span>
+        {/if}
+      </div>
+    {/each}
+  </div>
+</section>
+
+<style>
+  .queue {
+    height: 160px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--line);
+  }
+
+  .rows {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    height: 30px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--line-row);
+    font-size: 12px;
+  }
+
+  .name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bar {
+    width: 150px;
+    height: 3px;
+    background: var(--line-control);
+    flex: none;
+  }
+
+  .bar i {
+    display: block;
+    height: 3px;
+    background: var(--selected-mark);
+  }
+
+  .state {
+    min-width: 58px;
+    text-align: right;
+    font-size: 11px;
+  }
+</style>

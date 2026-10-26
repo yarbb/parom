@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
   import type { Tab } from '../lib/types';
   import EyeIcon from './EyeIcon.svelte';
@@ -25,7 +26,9 @@
   </div>
   <span class="spacer"></span>
   <div class="server">
-    <button class="control mono" disabled>{t('topbar.no_server')} ▾</button>
+    <button class="control mono" disabled>
+      {connection.state === 'disconnected' ? t('topbar.no_server') : hideAddress ? t('topbar.address_hidden') : connection.label} ▾
+    </button>
     <button
       class="control icon"
       aria-label={hideAddress ? t('topbar.show_address') : t('files.hide_address')}
@@ -35,8 +38,14 @@
     >
       <EyeIcon closed={hideAddress} />
     </button>
-    <span class="dot muted" aria-hidden="true">●</span>
-    <span class="muted">{t('status.not_connected')}</span>
+    <span
+      class="dot"
+      class:muted={connection.state === 'disconnected'}
+      class:status-modified={connection.state === 'connecting'}
+      class:status-new={connection.state === 'connected'}
+      aria-hidden="true">●</span
+    >
+    <span class="muted">{t(`status.${connection.state}`)}</span>
   </div>
 </header>
 
