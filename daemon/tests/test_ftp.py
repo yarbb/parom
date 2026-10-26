@@ -65,10 +65,11 @@ def main():
     round_trip(d, sid, args.ftp_root, work, "ftp")
     d.ok("session.close", {"session": sid})
 
-    # "ftp-insecure" never tries TLS and does not ask.
+    # "ftp-insecure" skips AUTH TLS, but the engine still asks before any
+    # unencrypted login (ftp/logon.cpp), exactly once.
     asked = len(d.seen["insecure_connection"])
     sid = d.ok("session.open", dict(ftp, protocol="ftp-insecure"))["session"]
-    assert len(d.seen["insecure_connection"]) == asked, "ftp-insecure should not ask"
+    assert len(d.seen["insecure_connection"]) == asked + 1, d.seen["insecure_connection"][asked:]
     d.ok("session.close", {"session": sid})
 
     # FTPES against a server without TLS fails instead of falling back.
