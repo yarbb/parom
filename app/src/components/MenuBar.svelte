@@ -70,6 +70,7 @@
           { label: check(ui.tab === 'github', t('tab.github')), hint: 'Ctrl+2', action: () => (ui.tab = 'github') },
           { separator: true, label: '' },
           { label: check(ui.log, t('log.title')), hint: 'Ctrl+L', action: () => (ui.log = !ui.log) },
+          { label: check(ui.syncBrowse, t('files.sync_browse')), hint: 'Ctrl+Y', action: () => (ui.syncBrowse = !ui.syncBrowse) },
           { label: check(hideAddress, t('files.hide_address')), action: () => (hideAddress = !hideAddress) },
           { separator: true, label: '' },
           { label: check(prefs.value.theme === 'dark', t('prefs.theme.dark')), action: () => setTheme('dark') },

@@ -28,6 +28,9 @@
   import { listLocal, localTrash } from '../lib/local';
   import { isTauri } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { joinRelative, normalizePath, relativeTo } from '../lib/browsing';
+  import { canSyncBrowse } from '../lib/commands.svelte';
+  import { twins } from '../lib/twins.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -163,6 +166,81 @@
     if (connection.state === 'disconnected') {
       void untrack(() => edits.stopAll());
     }
+  });
+
+  // The first time both panes show folders with the same name, ask once
+  // whether to tint them; any answer (closing the dialog too) is final, and
+  // Preferences → File lists changes it later.
+  let twinExample = $state<string | null>(null);
+  let twinBrowse = $state(false);
+  $effect(() => {
+    if (prefs.value.twinsAsked || prefs.value.markTwins || twinExample !== null) {
+      return;
+    }
+    const remote = new Set(twins.remote);
+    const same = twins.local.find((n) => remote.has(n));
+    if (same) {
+      twinExample = same;
+      twinBrowse = false;
+    }
+  });
+
+  function answerTwins(tint: boolean, browse: boolean) {
+    twinExample = null;
+    prefs.value.markTwins = tint;
+    prefs.value.twinsAsked = true;
+    void prefs.persist();
+    if (browse) {
+      ui.syncBrowse = true;
+    }
+  }
+
+  /**
+   * Whether the other side may have `target`: a folder one level below the
+   * one it shows must be in its list (no request for a folder that is not
+   * there); anything else is tried quietly.
+   */
+  function mayExist(target: string, shown: string, names: string[]): boolean {
+    const t = normalizePath(target);
+    const cut = t.lastIndexOf('/');
+    const parent = cut <= 0 ? '/' : t.slice(0, cut);
+    const name = target.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? '';
+    return parent !== normalizePath(shown) || names.includes(name);
+  }
+
+  // Synchronized browsing: a folder opened on one side opens the same folder,
+  // relative to the site's local folder and server folder, on the other.
+  let seenLocal = '';
+  let seenRemote = '';
+  $effect(() => {
+    const lp = localPath;
+    const rp = connection.remotePath;
+    const on = ui.syncBrowse && canSyncBrowse() && !!connection.siteRoot;
+    untrack(() => {
+      const localMoved = normalizePath(lp) !== normalizePath(seenLocal);
+      const remoteMoved = normalizePath(rp) !== normalizePath(seenRemote);
+      seenLocal = lp;
+      seenRemote = rp;
+      const localRoot = connection.site?.localDir.trim() ?? '';
+      if (!on || !lp || !rp) {
+        return;
+      }
+      if (localMoved) {
+        const rel = relativeTo(localRoot, lp);
+        const target = rel === null ? null : joinRelative(connection.siteRoot, rel, '/');
+        if (target && normalizePath(target) !== normalizePath(rp) && mayExist(target, rp, twins.remote)) {
+          seenRemote = target;
+          void connection.list(target, true);
+        }
+      } else if (remoteMoved) {
+        const rel = relativeTo(connection.siteRoot, rp);
+        const target = rel === null ? null : joinRelative(localRoot, rel, localSeparator);
+        if (target && normalizePath(target) !== normalizePath(lp) && mayExist(target, lp, twins.local)) {
+          seenLocal = target;
+          void localPane?.load(target, true);
+        }
+      }
+    });
   });
 
   // Sites with a local repository get their server compared on connect.
@@ -414,7 +492,10 @@
   {@const d = paneDrag.active}
   <div class="drag-ghost mono" style:left="{d.x + 14}px" style:top="{d.y + 12}px">
     {#key d.move}<span class="drag-mode" in:fly={{ y: d.move ? -6 : 6, duration: ms(140) }}>{d.move ? t('files.drag_move') : t('files.drag_copy')}</span>{/key}
-    {d.rows.length === 1 ? d.rows[0].name : t('files.drag_count', { count: d.rows.length })}
+    <!-- The slash tells which side the rows come from: "/" server, the local separator. -->
+    {d.rows.length === 1
+      ? `${d.from === 'server' || prefs.value.forwardSlashes ? '/' : localSeparator}${d.rows[0].name}`
+      : t('files.drag_count', { count: d.rows.length })}
   </div>
 {/if}
 
@@ -430,6 +511,20 @@
     {#snippet actions()}
       <button class="control" onclick={() => edits.answer(false, editDontAsk)}>{t('edit.saved.not_now')}</button>
       <button class="control primary" onclick={() => edits.answer(true, editDontAsk)}>{t('edit.saved.upload')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
+{#if twinExample !== null}
+  <Modal title={t('twins.title')} onCancel={() => answerTwins(false, false)}>
+    <p>{t('twins.body', { name: twinExample })}</p>
+    {#if canSyncBrowse()}
+      <Checkbox bind:checked={twinBrowse} label={t('twins.browse')} />
+    {/if}
+    <p class="muted">{t('twins.later')}</p>
+    {#snippet actions()}
+      <button class="control" onclick={() => answerTwins(false, twinBrowse)}>{t('twins.no')}</button>
+      <button class="control primary" onclick={() => answerTwins(true, twinBrowse)}>{t('twins.yes')}</button>
     {/snippet}
   </Modal>
 {/if}

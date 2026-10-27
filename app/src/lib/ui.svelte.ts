@@ -15,6 +15,8 @@ class Ui {
   log = $state(false);
   /** Open sign-in dialog: device flow ("browser") or personal access token. */
   githubSignIn = $state<'' | 'browser' | 'token'>('');
+  /** Synchronized browsing (Ctrl+Y): both panes follow each other inside the site's folders. */
+  syncBrowse = $state(false);
 }
 
 export const ui = new Ui();

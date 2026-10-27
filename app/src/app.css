@@ -333,6 +333,18 @@ button.control.small {
   text-transform: none;
 }
 
+/* An icon toggle in a pane header (synchronized browsing). */
+button.control.small.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+}
+
+button.control.small.icon-btn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .pathbar {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line-row);

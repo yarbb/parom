@@ -362,6 +362,7 @@
     oncontextmenu={(e) => contextMenu(e, null)}
     {onkeydown}
   >
+    {#key folder}
     <div class="spacer" style:height="{count * rowHeight}px">
       {#each indices as i (i)}
         {@const row = rowAt(i)}
@@ -391,6 +392,7 @@
         </div>
       {/each}
     </div>
+    {/key}
     {#if loading || error || (count === 0 && emptyText)}
       <div class="overlay" class:status-removed={!!error}>
         {loading ? t('files.loading') : error || emptyText}
@@ -439,7 +441,14 @@
     position: relative;
   }
 
+  .spacer {
+    animation: fade-in var(--motion) ease-out;
+  }
+
   .row {
+    transition:
+      background-color var(--motion-fast),
+      box-shadow var(--motion-fast);
     position: absolute;
     left: 0;
     right: 0;

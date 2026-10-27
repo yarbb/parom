@@ -65,6 +65,9 @@ export async function editCommand(command: 'cut' | 'copy' | 'paste' | 'selectAll
 export const closeWindow = () => (isTauri() ? getCurrentWindow().close() : undefined);
 export const openProject = (path = '') => openGitHub(`${PROJECT_URL}${path}`);
 
+/** Synchronized browsing needs a session of a site with a local folder. */
+export const canSyncBrowse = () => connection.state === 'connected' && !!connection.site?.localDir.trim();
+
 /** Global shortcuts (the file lists handle their own keys). Returns true if handled. */
 export function shortcut(e: KeyboardEvent): boolean {
   const mod = e.ctrlKey || e.metaKey;
@@ -72,12 +75,17 @@ export function shortcut(e: KeyboardEvent): boolean {
     return false;
   }
   const key = e.key.toLowerCase();
+  if (key === 'y' && e.target instanceof Element && e.target.closest('input, textarea')) {
+    // Redo in text fields.
+    return false;
+  }
   const run: Record<string, () => void> = {
     ',': () => (ui.preferences = true),
     s: () => (ui.siteManager = true),
     '1': () => (ui.tab = 'files'),
     '2': () => (ui.tab = 'github'),
     l: () => (ui.log = !ui.log),
+    y: () => (ui.syncBrowse = !ui.syncBrowse),
     r: reconnectLast,
     d: () => void connection.disconnect(),
     '=': () => zoom(10),

@@ -4,11 +4,9 @@
   import type { Tab } from '../lib/types';
   import Eye from '@lucide/svelte/icons/eye';
   import EyeOff from '@lucide/svelte/icons/eye-off';
-  import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import MenuBar from './MenuBar.svelte';
   import WindowControls from './WindowControls.svelte';
   import ServerMenu from './ServerMenu.svelte';
-  import { ui } from '../lib/ui.svelte';
 
   interface Props {
     name: string;
@@ -20,13 +18,23 @@
   let { name, tab, onTab, hideAddress = $bindable() }: Props = $props();
   /** Files are moving: the "_" blinks like a cursor at work. */
   const transferring = $derived(connection.transfers.some((x) => x.state === 'running') || connection.walks > 0);
+
+  /** Hover starts one full wave over the letters; leaving does not cut it short. */
+  let waving = $state(false);
+  function wave() {
+    if (waving) {
+      return;
+    }
+    waving = true;
+    setTimeout(() => (waving = false), 900 + name.length * 60);
+  }
 </script>
 
 <!-- The window's title bar: drag it by any empty spot (or the name),
      double-click to maximize. Buttons and menus stay clickable. -->
 <header data-tauri-drag-region>
   <!-- "_" before the name, like the "_P" app icon. -->
-  <b class="brand mono" class:busy={transferring} data-tauri-drag-region
+  <b class="brand mono" class:busy={transferring} class:waving data-tauri-drag-region role="presentation" onmouseenter={wave}
     ><span class="prompt" data-tauri-drag-region>_</span>{#each [...name] as ch, i (i)}<span class="ch" style:--i={i} data-tauri-drag-region>{ch}</span>{/each}</b
   >
   <MenuBar bind:hideAddress />
@@ -41,10 +49,6 @@
   <span class="spacer" data-tauri-drag-region></span>
   <div class="server">
     <ServerMenu {hideAddress} />
-    <button class="control icon" aria-label={t('prefs.title')} title="{t('prefs.title')} (Ctrl+,)" onclick={() => (ui.preferences = true)}>
-      <!-- Sliders: reads as "settings", unlike a gear that looks like a sun. -->
-      <SlidersHorizontal size={15} strokeWidth={1.6} />
-    </button>
     <button
       class="control icon"
       aria-label={hideAddress ? t('topbar.show_address') : t('files.hide_address')}
@@ -97,7 +101,7 @@
   }
 
   /* On hover the letters ride a small wave, one after another. */
-  .brand:hover .ch {
+  .brand.waving .ch {
     animation: wave 0.9s ease-in-out;
     animation-delay: calc(var(--i) * 60ms);
   }
@@ -120,7 +124,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .brand.busy .prompt,
-    .brand:hover .ch {
+    .brand.waving .ch {
       animation: none;
     }
   }

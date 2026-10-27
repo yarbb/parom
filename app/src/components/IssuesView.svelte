@@ -7,6 +7,9 @@
     checkRuns,
     counts,
     countItems,
+    detailCache,
+    keepUnchanged,
+    listCache,
     getPull,
     listComments,
     listItems,
@@ -57,10 +60,20 @@
 
   async function load() {
     const want = { kind, slug, filter };
-    loading = true;
+    const key = `${slug}:${kind}:${filter}`;
+    const cached = listCache.get(key);
+    if (cached) {
+      // Seen in this session: show it now; the fresh list follows.
+      items = cached;
+      if (!cached.some((i) => i.number === selected)) {
+        selected = cached[0]?.number ?? null;
+      }
+    }
+    loading = !cached;
     error = '';
     try {
-      const list = await listItems(slug, kind, filter);
+      const list = keepUnchanged(await listItems(slug, kind, filter), listCache.get(key), (i) => i.number);
+      listCache.set(key, list);
       if (want.kind === kind && want.slug === slug && want.filter === filter) {
         items = list;
         if (!list.some((i) => i.number === selected)) {
@@ -90,18 +103,27 @@
       .catch(() => (closedCount = null));
   });
 
+  const detailKey = (n: number) => `${slug}:${kind}:${n}`;
+
   async function loadDetail(n: number) {
-    comments = [];
-    pull = null;
-    checks = null;
+    const cached = detailCache.get(detailKey(n));
+    comments = cached?.comments ?? [];
+    pull = cached?.pull ?? null;
+    checks = cached?.checks ?? null;
     try {
-      comments = await listComments(slug, n);
+      const fresh = keepUnchanged(await listComments(slug, n), cached?.comments, (c) => c.id);
+      let p = cached?.pull ?? null;
+      let runs = cached?.checks ?? null;
       if (kind === 'pulls') {
-        const p = await getPull(slug, n);
-        if (selected === n) {
-          pull = p;
-          checks = p.head ? await checkRuns(slug, p.head.sha) : null;
-        }
+        const got = await getPull(slug, n);
+        p = cached?.pull && cached.pull.updated_at === got.updated_at ? cached.pull : got;
+        runs = p.head ? await checkRuns(slug, p.head.sha) : null;
+      }
+      detailCache.set(detailKey(n), { comments: fresh, pull: p, checks: runs });
+      if (selected === n) {
+        comments = fresh;
+        pull = p;
+        checks = runs;
       }
     } catch (e) {
       error = String(e);
@@ -151,6 +173,10 @@
   async function postComment(n: number) {
     const c = await addComment(slug, n, draft.trim());
     comments = [...comments, c];
+    const d = detailCache.get(detailKey(n));
+    if (d) {
+      d.comments = comments;
+    }
     items = items.map((i) => (i.number === n ? { ...i, comments: i.comments + 1 } : i));
     draft = '';
   }
@@ -210,6 +236,7 @@
         </button>
       </div>
     </div>
+    {#key filter}
     <div class="list">
       {#each shown as i (i.number)}
         <button class="row" class:selected={i.number === selected} onclick={() => (selected = i.number)}>
@@ -235,6 +262,7 @@
         <p class="muted note">{loading ? t('files.loading') : t(kind === 'issues' ? 'github.no_issues' : 'github.no_pulls')}</p>
       {/each}
     </div>
+    {/key}
   </div>
   <Splitter
     axis="x"
@@ -260,6 +288,8 @@
     {/if}
     {#if item}
       {@const i = item}
+      {#key i.number}
+      <div class="opened">
       <div class="head">
         <h2>{i.title} <span class="muted">#{i.number}</span></h2>
         <p class="muted">
@@ -334,6 +364,8 @@
           {/if}
         </div>
       </div>
+      </div>
+      {/key}
     {:else if !error && !loading && github.user}
       <p class="muted note">{t(kind === 'issues' ? 'github.no_issues' : 'github.no_pulls')}</p>
     {/if}
@@ -470,6 +502,18 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+  }
+
+  .opened {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    animation: fade-in var(--motion) ease-out;
+  }
+
+  .list {
+    animation: fade-in var(--motion) ease-out;
   }
 
   .head {

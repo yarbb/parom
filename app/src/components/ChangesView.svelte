@@ -115,7 +115,7 @@
     onReset={() => resetCol('ghChanges')}
   />
   {#if selected}
-    <DiffView path={selected} {diff} {loading} error={diffError} />
+    {#key selected}<DiffView path={selected} {diff} {loading} error={diffError} />{/key}
   {:else}
     <div class="placeholder muted">{t('github.no_changes_body')}</div>
   {/if}
