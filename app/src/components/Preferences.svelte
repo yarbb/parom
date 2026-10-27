@@ -288,6 +288,15 @@
           {:else}
             <p class="muted">{t('prefs.no_repos')}</p>
           {/each}
+          {#if prefs.value.hiddenRepos.length}
+            <div class="section-label inline">{t('prefs.hidden_repos')}</div>
+            {#each prefs.value.hiddenRepos as dir (dir)}
+              <div class="row list-row">
+                <span class="mono grow path" title={dir}>{dir}</span>
+                <button class="control small" onclick={() => repo.unhide(dir)}>{t('prefs.show_again')}</button>
+              </div>
+            {/each}
+          {/if}
           <p class="muted">{t('prefs.repos_hint')}</p>
         {:else if page === 'marker_history'}
           <div class="row"><span></span><Checkbox bind:checked={draft.syncDetectEdits} label={t('prefs.detect_edits')} /></div>

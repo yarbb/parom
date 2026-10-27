@@ -355,6 +355,33 @@ fn callbacks<'a>(repo: &'a Repository, token: Option<&'a str>) -> RemoteCallback
     cb
 }
 
+/// GitHub answered 401/403: the token may not write (or read) this repository.
+fn refused(e: &git2::Error) -> bool {
+    let m = e.message();
+    e.code() == ErrorCode::Auth || m.contains("403") || m.contains("401")
+}
+
+/// Runs a network operation with the GitHub token, then once more with the
+/// git credential helper if GitHub refused the token (a repository the app is
+/// not installed on, or a token without write access).
+fn with_credentials<T>(token: Option<&str>, url: &str, mut op: impl FnMut(Option<&str>) -> Result<T, git2::Error>) -> Result<T, String> {
+    let result = match op(token) {
+        Err(e) if token.is_some() && refused(&e) => op(None),
+        other => other,
+    };
+    result.map_err(|e| {
+        if refused(&e) {
+            let repo = github_slug(url).unwrap_or_else(|| url.to_owned());
+            format!(
+                "GitHub refused access to {repo} ({}). Install the GitHub App on that repository's owner, sign in with a token that can write to it, or sign in to git (Git Credential Manager).",
+                e.message()
+            )
+        } else {
+            msg(e)
+        }
+    })
+}
+
 fn proxy<'a>() -> ProxyOptions<'a> {
     let mut p = ProxyOptions::new();
     p.auto();
@@ -366,9 +393,12 @@ pub fn fetch(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     {
         let repo = open(dir)?;
         let mut remote = current_remote(&repo)?;
-        let mut opts = FetchOptions::new();
-        opts.remote_callbacks(callbacks(&repo, token)).proxy_options(proxy());
-        remote.fetch::<&str>(&[], Some(&mut opts), None).map_err(msg)?;
+        let url = remote.url().unwrap_or("").to_owned();
+        with_credentials(token, &url, |t| {
+            let mut opts = FetchOptions::new();
+            opts.remote_callbacks(callbacks(&repo, t)).proxy_options(proxy());
+            remote.fetch::<&str>(&[], Some(&mut opts), None)
+        })?;
     }
     branch_info(dir)
 }
@@ -415,21 +445,25 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         let branch = head.shorthand().map_err(msg)?.to_owned();
         let mut remote = current_remote(&repo)?;
         let remote_name = remote.name().ok().flatten().unwrap_or("origin").to_owned();
-        let rejected = std::cell::RefCell::new(None::<String>);
-        {
-            let mut cb = callbacks(&repo, token);
-            cb.push_update_reference(|_, status| {
-                if let Some(s) = status {
-                    *rejected.borrow_mut() = Some(s.to_owned());
-                }
-                Ok(())
-            });
-            let mut opts = PushOptions::new();
-            opts.remote_callbacks(cb).proxy_options(proxy());
-            let spec = format!("refs/heads/{branch}:refs/heads/{branch}");
-            remote.push(&[spec.as_str()], Some(&mut opts)).map_err(msg)?;
-        }
-        if let Some(reason) = rejected.into_inner() {
+        let url = remote.url().unwrap_or("").to_owned();
+        let spec = format!("refs/heads/{branch}:refs/heads/{branch}");
+        let rejected = with_credentials(token, &url, |t| {
+            let rejected = std::cell::RefCell::new(None::<String>);
+            {
+                let mut cb = callbacks(&repo, t);
+                cb.push_update_reference(|_, status| {
+                    if let Some(s) = status {
+                        *rejected.borrow_mut() = Some(s.to_owned());
+                    }
+                    Ok(())
+                });
+                let mut opts = PushOptions::new();
+                opts.remote_callbacks(cb).proxy_options(proxy());
+                remote.push(&[spec.as_str()], Some(&mut opts))?;
+            }
+            Ok(rejected.into_inner())
+        })?;
+        if let Some(reason) = rejected {
             return Err(format!("Push rejected: {reason}. Fetch and pull first"));
         }
         if repo.branch_upstream_name(&format!("refs/heads/{branch}")).is_err() {

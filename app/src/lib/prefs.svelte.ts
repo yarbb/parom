@@ -48,6 +48,8 @@ export interface Prefs {
   lastConnection: { type: 'site'; id: string } | { type: 'quick' } | null;
   /** Repositories added in the GitHub tab (site repositories are listed anyway). */
   repos: string[];
+  /** Site repositories removed from the GitHub tab's list. */
+  hiddenRepos: string[];
   /** Repository shown in the GitHub tab. */
   githubRepo: string;
 }
@@ -82,6 +84,7 @@ export const defaultPrefs: Prefs = {
   backupDir: '',
   lastConnection: null,
   repos: [],
+  hiddenRepos: [],
   githubRepo: '',
 };
 
