@@ -60,6 +60,7 @@
     if (isTauri()) {
       getName().then((n) => {
         name = n;
+        ui.appName = n;
         document.title = n;
       });
       getVersion().then((v) => (version = v));

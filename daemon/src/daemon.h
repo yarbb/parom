@@ -1,20 +1,20 @@
-// totzillad: wraps the FileZilla engine and serves JSON-RPC 2.0 over stdio.
+// paromd: wraps the FileZilla engine and serves JSON-RPC 2.0 over stdio.
 //
-// Copyright (C) TOTzilla contributors
+// Copyright (C) Parom contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef TOTZILLAD_DAEMON_HEADER
-#define TOTZILLAD_DAEMON_HEADER
+#ifndef PAROMD_DAEMON_HEADER
+#define PAROMD_DAEMON_HEADER
 
 #include <functional>
 #include <memory>
 #include <string>
 
-#ifndef TOTZILLAD_VERSION
-#define TOTZILLAD_VERSION "0.0.0-dev"
+#ifndef PAROMD_VERSION
+#define PAROMD_VERSION "0.0.0-dev"
 #endif
 
-namespace totzillad {
+namespace paromd {
 
 // Writes one JSON message per line. Thread-safe.
 class Output

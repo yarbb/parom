@@ -1,4 +1,4 @@
-// Bridge to totzillad through the Tauri backend (see daemon/PROTOCOL.md).
+// Bridge to paromd through the Tauri backend (see daemon/PROTOCOL.md).
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 

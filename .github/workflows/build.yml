@@ -1,4 +1,4 @@
-# Windows build: FileZilla engine (no GUI), the M0b spike and totzillad,
+# Windows build: FileZilla engine (no GUI), the M0b spike and paromd,
 # each tested against a local SFTP server (tests/sftp_test_server.py).
 # libfilezilla and fzssh come prebuilt from MSYS2 (UCRT64); MSYS2 also packages
 # FileZilla 3.71.1 against them, so the versions are known to work together.
@@ -66,18 +66,18 @@ jobs:
             spike/m0b/main.cpp -o out/bin/fzspike.exe \
             -Lbuild-fz/src/engine/.libs -lfzclient-private \
             $(pkg-config --libs libfilezilla libfzssh-client)
-      - name: Build totzillad
+      - name: Build paromd
         run: |
           sh daemon/build.sh src-fz build-fz out/bin "0.1.0-dev+${GITHUB_SHA::7}"
-          PATH="$PWD/out/bin:$PATH" totzillad.exe --version
+          PATH="$PWD/out/bin:$PATH" paromd.exe --version
       - name: Test M0b spike (connect, list, upload)
         timeout-minutes: 5
         env:
-          TOTZILLA_PASSWORD: test
+          PAROM_PASSWORD: test
         run: |
           export PATH="$PWD/out/bin:$PATH"
           mkdir sftproot && echo "already on the server" > sftproot/existing.txt
-          python tests/sftp_test_server.py --root sftproot --port 3373 --password "$TOTZILLA_PASSWORD" &
+          python tests/sftp_test_server.py --root sftproot --port 3373 --password "$PAROM_PASSWORD" &
           SERVER_PID=$!
           trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
           sleep 5
@@ -86,7 +86,7 @@ jobs:
             --upload "$(cygpath -w "$PWD/upload.txt")" --timeout 20
           cmp upload.txt sftproot/upload.txt
           echo "server copy matches"
-      - name: Test totzillad JSON-RPC
+      - name: Test paromd JSON-RPC
         timeout-minutes: 5
         run: |
           export PATH="$PWD/out/bin:$PATH"
@@ -95,9 +95,9 @@ jobs:
           SERVER_PID=$!
           trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
           sleep 5
-          python daemon/tests/test_rpc.py "$(cygpath -w "$PWD/out/bin/totzillad.exe")" \
+          python daemon/tests/test_rpc.py "$(cygpath -w "$PWD/out/bin/paromd.exe")" \
             --port 3374 --password test --root sftproot-daemon
-      - name: Test totzillad FTP and FTPS
+      - name: Test paromd FTP and FTPS
         timeout-minutes: 5
         run: |
           export PATH="$PWD/out/bin:$PATH"
@@ -110,14 +110,14 @@ jobs:
           FTPS_PID=$!
           trap 'kill $FTP_PID $FTPS_PID 2>/dev/null || true' EXIT
           sleep 5
-          python daemon/tests/test_ftp.py "$(cygpath -w "$PWD/out/bin/totzillad.exe")" --password test \
+          python daemon/tests/test_ftp.py "$(cygpath -w "$PWD/out/bin/paromd.exe")" --password test \
             --ftp-port 2121 --ftp-root ftproot --ftps-port 2221 --ftps-root ftpsroot
-      - name: Bundle totzillad with its DLLs
+      - name: Bundle paromd with its DLLs
         run: |
           mkdir -p out/daemon
-          cp out/bin/totzillad.exe out/daemon/
+          cp out/bin/paromd.exe out/daemon/
           # Every non-system DLL the daemon loads, resolved with the engine on PATH.
-          PATH="$PWD/out/bin:$PATH" ldd out/daemon/totzillad.exe \
+          PATH="$PWD/out/bin:$PATH" ldd out/daemon/paromd.exe \
             | awk '$3 ~ /^\// {print $3}' | grep -vi '^/c/windows' | sort -u \
             | while read -r dll; do cp "$dll" out/daemon/; done
           # The engine is built with -g; ship it without debug info.

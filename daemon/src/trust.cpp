@@ -1,4 +1,4 @@
-// Copyright (C) TOTzilla contributors
+// Copyright (C) Parom contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "trust.h"
@@ -10,7 +10,7 @@
 #include <fstream>
 #include <iostream>
 
-namespace totzillad {
+namespace paromd {
 
 using json = nlohmann::json;
 
@@ -33,7 +33,7 @@ void TrustStore::open(std::filesystem::path file)
 	}
 	catch (std::exception const& e) {
 		// A damaged file only means questions get asked again.
-		std::cerr << "totzillad: ignoring unreadable trust store: " << e.what() << '\n';
+		std::cerr << "paromd: ignoring unreadable trust store: " << e.what() << '\n';
 	}
 }
 
@@ -87,7 +87,7 @@ void TrustStore::save() const
 		std::filesystem::rename(tmp, file_);
 	}
 	catch (std::exception const& e) {
-		std::cerr << "totzillad: cannot save trust store: " << e.what() << '\n';
+		std::cerr << "paromd: cannot save trust store: " << e.what() << '\n';
 	}
 }
 

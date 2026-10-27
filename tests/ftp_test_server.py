@@ -4,7 +4,7 @@ Serves one directory to one user. With --tls, generates a throwaway
 self-signed certificate and requires TLS on the control connection.
 Not for real use.
 
-Copyright (C) TOTzilla contributors
+Copyright (C) Parom contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 

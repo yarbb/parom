@@ -1,4 +1,4 @@
-# totzillad protocol (version 1)
+# paromd protocol (version 1)
 
 JSON-RPC 2.0 over stdin/stdout, one JSON message per line (UTF-8). stderr carries diagnostics only. Closing stdin shuts the daemon down.
 

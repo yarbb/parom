@@ -2,7 +2,7 @@
 // Connects over SFTP, lists a directory and optionally uploads one file,
 // then re-lists the target directory to check the uploaded size.
 //
-// Copyright (C) TOTzilla contributors
+// Copyright (C) Parom contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "FileZillaEngine.h"
@@ -58,7 +58,7 @@ struct Args
 	std::wstring host;
 	unsigned int port{22};
 	std::wstring user;
-	std::wstring password; // from the TOTZILLA_PASSWORD environment variable
+	std::wstring password; // from the PAROM_PASSWORD environment variable
 	std::wstring keyfile;
 	std::wstring list_path; // empty: the login directory
 	std::wstring upload_file;
@@ -245,7 +245,7 @@ void usage()
 		"  --to DIR            remote directory for the upload (default: listed directory)\n"
 		"  --trust-hostkey     accept the server's host key\n"
 		"  --timeout SECONDS   engine timeout (default 60)\n"
-		"The password is read from the TOTZILLA_PASSWORD environment variable.\n";
+		"The password is read from the PAROM_PASSWORD environment variable.\n";
 }
 
 bool parse_args(int argc, char** argv, Args& args)
@@ -293,7 +293,7 @@ bool parse_args(int argc, char** argv, Args& args)
 			return false;
 		}
 	}
-	if (char const* pw = std::getenv("TOTZILLA_PASSWORD")) {
+	if (char const* pw = std::getenv("PAROM_PASSWORD")) {
 		args.password = fz::to_wstring(std::string(pw));
 	}
 	return !args.host.empty() && !args.user.empty() && args.port > 0 && args.port < 65536;

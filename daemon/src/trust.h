@@ -1,18 +1,18 @@
 // Fingerprints of SSH host keys and TLS certificates the user chose to trust
 // permanently, kept in <data dir>/trust.json.
 //
-// Copyright (C) TOTzilla contributors
+// Copyright (C) Parom contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#ifndef TOTZILLAD_TRUST_HEADER
-#define TOTZILLAD_TRUST_HEADER
+#ifndef PAROMD_TRUST_HEADER
+#define PAROMD_TRUST_HEADER
 
 #include <filesystem>
 #include <map>
 #include <optional>
 #include <string>
 
-namespace totzillad {
+namespace paromd {
 
 class TrustStore final
 {

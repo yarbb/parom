@@ -5,6 +5,7 @@
   import { markerName } from '../lib/sync/marker';
   import Checkbox from './Checkbox.svelte';
   import Modal from './Modal.svelte';
+  import { ui } from '../lib/ui.svelte';
   import SyncPreview from './SyncPreview.svelte';
 
   // Boards Dm (track sync state?), the direction choice, the preview (Ds) and Dp (syncing).
@@ -30,7 +31,7 @@
 {#if sync.offerMarker && sync.check}
   {@const c = sync.check}
   <Modal title={t('sync.marker.title', { server: c.site.name })} onCancel={() => markerAnswer('not_now')}>
-    <p>{t('sync.marker.body', { path: `${c.root.replace(/\/$/, '')}/${markerName}` })}</p>
+    <p>{t('sync.marker.body', { name: ui.appName, path: `${c.root.replace(/\/$/, '')}/${markerName}` })}</p>
     <pre class="mono preview">{markerName.slice(1)} 1
 repo   {c.site.repo || '–'}
 commit {t('sync.marker.after_first_sync')}
