@@ -307,7 +307,7 @@
           {/if}
           <p class="muted">{t('prefs.repos_hint')}</p>
         {:else if page === 'marker_history'}
-          <div class="row"><span></span><Checkbox bind:checked={draft.syncDetectEdits} label={t('prefs.detect_edits')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncScanEdits} label={t('prefs.scan_edits')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncLock} label={t('prefs.lock_server')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncBackup} label={t('prefs.backup_first')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncCloseIssues} label={t('prefs.close_issues')} /></div>

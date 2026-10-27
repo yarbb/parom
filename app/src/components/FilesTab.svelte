@@ -15,6 +15,7 @@
   import type { EngineState } from '../lib/types';
   import LocalPane from './LocalPane.svelte';
   import QueuePanel from './QueuePanel.svelte';
+  import Splitter from './Splitter.svelte';
   import RemotePane from './RemotePane.svelte';
   import RequestDialog from './RequestDialog.svelte';
   import SyncBar from './SyncBar.svelte';
@@ -35,6 +36,7 @@
   let remember = $state(false);
 
   let localPath = $state('');
+  let panesWidth = $state(0);
   let localSeparator = $state('/');
   let localPane: LocalPane;
 
@@ -384,12 +386,19 @@
 
 <SyncBar />
 
-<div class="panes">
+<div class="panes" bind:clientWidth={panesWidth} style:--split="{prefs.value.paneSplit}%">
   <LocalPane bind:this={localPane} bind:path={localPath} bind:separator={localSeparator} canUpload={connected} onUpload={upload} />
+  <Splitter
+    axis="x"
+    label={t('ui.resize')}
+    onMove={(d) => (prefs.value.paneSplit = Math.max(20, Math.min(80, prefs.value.paneSplit + (d / Math.max(1, panesWidth)) * 100)))}
+    onEnd={() => prefs.persist()}
+    onReset={() => prefs.set('paneSplit', 50)}
+  />
   <RemotePane onDownload={download} />
 </div>
 
-{#if connection.transfers.length || connection.walks}
+{#if (connection.transfers.length || connection.walks) && (!ui.log || prefs.value.queueWithLog)}
   <QueuePanel />
 {/if}
 </div>
@@ -501,5 +510,9 @@
     flex: 1;
     display: flex;
     min-height: 0;
+  }
+
+  .panes > :global(.pane:first-child) {
+    flex: 0 0 var(--split);
   }
 </style>
