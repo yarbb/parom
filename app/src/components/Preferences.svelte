@@ -258,6 +258,7 @@
             <input class="field mono short" inputmode="numeric" value={draft.connectTimeout} oninput={(e) => (draft.connectTimeout = num(e.currentTarget.value, 20))} />
             <span class="muted">{t('prefs.seconds')}</span>
           </label>
+          <div class="row"><span></span><Checkbox bind:checked={draft.autoReconnect} label={t('prefs.auto_reconnect')} /></div>
         {:else if page === 'account'}
           {#if github.user}
             <div class="row">

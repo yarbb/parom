@@ -14,6 +14,7 @@
   import { sync } from './lib/sync/engine.svelte';
   import Preferences from './components/Preferences.svelte';
   import SignInDialogs from './components/SignInDialogs.svelte';
+  import LogPanel from './components/LogPanel.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
@@ -75,7 +76,10 @@
       <GitHubTab {name} />
     {/if}
   </main>
+  {#if ui.log}<LogPanel onClose={() => (ui.log = false)} />{/if}
   <StatusBar
+    onLog={() => (ui.log = !ui.log)}
+    logOpen={ui.log}
     state={engine === 'unavailable'
       ? t('status.engine_unavailable')
       : connection.state === 'connected'

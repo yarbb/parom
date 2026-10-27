@@ -27,6 +27,8 @@ export interface Prefs {
   existsDefault: ExistsDefault;
   /** Seconds. */
   connectTimeout: number;
+  /** Open the session again when the server drops it. */
+  autoReconnect: boolean;
   /** Program for editing server files; empty uses the system's choice. */
   editorPath: string;
   editUploadOnSave: boolean;
@@ -72,6 +74,7 @@ export const defaultPrefs: Prefs = {
   lastLocalDir: '',
   existsDefault: 'ask',
   connectTimeout: 20,
+  autoReconnect: true,
   editorPath: '',
   editUploadOnSave: true,
   editAsk: true,

@@ -71,6 +71,9 @@ export function describeError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** What a dropped session is reopened with (kept in memory only). */
+type Reopen = { kind: 'quick'; params: ConnectParams } | { kind: 'site'; site: Site; password: string };
+
 class Connection {
   state = $state<ConnectionState>('disconnected');
   session = $state<number | null>(null);
@@ -87,8 +90,15 @@ class Connection {
   transfers = $state<Transfer[]>([]);
   /** The latest engine status line or error, for the status bar. */
   message = $state<{ level: string; text: string } | null>(null);
-  /** Recent engine log lines (not reactive; for a log panel later). */
+  /** Recent engine log lines. The array itself is not reactive (it changes
+   *  often); `logVersion` changes with it, for the log panel. */
   log: { time: number; level: string; text: string }[] = [];
+  logVersion = $state(0);
+
+  clearLog(): void {
+    this.log = [];
+    this.logVersion++;
+  }
   /** Folder uploads or downloads still walking their tree. */
   walks = $state(0);
   /** Files found by the folder walks in progress. */
@@ -113,6 +123,13 @@ class Connection {
 
   #nextTransfer = 1;
   #started = false;
+  /** How to open the current session again if the server drops it. */
+  #reopen: Reopen | null = null;
+  /** Bumped by Disconnect and new connects: stops a pending reconnect. */
+  #reconnectGen = 0;
+  /** Attempt number while reconnecting (0: not reconnecting). */
+  reconnecting = $state(0);
+  static readonly reconnectDelays = [2000, 5000, 15000];
   /** Called after a transfer finishes; the Files tab refreshes the target pane. */
   onTransferDone: ((t: Transfer) => void) | null = null;
 
@@ -136,6 +153,7 @@ class Connection {
         if (this.log.length > 1000) {
           this.log.splice(0, this.log.length - 1000);
         }
+        this.logVersion++;
         // Status lines, errors and failing server replies (4xx/5xx) reach the status bar.
         if (level === 'status' || level === 'error' || (level === 'reply' && /^[45]\d\d/.test(text))) {
           this.message = { level, text };
@@ -162,7 +180,13 @@ class Connection {
       case 'session.closed':
       case 'session.disconnected':
         if (p.session === this.session) {
-          this.#lost(e.method === 'session.disconnected' ? t('files.error.disconnected') : '');
+          const dropped = e.method === 'session.disconnected';
+          const path = this.remotePath;
+          const reopen = this.#reopen;
+          this.#lost(dropped ? t('files.error.disconnected') : '');
+          if (dropped && reopen && prefs.value.autoReconnect) {
+            void this.#reconnect(reopen, path);
+          }
         }
         break;
     }
@@ -178,9 +202,44 @@ class Connection {
     this.error = reason;
   }
 
-  async connect(params: ConnectParams): Promise<void> {
+  /** The server dropped the session: open it again a few times, then give up. */
+  async #reconnect(reopen: Reopen, path: string): Promise<void> {
+    const gen = ++this.#reconnectGen;
+    for (let i = 0; i < Connection.reconnectDelays.length; i++) {
+      this.reconnecting = i + 1;
+      this.error = t('files.reconnecting', { attempt: i + 1, total: Connection.reconnectDelays.length });
+      await new Promise((r) => setTimeout(r, Connection.reconnectDelays[i]));
+      if (gen !== this.#reconnectGen || this.state !== 'disconnected') {
+        break;
+      }
+      if (reopen.kind === 'site') {
+        await this.connectSite(reopen.site, reopen.password, true);
+      } else {
+        await this.connect(reopen.params, true);
+      }
+      // connect() changed the state meanwhile (TypeScript cannot see that).
+      if ((this.state as string) === 'connected') {
+        if (path) {
+          await this.list(path);
+        }
+        this.reconnecting = 0;
+        this.error = '';
+        return;
+      }
+    }
+    this.reconnecting = 0;
+    if (gen === this.#reconnectGen && this.state === 'disconnected') {
+      this.error = t('files.reconnect_failed');
+    }
+  }
+
+  async connect(params: ConnectParams, retry = false): Promise<void> {
     if (this.state !== 'disconnected') {
       return;
+    }
+    if (!retry) {
+      this.#reconnectGen++;
+      this.reconnecting = 0;
     }
     const target = parseHost(params.host, params.port);
     if (!target.host) {
@@ -201,6 +260,7 @@ class Connection {
       });
       this.session = res.session;
       this.state = 'connected';
+      this.#reopen = { kind: 'quick', params: { ...params } };
       const port = Number.isFinite(target.port) ? target.port : undefined;
       await this.#remember({ protocol: target.protocol, host: target.host, port, user }, params);
       void prefs.set('lastConnection', { type: 'quick' });
@@ -213,9 +273,13 @@ class Connection {
   }
 
   /** Connects with a saved site's settings. `password` is ignored for key and anonymous logons. */
-  async connectSite(site: Site, password: string): Promise<void> {
+  async connectSite(site: Site, password: string, retry = false): Promise<void> {
     if (this.state !== 'disconnected' || !site.host.trim()) {
       return;
+    }
+    if (!retry) {
+      this.#reconnectGen++;
+      this.reconnecting = 0;
     }
     this.state = 'connecting';
     this.error = '';
@@ -240,6 +304,7 @@ class Connection {
       this.session = res.session;
       this.state = 'connected';
       this.site = site;
+      this.#reopen = { kind: 'site', site, password };
       void prefs.set('lastConnection', { type: 'site', id: site.id });
       await this.list(site.remoteDir.trim() || undefined);
       this.siteRoot = this.remotePath;
@@ -280,6 +345,10 @@ class Connection {
   }
 
   async disconnect(): Promise<void> {
+    // Also stops a pending reconnect.
+    this.#reconnectGen++;
+    this.reconnecting = 0;
+    this.#reopen = null;
     const session = this.session;
     if (session === null) {
       return;

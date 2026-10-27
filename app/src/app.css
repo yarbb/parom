@@ -159,6 +159,16 @@ input.field::placeholder {
   padding-bottom: 5px;
 }
 
+.section-label .picked:not(:empty)::before {
+  content: '·';
+  margin: 0 8px;
+}
+
+.section-label .picked {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .section-label .buttons {
   display: flex;
   gap: 6px;
