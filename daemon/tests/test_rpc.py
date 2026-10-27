@@ -1,8 +1,8 @@
-"""Integration test for totzillad against tests/sftp_test_server.py.
+"""Integration test for paromd against tests/sftp_test_server.py.
 
-Usage: python daemon/tests/test_rpc.py PATH_TO_TOTZILLAD --port 3373 --password test --root SFTP_ROOT
+Usage: python daemon/tests/test_rpc.py PATH_TO_PAROMD --port 3373 --password test --root SFTP_ROOT
 
-Copyright (C) TOTzilla contributors
+Copyright (C) Parom contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
@@ -156,7 +156,7 @@ def progress_for(d, req_id):
 
 
 def transfers(d, sid, root):
-    work = tempfile.mkdtemp(prefix="totzillad-test-")
+    work = tempfile.mkdtemp(prefix="paromd-test-")
     local = os.path.join(work, "big.bin")
     size = 32 * 1024 * 1024
     with open(local, "wb") as f:
@@ -222,7 +222,7 @@ def mkdir_and_cancel(d, sid, root):
     d.ok("remote.mkdir", {"session": sid, "path": "/m/n"})
     assert os.path.isdir(os.path.join(root, "m", "n"))
 
-    work = tempfile.mkdtemp(prefix="totzillad-cancel-")
+    work = tempfile.mkdtemp(prefix="paromd-cancel-")
     local = os.path.join(work, "huge.bin")
     with open(local, "wb") as f:
         for _ in range(200):
@@ -261,7 +261,7 @@ def mkdir_and_cancel(d, sid, root):
 
 def trust_tests(exe, server, password):
     """Remembered host keys survive a daemon restart; a changed key is flagged."""
-    data = tempfile.mkdtemp(prefix="totzillad-data-")
+    data = tempfile.mkdtemp(prefix="paromd-data-")
     trust_file = os.path.join(data, "trust.json")
     params = dict(server, password=password)
 
@@ -361,7 +361,7 @@ def main():
     d = Daemon(args.exe)
 
     hello = d.ok("daemon.hello")
-    assert hello["name"] == "totzillad" and hello["protocol"] == 1, hello
+    assert hello["name"] == "paromd" and hello["protocol"] == 1, hello
 
     d.send_raw("{not json")
     msg = d.messages.get(timeout=10)

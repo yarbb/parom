@@ -4,7 +4,7 @@ Technical guide for agents working on this repository. Public file: no personal 
 
 ## Project
 Cross-platform SFTP/FTP client built on the FileZilla 3.71.1 engine, with a GitHub tab (like GitHub Desktop) and safe, version-aware server sync. Generic tool: nothing specific to any particular server.
-- Product name: **Parom** (Russian for "ferry"; formerly the working name TOTzilla). It lives in ONE place: `productName` in `app/src-tauri/tauri.conf.json` (window title, installer, credential service, user agent). Never "-zilla" (FileZilla trademark). Internal names still carry the working name for now: the daemon `totzillad`, the Rust crate, the repository, the GitHub App slug `totzilla-sync`.
+- Product name: **Parom** (Russian for "ferry"; formerly the working name TOTzilla). It lives in ONE place: `productName` in `app/src-tauri/tauri.conf.json` (window title, installer, credential service, user agent). Never "-zilla" (FileZilla trademark). The GitHub App slug `totzilla-sync` still carries the working name (renamed on GitHub separately; `APP_INSTALL_URL` follows it).
 - Rename compatibility: on first start the old data folders (`org.totzilla.app`) are copied to the new identifier and saved passwords to the new credential service (`src-tauri/src/migrate.rs`); the old marker `/.totzilla` and `.totzilla-ignore` are still read (the marker is replaced by `/.parom` on the next write).
 - License: GPLv3 or later. fzssh is AGPLv3, so distributed binaries follow AGPLv3 terms. Keep upstream copyright headers, mark modified files, keep NOTICE up to date.
 - Remove FileZilla branding, client identification strings and update-check URLs; updates come from GitHub Releases.
@@ -19,7 +19,7 @@ Cross-platform SFTP/FTP client built on the FileZilla 3.71.1 engine, with a GitH
 ## Layout
 ```
 third_party/filezilla/   FileZilla 3.71.1 source tarball (verified SHA-256 in NOTICE)
-daemon/                  totzillad: C++ wrapper around the engine, JSON-RPC over stdio (see daemon/PROTOCOL.md)
+daemon/                  paromd: C++ wrapper around the engine, JSON-RPC over stdio (see daemon/PROTOCOL.md)
 spike/m0b/               console spike: SFTP connect, list, upload via the engine API
 tests/                   shared test helpers (paramiko SFTP test server)
 app/                     Tauri 2 (Rust) + Svelte/TypeScript UI (planned)
@@ -35,7 +35,7 @@ locales/                 en.json (+ community translations)
 - Configure: `--enable-gui=no --disable-locales --disable-shellext --disable-storj --disable-manualupdatecheck --disable-autoupdatecheck --with-pugixml=builtin`, then `make -C src`.
 - The wx UI (`src/interface`, ~66k LOC) is not used; it is replaced entirely.
 
-## Daemon: totzillad
+## Daemon: paromd
 C++ process wrapping the engine. Owns the transfer queue (SQLite), sites, settings, sync/marker/backups. Talks JSON-RPC over stdio or a local pipe.
 
 ## UI: Tauri
@@ -75,7 +75,7 @@ One small file on the server, `/.parom` (~300 bytes; `/.totzilla` from before th
 
 ## Roadmap
 - M0a: engine library builds on Windows CI. M0b: console spike (SFTP connect, list, upload) built in CI.
-- M1: totzillad JSON-RPC + Tauri shell + Files tab.
+- M1: paromd (then totzillad) JSON-RPC + Tauri shell + Files tab.
 - M2 (done): Site Manager (sites in the daemon store, passwords in the OS credential store), Preferences (live where the feature exists), themes, i18n loader, context menus (edit, download, rename, delete, new folder), edit-in-place with upload on save, remembered host keys and certificates (`trust.json`), "apply to all" for file exists.
 - Still open from M2: persistent transfer queue in the daemon (SQLite) and simultaneous transfers; message log panel.
 - M3 (done): marker on the server, server state and hand-edit detection, lock, backups (folder configurable) with restore, deploys the committed version (git export), history, Preferences: Marker and history. Not done on purpose: deleting files removed from the repo on the server; the post-sync command runs on this computer (SFTP cannot run commands).

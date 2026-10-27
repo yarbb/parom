@@ -1,7 +1,7 @@
-// totzillad: wraps the FileZilla engine and serves JSON-RPC 2.0 over stdio.
+// paromd: wraps the FileZilla engine and serves JSON-RPC 2.0 over stdio.
 // See daemon/PROTOCOL.md for the methods and events.
 //
-// Copyright (C) TOTzilla contributors
+// Copyright (C) Parom contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
@@ -35,7 +35,7 @@
 #include <vector>
 
 
-namespace totzillad {
+namespace paromd {
 
 namespace {
 
@@ -512,8 +512,8 @@ private:
 	{
 		if (method == "daemon.hello") {
 			send_result(id, json{
-				{"name", "totzillad"},
-				{"version", TOTZILLAD_VERSION},
+				{"name", "paromd"},
+				{"version", PAROMD_VERSION},
 				{"engine", "FileZilla 3.71.1"},
 				{"protocol", protocol_version},
 			});

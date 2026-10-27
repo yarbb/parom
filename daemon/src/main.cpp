@@ -1,7 +1,7 @@
-// totzillad entry point: JSON-RPC 2.0, one message per line on stdin/stdout.
+// paromd entry point: JSON-RPC 2.0, one message per line on stdin/stdout.
 // Diagnostics go to stderr; stdout carries protocol messages only.
 //
-// Copyright (C) TOTzilla contributors
+// Copyright (C) Parom contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
@@ -14,7 +14,7 @@
 
 namespace {
 
-class StdoutOutput final : public totzillad::Output
+class StdoutOutput final : public paromd::Output
 {
 public:
 	void write_line(std::string const& line) override
@@ -35,10 +35,10 @@ int main(int argc, char** argv)
 	for (int i = 1; i < argc; ++i) {
 		std::string const arg = argv[i];
 		if (arg == "--version") {
-			std::cout << "totzillad " TOTZILLAD_VERSION "\n";
+			std::cout << "paromd " PAROMD_VERSION "\n";
 			return 0;
 		}
-		std::cerr << "Usage: totzillad [--version]\n"
+		std::cerr << "Usage: paromd [--version]\n"
 			"Speaks JSON-RPC 2.0 over stdin/stdout, one message per line.\n";
 		return 2;
 	}
@@ -46,7 +46,7 @@ int main(int argc, char** argv)
 	std::ios::sync_with_stdio(false);
 
 	StdoutOutput out;
-	totzillad::Daemon daemon(out);
+	paromd::Daemon daemon(out);
 
 	// Reads requests until EOF; the client closing stdin shuts the daemon down.
 	std::thread reader([&daemon] {

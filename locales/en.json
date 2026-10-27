@@ -394,7 +394,7 @@
   "sync.state.no_marker": "Not tracked",
   "sync.state.unsynced": "Tracked, not synced yet",
   "sync.uncommitted": "{count, plural, one {# uncommitted change, not deployed} other {# uncommitted changes, not deployed}}",
-  "sync.marker.body": "TOTzilla can keep one small file, {path} (about 300 bytes), on this server. It records which commit was last deployed, so you and your teammates can tell when the server is out of date. Your files are not touched.",
+  "sync.marker.body": "{name} can keep one small file, {path} (about 300 bytes), on this server. It records which commit was last deployed, so you and your teammates can tell when the server is out of date. Your files are not touched.",
   "sync.marker.after_first_sync": "after the first sync",
   "sync.marker.you": "you",
   "sync.marker.remember": "Remember my choice for this server",

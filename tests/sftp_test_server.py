@@ -3,7 +3,7 @@
 Serves one directory, accepts any user with the password given on the
 command line, and generates a throwaway host key. Not for real use.
 
-Copyright (C) TOTzilla contributors
+Copyright (C) Parom contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 

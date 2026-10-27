@@ -1,4 +1,4 @@
-//! Runs totzillad as a child process and speaks JSON-RPC 2.0 with it over
+//! Runs paromd as a child process and speaks JSON-RPC 2.0 with it over
 //! stdin/stdout (see daemon/PROTOCOL.md).
 
 use serde_json::{json, Value};
@@ -41,16 +41,16 @@ fn bridge_error(message: impl Into<String>) -> Value {
 }
 
 /// The daemon ships next to the app executable in `daemon/`.
-/// `TOTZILLA_DAEMON` overrides the path for development.
+/// `PAROM_DAEMON` overrides the path for development.
 pub fn daemon_path() -> io::Result<PathBuf> {
-    if let Some(path) = std::env::var_os("TOTZILLA_DAEMON") {
+    if let Some(path) = std::env::var_os("PAROM_DAEMON") {
         return Ok(path.into());
     }
     let exe = std::env::current_exe()?;
     let dir = exe
         .parent()
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "executable has no parent directory"))?;
-    let name = if cfg!(windows) { "totzillad.exe" } else { "totzillad" };
+    let name = if cfg!(windows) { "paromd.exe" } else { "paromd" };
     Ok(dir.join("daemon").join(name))
 }
 

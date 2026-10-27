@@ -17,7 +17,7 @@ use tauri::{Emitter, Manager};
 #[derive(Default)]
 struct DaemonState(Mutex<Option<Arc<Daemon>>>);
 
-/// Forwards one JSON-RPC request to totzillad. Errors are JSON-RPC error objects.
+/// Forwards one JSON-RPC request to paromd. Errors are JSON-RPC error objects.
 #[tauri::command]
 async fn daemon_call(
     state: tauri::State<'_, DaemonState>,

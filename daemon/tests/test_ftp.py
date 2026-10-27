@@ -1,9 +1,9 @@
-"""FTP and explicit FTPS tests for totzillad against tests/ftp_test_server.py.
+"""FTP and explicit FTPS tests for paromd against tests/ftp_test_server.py.
 
-Usage: python daemon/tests/test_ftp.py PATH_TO_TOTZILLAD --password test
+Usage: python daemon/tests/test_ftp.py PATH_TO_PAROMD --password test
            --ftp-port 2121 --ftp-root DIR --ftps-port 2221 --ftps-root DIR
 
-Copyright (C) TOTzilla contributors
+Copyright (C) Parom contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 """
 
@@ -52,7 +52,7 @@ def main():
     for root in (args.ftp_root, args.ftps_root):
         with open(os.path.join(root, "existing.txt"), "w") as f:
             f.write("already on the server\n")
-    work = tempfile.mkdtemp(prefix="totzillad-ftp-")
+    work = tempfile.mkdtemp(prefix="paromd-ftp-")
     d = Daemon(args.exe)
     ftp = {"host": "127.0.0.1", "port": args.ftp_port, "user": "test", "password": args.password, "timeout": 20}
     ftps = dict(ftp, port=args.ftps_port)
