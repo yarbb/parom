@@ -24,3 +24,7 @@ Because fzssh is AGPLv3, distributed binaries that link it are subject to the AG
 
 Modified files must carry a prominent notice of the change and keep their original copyright headers.
 "FileZilla" is a trademark of its owner; this project is not affiliated with or endorsed by the FileZilla Project.
+
+Fonts and icons bundled with the app:
+- Inter (rsms/inter) and JetBrains Mono (JetBrains/JetBrainsMono), SIL Open Font License 1.1, via the @fontsource-variable packages.
+- Lucide icons, ISC License, via @lucide/svelte.

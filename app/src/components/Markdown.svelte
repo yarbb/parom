@@ -115,7 +115,7 @@
     padding: 1px 4px;
     border-radius: 3px;
     background: var(--panel);
-    font-family: Consolas, 'Cascadia Code', ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 11.5px;
   }
 

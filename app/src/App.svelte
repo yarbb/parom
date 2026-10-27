@@ -17,6 +17,8 @@
   import { sync } from './lib/sync/engine.svelte';
   import Preferences from './components/Preferences.svelte';
   import SignInDialogs from './components/SignInDialogs.svelte';
+  import AboutDialog from './components/AboutDialog.svelte';
+  import { shortcut } from './lib/commands.svelte';
   import LogPanel from './components/LogPanel.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
@@ -47,13 +49,8 @@
   onMount(() => {
     const stopWatching = watchSystemTheme(loadTheme);
     void prefs.load().then(() => (hideAddress = prefs.value.hideAddress));
-    // Ctrl+, opens Preferences, like most desktop apps.
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
-        e.preventDefault();
-        ui.preferences = true;
-      }
-    };
+    // App shortcuts (Ctrl+, Ctrl+S, Ctrl+1/2, Ctrl+L, Ctrl+R, Ctrl+D, zoom); see the menus.
+    const onKey = (e: KeyboardEvent) => void shortcut(e);
     window.addEventListener('keydown', onKey);
     let stopExit = () => {};
 
@@ -123,6 +120,9 @@
   <Preferences onClose={() => (ui.preferences = false)} />
 {/if}
 <SignInDialogs />
+{#if ui.about}
+  <AboutDialog onClose={() => (ui.about = false)} />
+{/if}
 
 <style>
   .app {

@@ -12,6 +12,8 @@
   } from '../lib/files';
   import { t } from '../lib/i18n';
   import { prefs } from '../lib/prefs.svelte';
+  import FolderUp from '@lucide/svelte/icons/folder-up';
+  import FileIcon from './FileIcon.svelte';
   import { dragThreshold, paneDrag, type PaneSide } from '../lib/panedrag.svelte';
 
   interface Props {
@@ -315,11 +317,11 @@
           onkeydown={() => {}}
         >
           {#if row}
-            <span class="col name mono" title={row.name}>{row.dir ? `▸ ${row.name}/` : row.name}</span>
+            <span class="col name mono" title={row.name}><FileIcon name={row.name} dir={row.dir} link={row.link} /><span class="label">{row.name}</span></span>
             <span class="col size mono muted">{row.dir ? '' : formatSize(row.size, decimal)}</span>
             <span class="col time mono muted" title={formatFullTime(row.time)}>{formatTime(row.time, Date.now(), iso)}</span>
           {:else}
-            <span class="col name mono">..</span>
+            <span class="col name mono"><span class="file-icon-up" aria-hidden="true"><FolderUp size={14} strokeWidth={1.6} /></span><span class="label">..</span></span>
           {/if}
         </div>
       {/each}
@@ -408,6 +410,24 @@
   .name {
     flex: 1;
     min-width: 0;
+  }
+
+  .row .name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .row .name .label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-icon-up {
+    display: inline-flex;
+    flex: none;
+    color: var(--muted);
   }
 
   .size {

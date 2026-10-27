@@ -594,7 +594,7 @@
     gap: 6px 12px;
     max-height: 180px;
     overflow: auto;
-    font-family: Consolas, 'Cascadia Code', ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
   }
 
