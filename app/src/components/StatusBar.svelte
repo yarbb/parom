@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../lib/i18n';
+
   interface Props {
     state: string;
     error?: boolean;
@@ -6,9 +8,13 @@
     /** Latest engine message (status line, error, failing server reply). */
     message?: { level: string; text: string } | null;
     version: string;
+    /** Opens or closes the message log. */
+    onLog?: () => void;
+    logOpen?: boolean;
   }
 
-  let { state, error = false, ok = false, message = null, version }: Props = $props();
+  let { state, error = false, ok = false, message = null, version, onLog, logOpen = false }: Props = $props();
+  const logLabel = $derived(t('log.title'));
 </script>
 
 <footer class="mono muted">
@@ -16,7 +22,10 @@
   <span class="message" class:status-removed={message?.level === 'error' || message?.level === 'reply'} title={message?.text ?? ''}>
     {message?.text ?? ''}
   </span>
-  <span class="side right">{version}</span>
+  <span class="side right">
+    {#if onLog}<button class="log-button mono" class:open={logOpen} onclick={onLog}>{logLabel}</button>{/if}
+    {version}
+  </span>
 </footer>
 
 <style>
@@ -42,6 +51,22 @@
 
   .right {
     text-align: right;
+  }
+
+  .log-button {
+    margin-right: 12px;
+    padding: 0 6px;
+    border: 1px solid var(--line-control);
+    border-radius: 3px;
+    background: none;
+    color: var(--muted);
+    font-size: 10.5px;
+    cursor: pointer;
+  }
+
+  .log-button.open,
+  .log-button:hover {
+    color: var(--text-strong);
   }
 
   .message {

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { connection } from '../lib/connection.svelte';
   import { edits } from '../lib/edits.svelte';
-  import { remoteJoin, remoteParent, type FileRow } from '../lib/files';
+  import { remoteJoin, remoteParent, selectionSummary, type FileRow } from '../lib/files';
+  import { prefs } from '../lib/prefs.svelte';
   import { t } from '../lib/i18n';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileList from './FileList.svelte';
@@ -87,7 +88,7 @@
   class:drop-target={paneDrag.over === 'server' && (paneDrag.active ? paneDrag.active.from === 'local' : paneDrag.external) && connected}
 >
   <div class="section-label head">
-    <span>{t('files.remote')}</span>
+    <span>{t('files.remote')}<span class="picked">{selectionSummary(selected, (count) => t('files.selected', { count }), prefs.value.sizeUnits === 'decimal')}</span></span>
     <span class="buttons">
       <button class="control small" disabled={!connected} onclick={() => connection.list(connection.remotePath)}>{t('files.refresh')}</button>
       <button class="control small" disabled={!connected || selected.length === 0} onclick={() => download(selected)}>

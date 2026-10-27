@@ -72,6 +72,15 @@ export const listComments = (slug: string, n: number) => api<Comment[]>('GET', `
 export const addComment = (slug: string, n: number, body: string) =>
   api<Comment>('POST', `${repoPath(slug)}/issues/${n}/comments`, { body }, true);
 
+export const listLabels = (slug: string) => api<Label[]>('GET', `${repoPath(slug)}/labels?per_page=100`);
+
+export const createIssue = (slug: string, issue: { title: string; body: string; labels: string[] }) =>
+  api<Item>('POST', `${repoPath(slug)}/issues`, issue, true);
+
+/** GitHub-rendered HTML for a Markdown text (issue links resolved in `slug`). */
+export const renderMarkdown = (slug: string, text: string) =>
+  api<string>('POST', '/markdown', { text, mode: 'gfm', context: slug });
+
 export const setState = (slug: string, kind: Kind, n: number, state: 'open' | 'closed') =>
   api<Item>('PATCH', `${repoPath(slug)}/${kind}/${n}`, { state });
 

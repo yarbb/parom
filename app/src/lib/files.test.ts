@@ -6,6 +6,7 @@ import {
   formatTime,
   localJoin,
   parseHost,
+  selectionSummary,
   splitAddress,
   parseRemoteTime,
   remoteJoin,
@@ -199,5 +200,19 @@ describe('splitAddress', () => {
   it('leaves plain host names alone', () => {
     expect(splitAddress('example.org')).toBeNull();
     expect(splitAddress('  ')).toBeNull();
+  });
+});
+
+describe('selectionSummary', () => {
+  const text = (n: number) => `${n} selected`;
+  it('counts rows and sums file sizes', () => {
+    const rows = [
+      { name: 'a', size: 1024, dir: false, link: false, time: null },
+      { name: 'b', size: 2048, dir: false, link: false, time: null },
+      { name: 'd', size: -1, dir: true, link: false, time: null },
+    ];
+    expect(selectionSummary(rows, text)).toBe('3 selected · 3.0 KB');
+    expect(selectionSummary([rows[2]], text)).toBe('1 selected');
+    expect(selectionSummary([], text)).toBe('');
   });
 });

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke, isTauri } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
-  import { localJoin, type FileRow } from '../lib/files';
+  import { localJoin, selectionSummary, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
   import { prefs } from '../lib/prefs.svelte';
   import { listLocal, localHome, localMkdir, localRename, localRoots, localTrash, openInEditor } from '../lib/local';
@@ -174,7 +174,7 @@
 
 <section class="pane" data-pane="local" class:drop-target={paneDrag.over === 'local' && paneDrag.active?.from === 'server'}>
   <div class="section-label head">
-    <span>{t('files.local')}</span>
+    <span>{t('files.local')}<span class="picked">{selectionSummary(selected, (count) => t('files.selected', { count }), prefs.value.sizeUnits === 'decimal')}</span></span>
     <span class="buttons">
       <button class="control small" onclick={browse} title={t('files.browse_hint')}>{t('files.browse')}</button>
       <button class="control small" disabled={!canUpload || selected.length === 0} onclick={() => upload(selected)}>

@@ -5,6 +5,8 @@ class Ui {
   tab = $state<Tab>('files');
   siteManager = $state(false);
   preferences = $state(false);
+  /** The message log panel above the status bar. */
+  log = $state(false);
   /** Open sign-in dialog: device flow ("browser") or personal access token. */
   githubSignIn = $state<'' | 'browser' | 'token'>('');
 }

@@ -120,6 +120,16 @@ export function formatFullTime(ms: number | null): string {
   return ms === null ? '' : fullDate.format(ms);
 }
 
+/** "3 selected · 12 MB" for a pane header; sizes count files only. Empty when nothing is selected. */
+export function selectionSummary(rows: readonly FileRow[], selectedText: (count: number) => string, decimal = false): string {
+  if (!rows.length) {
+    return '';
+  }
+  const bytes = rows.reduce((sum, r) => (r.dir || r.size < 0 ? sum : sum + r.size), 0);
+  const files = rows.some((r) => !r.dir);
+  return files ? `${selectedText(rows.length)} · ${formatSize(bytes, decimal)}` : selectedText(rows.length);
+}
+
 /** Rows [start, end) to render for a fixed row height, with overscan. */
 export function visibleRange(
   scrollTop: number,

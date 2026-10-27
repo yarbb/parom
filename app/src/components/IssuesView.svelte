@@ -20,6 +20,7 @@
   import { repo } from '../lib/repo.svelte';
   import { relativeTime } from '../lib/when';
   import Markdown from './Markdown.svelte';
+  import NewIssueDialog from './NewIssueDialog.svelte';
   import Modal from './Modal.svelte';
 
   // Boards Ix and Pr: list (search, open / closed) and the selected item with
@@ -39,6 +40,14 @@
   let busy = $state(false);
   let error = $state('');
   let confirmMerge = $state(false);
+  let creating = $state(false);
+
+  async function created(issue: Item) {
+    filter = 'open';
+    await load();
+    selected = issue.number;
+    void counts.load(slug);
+  }
 
   const ms = (iso: string) => Date.parse(iso);
 
@@ -172,7 +181,12 @@
 <div class="issues">
   <div class="list-pane">
     <div class="filters">
-      <input class="field search" placeholder={t(kind === 'issues' ? 'github.search_issues' : 'github.search_pulls')} bind:value={query} />
+      <div class="search-row">
+        <input class="field search" placeholder={t(kind === 'issues' ? 'github.search_issues' : 'github.search_pulls')} bind:value={query} />
+        {#if kind === 'issues'}
+          <button class="control" onclick={() => (creating = true)}>{t('github.new_issue.button')}</button>
+        {/if}
+      </div>
       <div class="states">
         <button class="state" class:active={filter === 'open'} onclick={() => (filter = 'open')}>
           {t('github.state.open')}{openCount !== null ? ` ${openCount}` : ''}
@@ -295,6 +309,10 @@
   </div>
 </div>
 
+{#if creating}
+  <NewIssueDialog {slug} onClose={() => (creating = false)} onCreated={created} />
+{/if}
+
 {#if confirmMerge && item}
   {@const i = item}
   <Modal title={t('github.merge_pr')} onCancel={() => (confirmMerge = false)}>
@@ -329,8 +347,14 @@
     border-bottom: 1px solid var(--line);
   }
 
+  .search-row {
+    display: flex;
+    gap: 8px;
+  }
+
   .search {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 
   .states {
