@@ -33,6 +33,32 @@ pub fn append_line(path: &str, line: &str) -> Result<(), String> {
     writeln!(f, "{line}").map_err(|e| format!("{path}: {e}"))
 }
 
+/// Compares a downloaded server file with the local one: "missing" (no
+/// local file), "same" or "different" (content, byte for byte).
+pub fn compare_files(downloaded: &str, local: &str) -> Result<&'static str, String> {
+    if !Path::new(local).is_file() {
+        return Ok("missing");
+    }
+    let (a, b) = (fs::metadata(downloaded), fs::metadata(local));
+    if let (Ok(a), Ok(b)) = (&a, &b) {
+        if a.len() != b.len() {
+            return Ok("different");
+        }
+    }
+    let a = fs::read(downloaded).map_err(|e| format!("{downloaded}: {e}"))?;
+    let b = fs::read(local).map_err(|e| format!("{local}: {e}"))?;
+    Ok(if a == b { "same" } else { "different" })
+}
+
+/// Copies a file, creating the target's folders (server files taken into the
+/// local repository folder).
+pub fn copy_file(from: &str, to: &str) -> Result<(), String> {
+    if let Some(dir) = Path::new(to).parent() {
+        fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    fs::copy(from, to).map(|_| ()).map_err(|e| format!("{to}: {e}"))
+}
+
 /// Removes one of the app's own backup folders (the user confirmed it).
 pub fn remove_dir(path: &str) -> Result<(), String> {
     fs::remove_dir_all(path).map_err(|e| format!("{path}: {e}"))

@@ -177,6 +177,16 @@ async fn remove_backup(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn compare_files(downloaded: String, local: String) -> Result<String, String> {
+    blocking(move || support::compare_files(&downloaded, &local).map(str::to_owned)).await
+}
+
+#[tauri::command]
+async fn copy_file(from: String, to: String) -> Result<(), String> {
+    blocking(move || support::copy_file(&from, &to)).await
+}
+
+#[tauri::command]
 async fn dir_size(path: String) -> Result<u64, String> {
     blocking(move || Ok(support::dir_size(&path))).await
 }
@@ -462,6 +472,8 @@ pub fn run() {
             append_line,
             remove_backup,
             dir_size,
+            compare_files,
+            copy_file,
             machine_name,
             run_command,
             github_user,

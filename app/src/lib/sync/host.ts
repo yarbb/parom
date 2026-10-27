@@ -36,6 +36,9 @@ export const host = {
   appendLine: (path: string, line: string) => invoke<void>('append_line', { path, line }),
   removeBackup: (path: string) => invoke<void>('remove_backup', { path }),
   dirSize: (path: string) => invoke<number>('dir_size', { path }),
+  /** "missing" when there is no local file, else "same" or "different" (content). */
+  compareFiles: (downloaded: string, local: string) => invoke<'missing' | 'same' | 'different'>('compare_files', { downloaded, local }),
+  copyFile: (from: string, to: string) => invoke<void>('copy_file', { from, to }),
   machineName: () => invoke<string>('machine_name'),
   runCommand: (command: string, cwd: string) => invoke<{ code: number | null; output: string }>('run_command', { command, cwd }),
 };

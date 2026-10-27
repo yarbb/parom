@@ -38,6 +38,8 @@ export interface Prefs {
   syncAskVersionsDiffer: boolean;
   syncAskSomeoneElse: boolean;
   syncAskLocalOnly: boolean;
+  /** Show what a sync will change (and let files be skipped) before it runs. */
+  syncPreview: boolean;
   /** After a sync, comment on and close issues the deployed commits fix. */
   syncCloseIssues: boolean;
   /** Backups kept per site; older ones are deleted. */
@@ -80,6 +82,7 @@ export const defaultPrefs: Prefs = {
   syncAskSomeoneElse: true,
   syncAskLocalOnly: false,
   syncCloseIssues: true,
+  syncPreview: true,
   backupKeep: 5,
   backupDir: '',
   lastConnection: null,

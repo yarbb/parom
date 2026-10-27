@@ -1,26 +1,15 @@
 <script lang="ts">
   import { connection } from '../lib/connection.svelte';
-  import { formatTime } from '../lib/files';
   import { t } from '../lib/i18n';
   import { sync } from '../lib/sync/engine.svelte';
   import { markerName } from '../lib/sync/marker';
   import Checkbox from './Checkbox.svelte';
   import Modal from './Modal.svelte';
+  import SyncPreview from './SyncPreview.svelte';
 
-  // Boards Dm (track sync state?), Ds (versions differ) and Dp (syncing).
+  // Boards Dm (track sync state?), the direction choice, the preview (Ds) and Dp (syncing).
   let rememberChoice = $state(true);
-  let backup = $state(true);
-  let showDiff = $state(false);
 
-  $effect(() => {
-    if (sync.confirming) {
-      backup = sync.confirming.backup;
-      showDiff = false;
-    }
-  });
-
-  const short = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : '–');
-  const when = (iso: string | undefined) => (iso ? formatTime(Date.parse(iso), Date.now(), true) : '');
 
   async function markerAnswer(choice: 'create' | 'not_now' | 'never') {
     sync.offerMarker = false;
@@ -56,40 +45,26 @@ lock   –</pre>
   </Modal>
 {/if}
 
-{#if sync.confirming && sync.check}
-  {@const c = sync.check}
-  {@const plan = sync.confirming.plan}
-  {@const editedCount = c.edits.edited.length + c.edits.missing.length}
-  <Modal title={t('sync.versions_differ')} onCancel={() => (sync.confirming = null)}>
-    <p>{t('sync.differ.body')}</p>
-    <dl class="versions">
-      <dt>{t('sync.server')}</dt>
-      <dd class="mono">{short(c.marker?.sha)}{c.marker?.who ? ` · ${t('sync.differ.synced_by', { who: c.marker.who })}` : ''}{c.marker?.when ? ` · ${when(c.marker.when)}` : ''}</dd>
-      <dt>{t('sync.local')}</dt>
-      <dd class="mono">{short(c.repo.head)}{c.repo.head_time ? ` · ${when(new Date(c.repo.head_time * 1000).toISOString())}` : ''}</dd>
-    </dl>
-    <p class="counts">
-      <span>{t('sync.differ.upload', { count: plan.upload.length })}</span>
-      {#if plan.removedInRepo.length}<span class="status-removed">{t('sync.differ.removed', { count: plan.removedInRepo.length })}</span>{/if}
-      {#if editedCount}<span class="status-modified">{t('sync.edited_on_server', { count: editedCount })}</span>{/if}
-      {#if plan.protectedSkipped.length}<span class="muted">{t('sync.differ.protected', { count: plan.protectedSkipped.length })}</span>{/if}
-    </p>
-    {#if showDiff}
-      <ul class="mono files">
-        {#each c.edits.edited as p (p)}<li class="status-modified">{t('sync.differ.tag_edited')} {p}</li>{/each}
-        {#each c.edits.missing as p (p)}<li class="status-modified">{t('sync.differ.tag_missing')} {p}</li>{/each}
-        {#each plan.upload as p (p)}<li>↑ {p}</li>{/each}
-        {#each plan.removedInRepo as p (p)}<li class="status-removed">{t('sync.differ.tag_removed')} {p}</li>{/each}
-        {#each plan.protectedSkipped as p (p)}<li class="muted">{t('sync.differ.tag_protected')} {p}</li>{/each}
-      </ul>
-    {/if}
-    <Checkbox bind:checked={backup} label={t('sync.backup_first')} />
+{#if sync.choosing && sync.check}
+  <Modal title={t('sync.choose.title', { server: sync.check.site.name })} onCancel={() => (sync.choosing = false)}>
+    <div class="choices">
+      <button class="choice" onclick={() => ((sync.choosing = false), sync.start())}>
+        <b>{t('sync.choose.deploy')}</b>
+        <span class="muted">{t('sync.choose.deploy_body')}</span>
+      </button>
+      <button class="choice" onclick={() => sync.startPull()}>
+        <b>{t('sync.choose.pull')}</b>
+        <span class="muted">{t('sync.choose.pull_body')}</span>
+      </button>
+    </div>
     {#snippet actions()}
-      <button class="control" onclick={() => (sync.confirming = null)}>{t('common.cancel')}</button>
-      <button class="control" onclick={() => (showDiff = !showDiff)}>{t('sync.show_differences')}</button>
-      <button class="control primary" onclick={() => sync.confirming && sync.execute(sync.confirming.plan, backup)}>{t('sync.sync_anyway')}</button>
+      <button class="control" onclick={() => (sync.choosing = false)}>{t('common.cancel')}</button>
     {/snippet}
   </Modal>
+{/if}
+
+{#if sync.preview}
+  <SyncPreview preview={sync.preview} />
 {/if}
 
 {#if sync.run}
@@ -140,35 +115,32 @@ lock   –</pre>
     overflow: auto;
   }
 
-  .versions {
-    display: grid;
-    grid-template-columns: max-content 1fr;
-    gap: 4px 12px;
-    margin: 0 0 10px;
-  }
-
-  dt {
-    color: var(--muted);
-  }
-
-  dd {
-    margin: 0;
-  }
-
-  .counts {
+  .choices {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px 14px;
+    flex-direction: column;
+    gap: 8px;
   }
 
-  .files {
-    max-height: 180px;
-    overflow: auto;
-    margin: 0 0 12px;
-    padding-left: 4px;
-    list-style: none;
-    font-size: 11.5px;
-    word-break: break-all;
+  .choice {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-control);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .choice:hover {
+    border-color: var(--selected-mark);
+  }
+
+  .choice b {
+    color: var(--text-strong);
   }
 
   .steps {

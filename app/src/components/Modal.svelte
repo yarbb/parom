@@ -6,9 +6,11 @@
     onCancel: () => void;
     children: Snippet;
     actions: Snippet;
+    /** For dialogs with lists (sync preview). */
+    wide?: boolean;
   }
 
-  let { title, onCancel, children, actions }: Props = $props();
+  let { title, onCancel, children, actions, wide = false }: Props = $props();
   let dialog: HTMLDivElement;
 
   $effect(() => {
@@ -29,7 +31,7 @@
 </script>
 
 <div class="backdrop">
-  <div class="dialog" role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={dialog} {onkeydown}>
+  <div class="dialog" class:wide role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={dialog} {onkeydown}>
     <h2>{title}</h2>
     <div class="body">{@render children()}</div>
     <div class="actions">{@render actions()}</div>
@@ -55,6 +57,10 @@
     border-radius: 6px;
     background: var(--panel);
     outline: none;
+  }
+
+  .dialog.wide {
+    width: 640px;
   }
 
   h2 {
