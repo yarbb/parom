@@ -3,6 +3,7 @@
   export type FileOp =
     | { kind: 'rename'; name: string; onSubmit: (name: string) => void }
     | { kind: 'mkdir'; onSubmit: (name: string) => void }
+    | { kind: 'mkfile'; onSubmit: (name: string) => void }
     | { kind: 'delete'; names: string[]; remote: boolean; onSubmit: () => void };
 </script>
 
@@ -43,7 +44,7 @@
   }
 
   const title = $derived(
-    op.kind === 'rename' ? t('fileop.rename.title') : op.kind === 'mkdir' ? t('fileop.mkdir.title') : t('fileop.delete.title'),
+    op.kind === 'rename' ? t('fileop.rename.title') : op.kind === 'mkdir' ? t('fileop.mkdir.title') : op.kind === 'mkfile' ? t('fileop.mkfile.title') : t('fileop.delete.title'),
   );
 </script>
 

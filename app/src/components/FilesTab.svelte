@@ -2,7 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { connection } from '../lib/connection.svelte';
   import { edits } from '../lib/edits.svelte';
-  import { localJoin } from '../lib/files';
+  import { localJoin, splitAddress } from '../lib/files';
   import { t } from '../lib/i18n';
   import { credentialKey, recentLabel } from '../lib/recent';
   import { prefs } from '../lib/prefs.svelte';
@@ -190,6 +190,22 @@
     return () => (connection.onTransferDone = null);
   });
 
+  // "host:port" or "user@host" pasted into the host field: the port and the
+  // user move to their own fields; the protocol prefix stays in the host.
+  function tidyHost() {
+    const a = splitAddress(host);
+    if (!a || (!a.port && !a.user)) {
+      return;
+    }
+    host = a.protocol ? `${a.protocol}://${a.host}` : a.host;
+    if (a.port) {
+      port = String(a.port);
+    }
+    if (a.user && !user.trim()) {
+      user = a.user;
+    }
+  }
+
   function submit(e: SubmitEvent) {
     e.preventDefault();
     if (connected) {
@@ -228,7 +244,7 @@
 
 <div class="view" class:hidden={!visible}>
 <form class="connect" onsubmit={submit}>
-  <input class="field mono host" placeholder={t('files.connect.host')} aria-label={t('files.connect.host')} disabled={connected || busy} bind:value={host} />
+  <input class="field mono host" placeholder={t('files.connect.host')} aria-label={t('files.connect.host')} disabled={connected || busy} bind:value={host} onblur={tidyHost} onpaste={() => setTimeout(tidyHost)} />
   <input class="field mono user" placeholder={t('files.connect.user')} aria-label={t('files.connect.user')} disabled={connected || busy} bind:value={user} />
   <input
     class="field mono password"

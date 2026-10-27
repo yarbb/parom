@@ -196,3 +196,14 @@ describe('two-way sync', () => {
     expect(groups[1].items.map((i) => i.path)).toEqual(['a/x.lua', 'a/y.lua']);
   });
 });
+
+describe('sync folders chosen per site', () => {
+  it('limits managed paths to the chosen top-level folders', () => {
+    const rules = { ...parseRules(''), within: ['addons', 'lua'] };
+    expect(classify('addons/x/init.lua', rules)).toBe('managed');
+    expect(classify('lua/autorun/a.lua', rules)).toBe('managed');
+    expect(classify('maps/gm_x.bsp', rules)).toBe('unmanaged');
+    expect(classify('addonsfoo/a.lua', rules)).toBe('unmanaged');
+    expect(classify('maps/gm_x.bsp', { ...rules, within: [] })).toBe('managed');
+  });
+});

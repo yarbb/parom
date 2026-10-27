@@ -4,7 +4,10 @@
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
   import { deleteSecret, setSecret } from '../lib/secrets';
-  import { newSite, protocols, siteSecretKey, sites, type Site } from '../lib/sites.svelte';
+  import { newSite, protocols, siteSecretKey, sites, type Protocol, type Site } from '../lib/sites.svelte';
+  import { splitAddress } from '../lib/files';
+  import { git } from '../lib/sync/host';
+  import { sync } from '../lib/sync/engine.svelte';
   import Checkbox from './Checkbox.svelte';
 
   // Board Sm: a tree of sites and folders on the left, the selected site's
@@ -111,6 +114,12 @@
         }
       }
       await sites.save(folders, $state.snapshot(list) as Site[]);
+      // The connected site picks up its new settings (remote folder, sync folders).
+      const current = connection.site && sites.list.find((x) => x.id === connection.site?.id);
+      if (current) {
+        connection.site = current;
+        void sync.refresh();
+      }
       return true;
     } catch (e) {
       error = String((e as Error).message ?? e);
@@ -145,6 +154,62 @@
   }
 
   const port = (v: string) => (v.trim() === '' ? undefined : Number(v));
+
+  // Top-level entries of the site's repository, for "Folders to sync".
+  let topLevel = $state<{ name: string; dir: boolean }[]>([]);
+  $effect(() => {
+    const dir = site?.localDir.trim() ?? '';
+    topLevel = [];
+    if (!dir || tab !== 'sync') {
+      return;
+    }
+    git
+      .tree(dir, 'HEAD')
+      .then((files) => {
+        const seen = new Map<string, boolean>();
+        for (const f of files) {
+          const i = f.path.indexOf('/');
+          const name = i < 0 ? f.path : f.path.slice(0, i);
+          seen.set(name, (seen.get(name) ?? false) || i >= 0);
+        }
+        topLevel = [...seen.entries()]
+          .map(([name, isDir]) => ({ name, dir: isDir }))
+          .filter((e) => !e.name.startsWith('.git'))
+          .sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name));
+      })
+      .catch(() => (topLevel = []));
+  });
+
+  function toggleSyncPath(s: Site, name: string, on: boolean) {
+    const current = new Set(s.syncPaths ?? []);
+    if (on) {
+      current.add(name);
+    } else {
+      current.delete(name);
+    }
+    s.syncPaths = [...current].sort();
+  }
+
+  /** A pasted "ftp://user@host:21/dir" fills protocol, user, host, port and remote folder. */
+  function tidyHost(s: Site) {
+    const a = splitAddress(s.host);
+    if (!a) {
+      return;
+    }
+    if (a.protocol && (protocols as string[]).includes(a.protocol)) {
+      s.protocol = a.protocol as Protocol;
+    }
+    s.host = a.host;
+    if (a.port) {
+      s.port = a.port;
+    }
+    if (a.user && !s.user) {
+      s.user = a.user;
+    }
+    if (a.path && a.path !== '/' && !s.remoteDir.trim()) {
+      s.remoteDir = a.path;
+    }
+  }
 </script>
 
 <div class="backdrop">
@@ -211,7 +276,7 @@
                 </select>
               </label>
               <div class="row2">
-                <label class="grow"><span>{t('files.connect.host')}</span><input class="field mono" bind:value={site.host} /></label>
+                <label class="grow"><span>{t('files.connect.host')}</span><input class="field mono" bind:value={site.host} onblur={() => site && tidyHost(site)} onpaste={() => setTimeout(() => site && tidyHost(site))} /></label>
                 <label class="small"><span>{t('files.connect.port')}</span>
                   <input class="field mono" inputmode="numeric" value={site.port ?? ''} oninput={(e) => (site.port = port(e.currentTarget.value))} />
                 </label>
@@ -275,6 +340,21 @@
                 </select>
               </label>
               <label><span>{t('sites.post_sync')}</span><input class="field mono" bind:value={site.postSync} placeholder={t('sites.post_sync_hint')} /></label>
+              <div class="section-label inline">{t('sites.sync_paths')}</div>
+              {#if topLevel.length}
+                {@const s = site}
+                <p class="muted note">{(s.syncPaths ?? []).length ? t('sites.sync_paths_some', { count: (s.syncPaths ?? []).length }) : t('sites.sync_paths_all')}</p>
+                <div class="sync-paths">
+                  {#each topLevel as e (e.name)}
+                    <Checkbox
+                      bind:checked={() => (s.syncPaths ?? []).includes(e.name), (on) => toggleSyncPath(s, e.name, on)}
+                      label={e.dir ? `${e.name}/` : e.name}
+                    />
+                  {/each}
+                </div>
+              {:else}
+                <p class="muted note">{t('sites.sync_paths_no_repo')}</p>
+              {/if}
             {/if}
           </div>
         {:else if selectedFolder !== null}
@@ -506,6 +586,16 @@
 
   .small-input {
     max-width: 90px;
+  }
+
+  .sync-paths {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 6px 12px;
+    max-height: 180px;
+    overflow: auto;
+    font-family: Consolas, 'Cascadia Code', ui-monospace, monospace;
+    font-size: 12px;
   }
 
   .with-button {

@@ -1,6 +1,7 @@
 // The Files tab's connection: one daemon session, its remote listing,
 // questions the engine asks (host key, passwords, file exists) and transfers.
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
+import { invoke } from '@tauri-apps/api/core';
 import { localJoin, parseHost, parseRemoteTime, remoteJoin, type FileRow } from './files';
 import { localMkdir, localWalk } from './local';
 import { t } from './i18n';
@@ -549,6 +550,19 @@ class Connection {
 
   mkdirRemote(name: string): Promise<boolean> {
     return this.#remoteOp((session, path) => call('remote.mkdir', { session, path: remoteJoin(path, name) }));
+  }
+
+  /** Creates an empty file in the current folder (uploads an empty temp file). */
+  mkfileRemote(name: string): Promise<boolean> {
+    return this.#remoteOp(async (session, path) => {
+      if (this.remoteRows.some((r) => r.name === name)) {
+        throw new Error(`${name} already exists`);
+      }
+      const dir = await invoke<string>('edit_new_dir');
+      const local = localJoin(dir, name, dir.includes('\\') ? '\\' : '/');
+      await invoke('write_small_file', { path: local, content: '' });
+      await call('transfer.upload', { session, local, remote_path: path, remote_name: name, exists: 'skip' });
+    });
   }
 
   /** Deletes files and whole folders (contents first, deepest folders last). */

@@ -29,7 +29,7 @@
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let op = $state<FileOp | null>(null);
 
-  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir', rows: FileRow[]) {
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[]) {
     if (!connected) {
       return;
     }
@@ -37,6 +37,8 @@
       void connection.list(connection.remotePath);
     } else if (cmd === 'mkdir') {
       op = { kind: 'mkdir', onSubmit: (name) => void connection.mkdirRemote(name) };
+    } else if (cmd === 'mkfile') {
+      op = { kind: 'mkfile', onSubmit: (name) => void connection.mkfileRemote(name) };
     } else if (cmd === 'rename' && rows.length === 1) {
       const from = rows[0].name;
       op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && void connection.renameRemote(from, to) };
@@ -69,6 +71,7 @@
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
         { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
+        { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         { label: t('fileop.copy_path'), action: () => copyPath(rows) },
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: () => command('refresh', rows) },

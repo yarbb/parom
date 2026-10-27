@@ -85,7 +85,7 @@
     error={engine === 'unavailable'}
     ok={engine === 'ready' && connection.state === 'connected'}
     message={connection.message}
-    version={version ? t('app.version', { name, version }) : ''}
+    version={version ? t('app.version', { name, version }) + (import.meta.env.VITE_BUILD ? ` · ${import.meta.env.VITE_BUILD}` : '') : ''}
   />
 </div>
 {/if}
