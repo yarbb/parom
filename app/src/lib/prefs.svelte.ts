@@ -27,6 +27,8 @@ export interface Prefs {
   existsDefault: ExistsDefault;
   /** Seconds. */
   connectTimeout: number;
+  /** Transfers at once (extra connections to the server); sites that pace requests use one. */
+  simultaneous: number;
   /** Open the session again when the server drops it. */
   autoReconnect: boolean;
   /** Program for editing server files; empty uses the system's choice. */
@@ -76,6 +78,7 @@ export const defaultPrefs: Prefs = {
   lastLocalDir: '',
   existsDefault: 'ask',
   connectTimeout: 20,
+  simultaneous: 2,
   autoReconnect: true,
   editorPath: '',
   editUploadOnSave: true,

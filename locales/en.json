@@ -456,5 +456,6 @@
   "log.title": "Log",
   "log.clear": "Clear",
   "log.empty": "No messages yet.",
+  "prefs.simultaneous_hint": "Each extra transfer opens another connection to the server while a batch runs. Sites with a pause between requests (Site Manager → Transfer) always use one.",
   "prefs.auto_reconnect": "Reconnect automatically when the server drops the connection (3 tries)"
 }
