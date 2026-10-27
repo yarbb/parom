@@ -12,6 +12,7 @@
   import { prefs } from './lib/prefs.svelte';
   import { sync } from './lib/sync/engine.svelte';
   import Preferences from './components/Preferences.svelte';
+  import SignInDialogs from './components/SignInDialogs.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
@@ -92,6 +93,7 @@
 {#if ui.preferences}
   <Preferences onClose={() => (ui.preferences = false)} />
 {/if}
+<SignInDialogs />
 
 <style>
   .app {

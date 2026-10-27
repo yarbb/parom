@@ -54,7 +54,7 @@ pub fn status(dir: &str) -> Result<RepoStatus, String> {
 /// True for a file libgit2 calls modified although its content equals the
 /// committed blob once CRLF is turned into LF (or as is). git with
 /// `core.autocrlf` treats these as clean, so GitHub Desktop shows nothing.
-fn only_line_endings(repo: &Repository, head: Option<&git2::Tree<'_>>, path: &str, status: Status) -> bool {
+pub(crate) fn only_line_endings(repo: &Repository, head: Option<&git2::Tree<'_>>, path: &str, status: Status) -> bool {
     if status != Status::WT_MODIFIED {
         return false;
     }

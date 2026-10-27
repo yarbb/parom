@@ -44,6 +44,10 @@ export interface Prefs {
   backupDir: string;
   /** What "Reconnect" connects to: a saved site, or the newest quick connection. */
   lastConnection: { type: 'site'; id: string } | { type: 'quick' } | null;
+  /** Repositories added in the GitHub tab (site repositories are listed anyway). */
+  repos: string[];
+  /** Repository shown in the GitHub tab. */
+  githubRepo: string;
 }
 
 export const defaultPrefs: Prefs = {
@@ -74,6 +78,8 @@ export const defaultPrefs: Prefs = {
   backupKeep: 5,
   backupDir: '',
   lastConnection: null,
+  repos: [],
+  githubRepo: '',
 };
 
 /** Applies the parts of the preferences that change the page itself. */
