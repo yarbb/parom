@@ -42,6 +42,8 @@ export interface Prefs {
   backupKeep: number;
   /** Folder for backups; empty uses the app's data folder. */
   backupDir: string;
+  /** What "Reconnect" connects to: a saved site, or the newest quick connection. */
+  lastConnection: { type: 'site'; id: string } | { type: 'quick' } | null;
 }
 
 export const defaultPrefs: Prefs = {
@@ -71,6 +73,7 @@ export const defaultPrefs: Prefs = {
   syncAskLocalOnly: false,
   backupKeep: 5,
   backupDir: '',
+  lastConnection: null,
 };
 
 /** Applies the parts of the preferences that change the page itself. */

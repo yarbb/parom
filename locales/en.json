@@ -323,5 +323,8 @@
   "queue.scanning": "{count, plural, one {Scanning folders... # file found} other {Scanning folders... # files found}}",
   "sites.pace": "Pause between requests",
   "sites.pace.none": "None",
-  "sites.pace_hint": "For hosts that refuse connections with \"too many requests\". Each command and transfer waits this long after the previous one."
+  "sites.pace_hint": "For hosts that refuse connections with \"too many requests\". Each command and transfer waits this long after the previous one.",
+  "dialog.insecure.remember": "Do not ask again for this server",
+  "prefs.plain_ftp": "unencrypted FTP allowed",
+  "files.reconnect": "Reconnect"
 }

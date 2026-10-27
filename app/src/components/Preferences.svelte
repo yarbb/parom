@@ -236,7 +236,7 @@
           <div class="section-label inline">{t('prefs.trusted_hosts')}</div>
           {#each trusted as e (e.key)}
             <div class="row list-row">
-              <span class="grow mono">{e.host}:{e.port} <span class="muted">{e.kind === 'ssh' ? 'SSH' : 'TLS'}</span></span>
+              <span class="grow mono">{e.host}:{e.port} <span class="muted">{e.kind === 'ssh' ? 'SSH' : e.kind === 'tls' ? 'TLS' : t('prefs.plain_ftp')}</span></span>
               <span class="mono muted fp" title={e.fingerprint}>{e.fingerprint}</span>
               <button class="control small" onclick={() => forget(e)}>{t('prefs.forget')}</button>
             </div>

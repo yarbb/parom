@@ -75,6 +75,15 @@ def main():
     assert len(d.seen["insecure_connection"]) == asked + 1, d.seen["insecure_connection"][asked:]
     d.ok("session.close", {"session": sid})
 
+    # "Do not ask again for this server": remembered per host and port.
+    d.answers["insecure_connection"] = lambda p: {"allow": True, "remember": True}
+    sid = d.ok("session.open", dict(ftp, protocol="ftp-insecure"))["session"]
+    d.ok("session.close", {"session": sid})
+    asked = len(d.seen["insecure_connection"])
+    sid = d.ok("session.open", dict(ftp, protocol="ftp-insecure"))["session"]
+    assert len(d.seen["insecure_connection"]) == asked, "remembered host was asked again"
+    d.ok("session.close", {"session": sid})
+
     # FTPES against a server without TLS fails instead of falling back.
     d.error("session.open", dict(ftp, protocol="ftpes"), -32000)
 
