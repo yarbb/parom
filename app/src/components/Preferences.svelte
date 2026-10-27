@@ -7,6 +7,8 @@
   import { availableLocales, currentLocale, t } from '../lib/i18n';
   import { prefs, type Prefs } from '../lib/prefs.svelte';
   import Checkbox from './Checkbox.svelte';
+  import Select from './Select.svelte';
+  import Modal from './Modal.svelte';
   import { sites } from '../lib/sites.svelte';
   import { host } from '../lib/sync/host';
   import { openInEditor } from '../lib/local';
@@ -22,26 +24,37 @@
     | 'interface' | 'language' | 'file_lists' | 'file_editing'
     | 'sftp_keys' | 'transfers' | 'timeouts'
     | 'account' | 'repositories' | 'marker_history'
-    | 'logging' | 'updates';
+    | 'logging' | 'updates' | 'shortcuts';
 
   const groups: { title: string; pages: Page[] }[] = [
     { title: 'prefs.group.general', pages: ['interface', 'language', 'file_lists', 'file_editing'] },
     { title: 'prefs.group.connection', pages: ['sftp_keys', 'transfers', 'timeouts'] },
     { title: 'prefs.group.github', pages: ['account', 'repositories'] },
     { title: 'prefs.group.sync', pages: ['marker_history'] },
-    { title: 'prefs.group.advanced', pages: ['logging', 'updates'] },
+    { title: 'prefs.group.advanced', pages: ['shortcuts', 'logging', 'updates'] },
   ];
   const pageKey: Record<Page, string> = {
     interface: 'prefs.interface', language: 'prefs.language', file_lists: 'prefs.file_lists', file_editing: 'prefs.file_editing',
     sftp_keys: 'prefs.sftp_keys', transfers: 'prefs.transfers', timeouts: 'prefs.timeouts',
     account: 'prefs.account', repositories: 'prefs.repositories', marker_history: 'prefs.marker_history',
-    logging: 'prefs.logging', updates: 'prefs.updates',
+    logging: 'prefs.logging', updates: 'prefs.updates', shortcuts: 'prefs.shortcuts',
   };
   const later: Partial<Record<Page, string>> = {
     logging: 'prefs.later.logging',
   };
 
   let page = $state<Page>('interface');
+  const accents = ['neutral', 'blue', 'green', 'purple', 'orange', 'pink', 'teal'] as const;
+  /** Dark-theme shade of each accent, for the little sample next to the list. */
+  const swatch: Record<(typeof accents)[number], string> = {
+    neutral: 'var(--text-strong)',
+    blue: '#4f9dff',
+    green: '#3fb950',
+    purple: '#a78bfa',
+    orange: '#f0883e',
+    pink: '#f472b6',
+    teal: '#2dd4bf',
+  };
   let customEditor = $state(prefs.value.editorPath !== '');
 
   async function browseEditor() {
@@ -128,12 +141,46 @@
     }
   }
 
-  function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
+  // Closing with unsaved changes asks first (Escape, the cross, a click outside).
+  let confirmClose = $state(false);
+  const dirty = () => JSON.stringify($state.snapshot(draft)) !== JSON.stringify($state.snapshot(prefs.value));
+
+  function requestClose() {
+    if (dirty()) {
+      confirmClose = true;
+    } else {
       onClose();
     }
   }
+
+  let pressedOutside = false;
+
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !confirmClose) {
+      e.preventDefault();
+      requestClose();
+    }
+  }
+
+  /** Every shortcut, for the Keyboard shortcuts page. */
+  const shortcuts: [string, string][] = [
+    ['Ctrl+S', 'menu.site_manager'],
+    ['Ctrl+,', 'menu.preferences'],
+    ['Ctrl+1 / Ctrl+2', 'prefs.keys.tabs'],
+    ['Ctrl+L', 'log.title'],
+    ['Ctrl+R', 'menu.reconnect'],
+    ['Ctrl+D', 'common.disconnect'],
+    ['Ctrl+= / Ctrl+- / Ctrl+0', 'prefs.keys.zoom'],
+    ['Enter', 'prefs.keys.enter'],
+    ['Backspace', 'prefs.keys.up'],
+    ['F2', 'fileop.rename.title'],
+    ['Delete', 'prefs.keys.delete'],
+    ['F5', 'files.refresh'],
+    ['Ctrl+A', 'menu.select_all'],
+    ['Shift / Ctrl + click', 'prefs.keys.select'],
+    ['Shift + drag', 'prefs.keys.move'],
+    ['Escape', 'prefs.keys.escape'],
+  ];
 
   const num = (v: string, fallback: number) => {
     const n = Number(v);
@@ -141,11 +188,16 @@
   };
 </script>
 
-<div class="backdrop">
+<div
+  class="backdrop"
+  role="presentation"
+  onmousedown={(e) => (pressedOutside = e.target === e.currentTarget)}
+  onclick={(e) => e.target === e.currentTarget && pressedOutside && requestClose()}
+>
   <div class="window" role="dialog" aria-modal="true" aria-label={t('prefs.title')} tabindex="-1" {onkeydown}>
     <header>
       <h2>{t('prefs.title')}</h2>
-      <button class="close" aria-label={t('common.cancel')} onclick={onClose}>✕</button>
+      <button class="close" aria-label={t('common.cancel')} onclick={requestClose}>✕</button>
     </header>
     <div class="body">
       <nav>
@@ -171,30 +223,23 @@
             </span>
           </div>
           <label class="row"><span>{t('prefs.density')}</span>
-            <select class="field" bind:value={draft.density}>
-              <option value="comfortable">{t('prefs.density.comfortable')}</option>
-              <option value="compact">{t('prefs.density.compact')}</option>
-            </select>
+            <Select bind:value={draft.density} options={[{ value: 'comfortable', label: t('prefs.density.comfortable') }, { value: 'compact', label: t('prefs.density.compact') }]} />
           </label>
           <label class="row"><span>{t('prefs.size_units')}</span>
-            <select class="field" bind:value={draft.sizeUnits}>
-              <option value="binary">{t('prefs.size_units.binary')}</option>
-              <option value="decimal">{t('prefs.size_units.decimal')}</option>
-            </select>
+            <Select bind:value={draft.sizeUnits} options={[{ value: 'binary', label: t('prefs.size_units.binary') }, { value: 'decimal', label: t('prefs.size_units.decimal') }]} />
           </label>
           <label class="row"><span>{t('prefs.font_size')}</span>
-            <select class="field" bind:value={draft.fontScale}>
-              {#each [90, 100, 110, 125, 150] as s (s)}<option value={s}>{s}%</option>{/each}
-            </select>
+            <Select bind:value={draft.fontScale} options={[80, 90, 100, 110, 125, 150, 175].map((s) => ({ value: s, label: `${s}%` }))} />
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.hideAddress} label={t('prefs.hide_address')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
-          <div class="row"><span>{t('prefs.accent')}</span><select class="field" disabled><option>{t('prefs.accent.neutral')}</option></select></div>
+          <label class="row"><span>{t('prefs.accent')}</span>
+            <Select bind:value={draft.accent} options={accents.map((a) => ({ value: a, label: t(`prefs.accent.${a}`) }))} />
+            <span class="swatch" style:background={swatch[draft.accent]} aria-hidden="true"></span>
+          </label>
         {:else if page === 'language'}
           <label class="row"><span>{t('prefs.language')}</span>
-            <select class="field" bind:value={draft.language}>
-              {#each locales as l (l.code)}<option value={l.code}>{l.name}</option>{/each}
-            </select>
+            <Select bind:value={draft.language} options={locales.map((l) => ({ value: l.code, label: l.name }))} />
           </label>
           <div class="section-label inline">{t('prefs.translations')}</div>
           {#each locales as l (l.code)}
@@ -205,16 +250,10 @@
           <div class="row"><span></span><Checkbox bind:checked={draft.foldersFirst} label={t('prefs.folders_first')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.caseSensitive} label={t('prefs.case_sensitive')} /></div>
           <label class="row"><span>{t('prefs.date_format')}</span>
-            <select class="field" bind:value={draft.dateFormat}>
-              <option value="short">Oct 26</option>
-              <option value="iso">2026-10-26 12:04</option>
-            </select>
+            <Select bind:value={draft.dateFormat} options={[{ value: 'short', label: 'Oct 26' }, { value: 'iso', label: '2026-10-26 12:04' }]} />
           </label>
           <label class="row"><span>{t('prefs.double_click')}</span>
-            <select class="field" bind:value={draft.doubleClick}>
-              <option value="transfer">{t('prefs.double_click.transfer')}</option>
-              <option value="nothing">{t('prefs.double_click.nothing')}</option>
-            </select>
+            <Select bind:value={draft.doubleClick} options={[{ value: 'transfer', label: t('prefs.double_click.transfer') }, { value: 'nothing', label: t('prefs.double_click.nothing') }]} />
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.rememberDirs} label={t('prefs.remember_dirs')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
@@ -247,14 +286,10 @@
           <div class="row"><span></span><Checkbox checked={false} disabled label={t('prefs.ssh_agent')} /></div>
         {:else if page === 'transfers'}
           <label class="row"><span>{t('prefs.exists_default')}</span>
-            <select class="field" bind:value={draft.existsDefault}>
-              {#each ['ask', 'overwrite', 'overwrite_newer', 'skip'] as a (a)}<option value={a}>{t(`sites.exists.${a}`)}</option>{/each}
-            </select>
+            <Select bind:value={draft.existsDefault} options={(['ask', 'overwrite', 'overwrite_newer', 'skip'] as const).map((a) => ({ value: a, label: t(`sites.exists.${a}`) }))} />
           </label>
           <label class="row"><span>{t('prefs.simultaneous')}</span>
-            <select class="field" bind:value={draft.simultaneous}>
-              {#each [1, 2, 3, 4, 5] as n (n)}<option value={n}>{n}</option>{/each}
-            </select>
+            <Select bind:value={draft.simultaneous} options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))} />
           </label>
           <p class="muted">{t('prefs.simultaneous_hint')}</p>
           <div class="row"><span></span><Checkbox checked={false} disabled label={t('prefs.temp_upload')} /></div>
@@ -312,9 +347,7 @@
           <div class="row"><span></span><Checkbox bind:checked={draft.syncBackup} label={t('prefs.backup_first')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncCloseIssues} label={t('prefs.close_issues')} /></div>
           <label class="row"><span>{t('prefs.backup_keep')}</span>
-            <select class="field" bind:value={draft.backupKeep}>
-              {#each [1, 3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}
-            </select>
+            <Select bind:value={draft.backupKeep} options={[1, 3, 5, 10, 20].map((n) => ({ value: n, label: String(n) }))} />
           </label>
           <label class="row"><span>{t('prefs.backup_folder')}</span>
             <input class="field mono grow" placeholder={defaultBackups} bind:value={draft.backupDir} />
@@ -329,9 +362,11 @@
           {#each sites.list as s (s.id)}
             <label class="row list-row">
               <span class="grow">{s.name}</span>
-              <select class="field" value={s.marker} onchange={(e) => setMarker(s.id, e.currentTarget.value as 'ask' | 'on' | 'off')}>
-                {#each ['ask', 'on', 'off'] as m (m)}<option value={m}>{t(`sites.marker.${m}`)}</option>{/each}
-              </select>
+              <Select
+                value={s.marker}
+                options={(['ask', 'on', 'off'] as const).map((m) => ({ value: m, label: t(`sites.marker.${m}`) }))}
+                onchange={(v) => setMarker(s.id, v)}
+              />
             </label>
           {:else}
             <p class="muted">{t('sites.empty')}</p>
@@ -342,6 +377,14 @@
           </div>
         {:else if page === 'logging'}
           <div class="row"><span></span><Checkbox checked={true} disabled label={t('prefs.write_log')} /></div>
+        {:else if page === 'shortcuts'}
+          <dl class="keys">
+            {#each shortcuts as [keys, what] (keys)}
+              <dt class="mono">{keys}</dt>
+              <dd>{t(what)}</dd>
+            {/each}
+          </dl>
+          <p class="muted">{t('prefs.keys.later')}</p>
         {:else if page === 'updates'}
           <div class="row"><span>{t('prefs.current_version')}</span><span class="mono">v{version}</span></div>
           <p class="muted">{t('prefs.updates_source')}</p>
@@ -358,6 +401,17 @@
   </div>
 </div>
 
+{#if confirmClose}
+  <Modal title={t('prefs.unsaved.title')} onCancel={() => (confirmClose = false)}>
+    <p>{t('prefs.unsaved.body')}</p>
+    {#snippet actions()}
+      <button class="control" onclick={() => (confirmClose = false)}>{t('common.cancel')}</button>
+      <button class="control" onclick={() => ((confirmClose = false), onClose())}>{t('prefs.unsaved.discard')}</button>
+      <button class="control primary" onclick={() => ((confirmClose = false), ok())}>{t('prefs.unsaved.save')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
 <style>
   .backdrop {
     position: fixed;
@@ -367,6 +421,22 @@
     justify-content: center;
     background: rgb(0 0 0 / 0.55);
     z-index: 10;
+    animation: fade-in var(--motion) ease-out;
+  }
+
+  .keys {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 18px;
+    margin: 0 0 14px;
+  }
+
+  .keys dt {
+    color: var(--text-strong);
+  }
+
+  .keys dd {
+    margin: 0;
   }
 
   .window {
@@ -380,6 +450,8 @@
     border-radius: 6px;
     background: var(--panel);
     outline: none;
+    animation: pop-in var(--motion) ease-out;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
   }
 
   header,
@@ -564,7 +636,11 @@
     white-space: nowrap;
   }
 
-  select.field {
-    height: 28px;
+  .swatch {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    border-radius: 50%;
+    border: 1px solid var(--line-control);
   }
 </style>

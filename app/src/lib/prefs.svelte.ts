@@ -10,6 +10,8 @@ import { applyTheme, type ThemeChoice } from './theme';
 export interface Prefs {
   theme: ThemeChoice;
   density: 'comfortable' | 'compact';
+  /** Colour of selection marks, focus and primary buttons. */
+  accent: 'neutral' | 'blue' | 'green' | 'purple' | 'orange' | 'pink' | 'teal';
   sizeUnits: 'binary' | 'decimal';
   /** Percent of the normal UI size. */
   fontScale: number;
@@ -64,6 +66,8 @@ export interface Prefs {
   queueHeight: number;
   /** Show the queue while the log is open (otherwise a status bar button opens it). */
   queueWithLog: boolean;
+  /** Folder colour labels by folder key (lib/labels.ts). */
+  folderLabels: Record<string, string>;
   /** Passwords from the app's old name were copied (once). */
   secretsMigrated: boolean;
   /** Repository shown in the GitHub tab. */
@@ -73,6 +77,7 @@ export interface Prefs {
 export const defaultPrefs: Prefs = {
   theme: 'system',
   density: 'comfortable',
+  accent: 'neutral',
   sizeUnits: 'binary',
   fontScale: 100,
   hideAddress: false,
@@ -106,6 +111,7 @@ export const defaultPrefs: Prefs = {
   hiddenRepos: [],
   githubRepo: '',
   secretsMigrated: false,
+  folderLabels: {},
   paneSplit: 50,
   logHeight: 190,
   queueHeight: 160,
@@ -117,6 +123,11 @@ export function applyPrefs(p: Prefs): void {
   applyTheme(p.theme);
   const root = document.documentElement;
   root.dataset.density = p.density;
+  if (p.accent === 'neutral') {
+    delete root.dataset.accent;
+  } else {
+    root.dataset.accent = p.accent;
+  }
   // Webview zoom (like Ctrl+wheel in a browser) scales everything and keeps
   // vw/vh and mouse coordinates consistent, so dialogs still fit the window.
   if (isTauri()) {
@@ -164,3 +175,8 @@ class PrefsStore {
 }
 
 export const prefs = new PrefsStore();
+
+/** Largest height for the log or queue so the file panes keep room (the other panel open counts). */
+export function bottomPanelMax(other: number): number {
+  return Math.max(80, window.innerHeight - 360 - other);
+}

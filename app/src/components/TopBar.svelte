@@ -23,7 +23,8 @@
 <!-- The window's title bar: drag it by any empty spot (or the name),
      double-click to maximize. Buttons and menus stay clickable. -->
 <header data-tauri-drag-region>
-  <b class="brand mono" data-tauri-drag-region>{name}</b>
+  <!-- "_" before the name, like the "_P" app icon. -->
+  <b class="brand mono" data-tauri-drag-region><span class="prompt" data-tauri-drag-region>_</span>{name}</b>
   <MenuBar bind:hideAddress />
   <div class="tabs" role="tablist">
     <button role="tab" class="tab" class:active={tab === 'files'} aria-selected={tab === 'files'} onclick={() => onTab('files')}>
@@ -75,6 +76,11 @@
   .brand {
     margin-right: 10px;
     user-select: none;
+  }
+
+  .prompt {
+    margin-right: 1px;
+    color: var(--accent);
   }
 
   .tabs {

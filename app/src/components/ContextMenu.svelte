@@ -68,6 +68,8 @@
 
 <style>
   .menu {
+    animation: pop-in var(--motion) ease-out;
+    transform-origin: top left;
     position: fixed;
     min-width: 200px;
     padding: 4px 0;

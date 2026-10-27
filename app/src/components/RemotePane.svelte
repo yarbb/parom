@@ -7,6 +7,8 @@
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileList from './FileList.svelte';
   import { paneDrag } from '../lib/panedrag.svelte';
+  import { labelColors, labelOf, remoteLabelKey } from '../lib/labels';
+  import LabelPicker from './LabelPicker.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
 
   interface Props {
@@ -30,6 +32,13 @@
 
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let op = $state<FileOp | null>(null);
+  let labeling = $state<{ keys: string[]; names: string[] } | null>(null);
+  /** Labels belong to a server: the saved site, or the address of a quick connection. */
+  const server = $derived(connection.site?.id ?? connection.label);
+  const folderLabel = (row: FileRow) => {
+    const c = labelOf(remoteLabelKey(server, remoteJoin(connection.remotePath, row.name)));
+    return c ? labelColors[c] : null;
+  };
 
   function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[]) {
     if (!connected) {
@@ -74,6 +83,14 @@
         { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
+        {
+          label: t('labels.menu'),
+          disabled: !rows.some((r) => r.dir),
+          action: () => {
+            const dirs = rows.filter((r) => r.dir);
+            labeling = { keys: dirs.map((r) => remoteLabelKey(server, remoteJoin(connection.remotePath, r.name))), names: dirs.map((r) => r.name) };
+          },
+        },
         { label: t('fileop.copy_path'), action: () => copyPath(rows) },
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: () => command('refresh', rows) },
@@ -106,6 +123,9 @@
     onUp={() => parent && connection.list(parent)}
     onOpenDir={(row) => connection.list(remoteJoin(connection.remotePath, row.name))}
     onActivate={download}
+    folder={connection.remotePath}
+    labelOf={folderLabel}
+    unscanned={(row) => row.dir && !connection.listed.has(remoteJoin(connection.remotePath, row.name))}
     dragFrom="server"
     bind:selected
     loading={connection.remoteLoading}
@@ -121,4 +141,7 @@
 {/if}
 {#if op}
   <FileOpDialog {op} onClose={() => (op = null)} />
+{/if}
+{#if labeling}
+  <LabelPicker keys={labeling.keys} names={labeling.names} onClose={() => (labeling = null)} />
 {/if}

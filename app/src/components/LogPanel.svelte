@@ -2,7 +2,8 @@
   import { tick } from 'svelte';
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
-  import { prefs } from '../lib/prefs.svelte';
+  import { bottomPanelMax, prefs } from '../lib/prefs.svelte';
+  import { ui } from '../lib/ui.svelte';
   import Splitter from './Splitter.svelte';
 
   // The engine's message log (status, commands, server replies, errors),
@@ -10,6 +11,8 @@
   let { onClose }: { onClose: () => void } = $props();
 
   let box: HTMLDivElement;
+  /** The queue is shown below the log only when asked for. */
+  const queueOpen = $derived(connection.transfers.length > 0 && prefs.value.queueWithLog && ui.log);
   let follow = true;
   // Repeats in a row (keep-alive and the like) fold into one line with a count.
   let lines = $derived.by(() => {
@@ -28,7 +31,7 @@
   });
 
   const resize = (delta: number) => {
-    prefs.value.logHeight = Math.max(80, Math.min(window.innerHeight - 220, prefs.value.logHeight - delta));
+    prefs.value.logHeight = Math.max(80, Math.min(bottomPanelMax(queueOpen ? prefs.value.queueHeight : 0), prefs.value.logHeight - delta));
   };
 
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -62,7 +65,7 @@
   onEnd={() => prefs.persist()}
   onReset={() => prefs.set('logHeight', 190)}
 />
-<section class="log" aria-label={t('log.title')} style:height="{prefs.value.logHeight}px">
+<section class="log" aria-label={t('log.title')} style:height="{prefs.value.logHeight}px" style:max-height="calc(100vh - 360px)">
   <div class="section-label head">
     <span>{t('log.title')}</span>
     <span class="buttons">
