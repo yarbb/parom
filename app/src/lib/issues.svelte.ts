@@ -13,6 +13,8 @@ export interface Item {
   title: string;
   state: 'open' | 'closed';
   body: string | null;
+  /** Markdown rendered by GitHub (requested with `html`). */
+  body_html?: string | null;
   user: { login: string } | null;
   labels: Label[];
   assignees: { login: string }[];
@@ -43,6 +45,7 @@ export interface Comment {
   id: number;
   user: { login: string } | null;
   body: string;
+  body_html?: string | null;
   created_at: string;
 }
 
@@ -58,16 +61,16 @@ export interface CheckRun {
 const repoPath = (slug: string) => `/repos/${slug}`;
 
 export async function listItems(slug: string, kind: Kind, state: 'open' | 'closed'): Promise<Item[]> {
-  const items = await api<Item[]>('GET', `${repoPath(slug)}/${kind}?state=${state}&per_page=100&sort=updated&direction=desc`);
+  const items = await api<Item[]>('GET', `${repoPath(slug)}/${kind}?state=${state}&per_page=100&sort=updated&direction=desc`, undefined, true);
   return kind === 'issues' ? items.filter((i) => !i.pull_request) : items;
 }
 
-export const getPull = (slug: string, n: number) => api<PullDetail>('GET', `${repoPath(slug)}/pulls/${n}`);
+export const getPull = (slug: string, n: number) => api<PullDetail>('GET', `${repoPath(slug)}/pulls/${n}`, undefined, true);
 
-export const listComments = (slug: string, n: number) => api<Comment[]>('GET', `${repoPath(slug)}/issues/${n}/comments?per_page=100`);
+export const listComments = (slug: string, n: number) => api<Comment[]>('GET', `${repoPath(slug)}/issues/${n}/comments?per_page=100`, undefined, true);
 
 export const addComment = (slug: string, n: number, body: string) =>
-  api<Comment>('POST', `${repoPath(slug)}/issues/${n}/comments`, { body });
+  api<Comment>('POST', `${repoPath(slug)}/issues/${n}/comments`, { body }, true);
 
 export const setState = (slug: string, kind: Kind, n: number, state: 'open' | 'closed') =>
   api<Item>('PATCH', `${repoPath(slug)}/${kind}/${n}`, { state });

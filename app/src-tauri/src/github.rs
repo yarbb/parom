@@ -67,14 +67,15 @@ fn status_error(code: u16, resp: ureq::Response) -> ApiError {
 }
 
 /// One REST call: `path` is relative to api.github.com and must start with "/".
-pub fn api(user_agent: &str, token: &str, method: &str, path: &str, body: Option<Value>) -> Result<Value, ApiError> {
+/// `html` asks for Markdown fields rendered by GitHub as well (`body_html`).
+pub fn api(user_agent: &str, token: &str, method: &str, path: &str, body: Option<Value>, html: bool) -> Result<Value, ApiError> {
     if !path.starts_with('/') || path.contains("://") {
         return Err(ApiError { status: 0, message: format!("bad API path: {path}") });
     }
     let req = agent(user_agent)
         .request(method, &format!("{API}{path}"))
         .set("Authorization", &format!("Bearer {token}"))
-        .set("Accept", "application/vnd.github+json")
+        .set("Accept", if html { "application/vnd.github.full+json" } else { "application/vnd.github+json" })
         .set("X-GitHub-Api-Version", "2022-11-28");
     let result = match body {
         Some(b) => req.send_json(b),
@@ -145,7 +146,7 @@ pub fn device_poll(user_agent: &str, device_code: &str) -> Result<Option<String>
 
 /// The signed-in user, trimmed to what the UI shows.
 pub fn user(user_agent: &str, token: &str) -> Result<Value, ApiError> {
-    let u = api(user_agent, token, "GET", "/user", None)?;
+    let u = api(user_agent, token, "GET", "/user", None, false)?;
     Ok(json!({
         "login": u.get("login"),
         "id": u.get("id"),
