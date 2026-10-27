@@ -5,6 +5,7 @@
   import { t } from '../lib/i18n';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileList from './FileList.svelte';
+  import { paneDrag } from '../lib/panedrag.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
 
   interface Props {
@@ -80,7 +81,11 @@
   }
 </script>
 
-<section class="pane">
+<section
+  class="pane"
+  data-pane="server"
+  class:drop-target={paneDrag.over === 'server' && (paneDrag.active ? paneDrag.active.from === 'local' : paneDrag.external) && connected}
+>
   <div class="section-label head">
     <span>{t('files.remote')}</span>
     <span class="buttons">
@@ -100,6 +105,7 @@
     onUp={() => parent && connection.list(parent)}
     onOpenDir={(row) => connection.list(remoteJoin(connection.remotePath, row.name))}
     onActivate={download}
+    dragFrom="server"
     bind:selected
     loading={connection.remoteLoading}
     error={connection.remoteError}

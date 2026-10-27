@@ -9,6 +9,7 @@
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
   import FileList from './FileList.svelte';
+  import { paneDrag } from '../lib/panedrag.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -171,7 +172,7 @@
   });
 </script>
 
-<section class="pane">
+<section class="pane" data-pane="local" class:drop-target={paneDrag.over === 'local' && paneDrag.active?.from === 'server'}>
   <div class="section-label head">
     <span>{t('files.local')}</span>
     <span class="buttons">
@@ -191,6 +192,7 @@
     onUp={up}
     onOpenDir={(row) => load(atRoots ? row.name : localJoin(path, row.name, separator))}
     onActivate={upload}
+    dragFrom="local"
     bind:selected
     {loading}
     {error}
