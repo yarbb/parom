@@ -45,9 +45,12 @@
     }
   });
 
-  export async function load(dir: string) {
+  /** Opens a folder; `quiet` (synchronized browsing) leaves the pane as it is when that fails. */
+  export async function load(dir: string, quiet = false) {
     loading = true;
-    error = '';
+    if (!quiet) {
+      error = '';
+    }
     try {
       const res = await listLocal(dir);
       path = res.path;
@@ -59,7 +62,9 @@
         void prefs.set('lastLocalDir', res.path);
       }
     } catch (e) {
-      error = String(e);
+      if (!quiet) {
+        error = String(e);
+      }
     } finally {
       loading = false;
     }

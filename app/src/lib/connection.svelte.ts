@@ -385,13 +385,16 @@ class Connection {
     this.#lost();
   }
 
-  async list(path?: string): Promise<void> {
+  /** Lists a server folder; `quiet` (synchronized browsing) keeps the pane as it is when that fails. */
+  async list(path?: string, quiet = false): Promise<void> {
     const session = this.session;
     if (session === null) {
       return;
     }
     this.remoteLoading = true;
-    this.remoteError = '';
+    if (!quiet) {
+      this.remoteError = '';
+    }
     const cached = path ? this.#listings.get(path) : undefined;
     if (path && cached) {
       // Seen before in this session: show it now, the fresh listing follows.
@@ -415,7 +418,9 @@ class Connection {
       this.remotePath = res.path;
       this.remoteRows = rows;
     } catch (e) {
-      this.remoteError = describeError(e);
+      if (!quiet) {
+        this.remoteError = describeError(e);
+      }
     } finally {
       this.remoteLoading = false;
     }
