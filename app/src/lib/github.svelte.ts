@@ -7,6 +7,8 @@ export interface GitHubUser {
   id: number;
   name: string | null;
   avatar_url: string;
+  /** How the token was made: GitHub App sign-in or a personal access token. */
+  kind: 'app' | 'fine-grained' | 'classic' | 'other';
 }
 
 export interface DeviceCode {
@@ -20,8 +22,14 @@ export interface DeviceCode {
 /** Fine-grained token page, prefilled with what the app needs. */
 export const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new';
 
-/** Where people add repositories to the GitHub App after signing in with the browser. */
-export const APP_INSTALL_URL = 'https://github.com/settings/installations';
+/** Installs the GitHub App (slug of the app behind CLIENT_ID in github.rs) on an account. */
+export const APP_INSTALL_URL = 'https://github.com/apps/totzilla-sync/installations/new';
+
+/** Token settings, for "the token does not include this repository". */
+export const TOKEN_SETTINGS_URL: Record<string, string> = {
+  'fine-grained': 'https://github.com/settings/personal-access-tokens',
+  classic: 'https://github.com/settings/tokens',
+};
 
 export const openGitHub = (url: string) => invoke<void>('open_github_url', { url });
 

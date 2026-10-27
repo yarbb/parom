@@ -126,7 +126,7 @@
     {/if}
     {#snippet actions()}
       {#if done}
-        <button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.device.install_button')}</button>
+        <button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.install_app')}</button>
         <button class="control primary" onclick={close}>{t('common.ok')}</button>
       {:else if error}
         <button class="control" onclick={close}>{t('common.cancel')}</button>

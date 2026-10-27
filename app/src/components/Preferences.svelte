@@ -265,7 +265,9 @@
               <span class="mono grow">@{github.user.login}{github.user.name ? ` (${github.user.name})` : ''}</span>
               <button class="control" onclick={() => github.signOut()}>{t('github.sign_out')}</button>
             </div>
-            <div class="row"><span></span><button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.device.install_button')}</button></div>
+            {#if github.user.kind === 'app'}
+              <div class="row"><span></span><button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.install_app')}</button></div>
+            {/if}
           {:else}
             <p class="muted">{t('prefs.signed_out')}</p>
             <div class="row">

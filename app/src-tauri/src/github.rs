@@ -144,10 +144,25 @@ pub fn device_poll(user_agent: &str, device_code: &str) -> Result<Option<String>
     }
 }
 
+/// How the token was made, from its prefix: access problems are fixed in
+/// different places (app installation, token settings).
+fn token_kind(token: &str) -> &'static str {
+    if token.starts_with("ghu_") {
+        "app"
+    } else if token.starts_with("github_pat_") {
+        "fine-grained"
+    } else if token.starts_with("ghp_") {
+        "classic"
+    } else {
+        "other"
+    }
+}
+
 /// The signed-in user, trimmed to what the UI shows.
 pub fn user(user_agent: &str, token: &str) -> Result<Value, ApiError> {
     let u = api(user_agent, token, "GET", "/user", None, false)?;
     Ok(json!({
+        "kind": token_kind(token),
         "login": u.get("login"),
         "id": u.get("id"),
         "name": u.get("name"),
