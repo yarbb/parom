@@ -1,6 +1,8 @@
 mod daemon;
 mod edit;
 mod git;
+mod github;
+mod gitrepo;
 mod local;
 mod secrets;
 mod support;
@@ -210,6 +212,137 @@ fn secret_delete(app: tauri::AppHandle, key: String) -> Result<(), String> {
     secrets::delete(&secret_service(&app), &key)
 }
 
+// GitHub tab: the token lives in the credential store and is only read here.
+fn user_agent(app: &tauri::AppHandle) -> String {
+    format!("{}/{}", app.package_info().name, app.package_info().version)
+}
+
+fn github_token(app: &tauri::AppHandle) -> Result<Option<String>, String> {
+    secrets::get(&secret_service(app), github::TOKEN_KEY)
+}
+
+/// The signed-in account, or None. A token GitHub no longer accepts is dropped.
+#[tauri::command]
+async fn github_user(app: tauri::AppHandle) -> Result<Option<Value>, String> {
+    blocking(move || {
+        let Some(token) = github_token(&app)? else { return Ok(None) };
+        match github::user(&user_agent(&app), &token) {
+            Ok(u) => Ok(Some(u)),
+            Err(e) if e.status == 401 => {
+                secrets::delete(&secret_service(&app), github::TOKEN_KEY)?;
+                Ok(None)
+            }
+            Err(e) => Err(e.into()),
+        }
+    })
+    .await
+}
+
+/// Checks a personal access token and keeps it if GitHub accepts it.
+#[tauri::command]
+async fn github_sign_in_token(app: tauri::AppHandle, token: String) -> Result<Value, String> {
+    blocking(move || {
+        let token = token.trim().to_owned();
+        let user = github::user(&user_agent(&app), &token)?;
+        secrets::set(&secret_service(&app), github::TOKEN_KEY, &token)?;
+        Ok(user)
+    })
+    .await
+}
+
+#[tauri::command]
+fn github_sign_out(app: tauri::AppHandle) -> Result<(), String> {
+    secrets::delete(&secret_service(&app), github::TOKEN_KEY)
+}
+
+#[tauri::command]
+async fn github_device_start(app: tauri::AppHandle) -> Result<github::DeviceCode, String> {
+    blocking(move || github::device_start(&user_agent(&app))).await
+}
+
+/// One poll of the device flow: the user once approved, None while waiting.
+#[tauri::command]
+async fn github_device_poll(app: tauri::AppHandle, device_code: String) -> Result<Option<Value>, String> {
+    blocking(move || {
+        let ua = user_agent(&app);
+        let Some(token) = github::device_poll(&ua, &device_code)? else { return Ok(None) };
+        let user = github::user(&ua, &token)?;
+        secrets::set(&secret_service(&app), github::TOKEN_KEY, &token)?;
+        Ok(Some(user))
+    })
+    .await
+}
+
+/// A REST call as the signed-in user; `path` is relative to api.github.com.
+#[tauri::command]
+async fn github_api(app: tauri::AppHandle, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
+    blocking(move || {
+        let token = github_token(&app)?.ok_or("Not signed in to GitHub")?;
+        Ok(github::api(&user_agent(&app), &token, &method, &path, body)?)
+    })
+    .await
+}
+
+/// Opens a github.com page in the default browser (nothing else).
+#[tauri::command]
+fn open_github_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") {
+        return Err(format!("not a GitHub URL: {url}"));
+    }
+    open::that_detached(&url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn repo_info(dir: String) -> Result<gitrepo::BranchInfo, String> {
+    blocking(move || gitrepo::branch_info(&dir)).await
+}
+
+#[tauri::command]
+async fn repo_changes(dir: String) -> Result<Vec<gitrepo::FileChange>, String> {
+    blocking(move || gitrepo::changes(&dir)).await
+}
+
+#[tauri::command]
+async fn repo_file_diff(dir: String, path: String, rev: Option<String>) -> Result<gitrepo::FileDiff, String> {
+    blocking(move || gitrepo::file_diff(&dir, &path, rev.as_deref())).await
+}
+
+#[tauri::command]
+async fn repo_commit(
+    dir: String,
+    paths: Vec<String>,
+    message: String,
+    name: Option<String>,
+    email: Option<String>,
+) -> Result<String, String> {
+    blocking(move || gitrepo::commit(&dir, &paths, &message, name.as_deref(), email.as_deref())).await
+}
+
+#[tauri::command]
+async fn repo_log(dir: String, limit: usize) -> Result<Vec<gitrepo::LogEntry>, String> {
+    blocking(move || gitrepo::log(&dir, limit)).await
+}
+
+#[tauri::command]
+async fn repo_commit_files(dir: String, rev: String) -> Result<Vec<gitrepo::CommitFile>, String> {
+    blocking(move || gitrepo::commit_files(&dir, &rev)).await
+}
+
+/// fetch, pull (fast-forward only) or push origin, with the GitHub token.
+#[tauri::command]
+async fn repo_remote(app: tauri::AppHandle, dir: String, op: String) -> Result<gitrepo::BranchInfo, String> {
+    blocking(move || {
+        let token = github_token(&app).ok().flatten();
+        match op.as_str() {
+            "fetch" => gitrepo::fetch(&dir, token.as_deref()),
+            "pull" => gitrepo::pull(&dir, token.as_deref()),
+            "push" => gitrepo::push(&dir, token.as_deref()),
+            _ => Err(format!("unknown operation: {op}")),
+        }
+    })
+    .await
+}
+
 /// `--self-test <file>`: starts the bundled daemon, asks for its version and
 /// writes the outcome as JSON to `<file>` without opening a window. Used by CI
 /// on the installed app to prove the daemon and its libraries are bundled.
@@ -323,7 +456,21 @@ pub fn run() {
             remove_backup,
             dir_size,
             machine_name,
-            run_command
+            run_command,
+            github_user,
+            github_sign_in_token,
+            github_sign_out,
+            github_device_start,
+            github_device_poll,
+            github_api,
+            open_github_url,
+            repo_info,
+            repo_changes,
+            repo_file_diff,
+            repo_commit,
+            repo_log,
+            repo_commit_files,
+            repo_remote
         ])
         .run(tauri::generate_context!())
         .expect("error while running the application");

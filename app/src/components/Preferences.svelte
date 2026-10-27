@@ -10,6 +10,9 @@
   import { sites } from '../lib/sites.svelte';
   import { host } from '../lib/sync/host';
   import { openInEditor } from '../lib/local';
+  import { APP_INSTALL_URL, github, openGitHub } from '../lib/github.svelte';
+  import { repo } from '../lib/repo.svelte';
+  import { ui } from '../lib/ui.svelte';
 
   // Boards P1-P12. Pages whose features exist are live; the rest show their
   // settings disabled until the feature lands, so nothing pretends to work.
@@ -35,8 +38,6 @@
     logging: 'prefs.logging', updates: 'prefs.updates',
   };
   const later: Partial<Record<Page, string>> = {
-    account: 'prefs.later.github',
-    repositories: 'prefs.later.github',
     logging: 'prefs.later.logging',
   };
 
@@ -257,12 +258,42 @@
             <input class="field mono short" inputmode="numeric" value={draft.connectTimeout} oninput={(e) => (draft.connectTimeout = num(e.currentTarget.value, 20))} />
             <span class="muted">{t('prefs.seconds')}</span>
           </label>
-        {:else if page === 'account' || page === 'repositories'}
-          <div class="row"><span>{t('prefs.sign_in_method')}</span><select class="field" disabled><option>{t('github.sign_in_browser')}</option></select></div>
+        {:else if page === 'account'}
+          {#if github.user}
+            <div class="row">
+              <span>{t('prefs.signed_in_as')}</span>
+              <span class="mono grow">@{github.user.login}{github.user.name ? ` (${github.user.name})` : ''}</span>
+              <button class="control" onclick={() => github.signOut()}>{t('github.sign_out')}</button>
+            </div>
+            <div class="row"><span></span><button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.device.install_button')}</button></div>
+          {:else}
+            <p class="muted">{t('prefs.signed_out')}</p>
+            <div class="row">
+              <span></span>
+              <button class="control primary" onclick={() => (ui.githubSignIn = 'browser')}>{t('github.sign_in_browser')}</button>
+              <button class="control" onclick={() => (ui.githubSignIn = 'token')}>{t('github.sign_in_token')}</button>
+            </div>
+          {/if}
+          <p class="muted">{t('prefs.token_storage')}</p>
+        {:else if page === 'repositories'}
+          {#each repo.choices as c (c.dir)}
+            <div class="row list-row">
+              <span class="mono grow path" title={c.dir}>{c.dir}</span>
+              {#if c.site}
+                <span class="muted">{t('prefs.repo_site', { site: c.site })}</span>
+              {:else}
+                <button class="control small" onclick={() => repo.remove(c.dir)}>{t('common.remove')}</button>
+              {/if}
+            </div>
+          {:else}
+            <p class="muted">{t('prefs.no_repos')}</p>
+          {/each}
+          <p class="muted">{t('prefs.repos_hint')}</p>
         {:else if page === 'marker_history'}
           <div class="row"><span></span><Checkbox bind:checked={draft.syncDetectEdits} label={t('prefs.detect_edits')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncLock} label={t('prefs.lock_server')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncBackup} label={t('prefs.backup_first')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncCloseIssues} label={t('prefs.close_issues')} /></div>
           <label class="row"><span>{t('prefs.backup_keep')}</span>
             <select class="field" bind:value={draft.backupKeep}>
               {#each [1, 3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}

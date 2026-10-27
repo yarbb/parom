@@ -38,12 +38,18 @@ export interface Prefs {
   syncAskVersionsDiffer: boolean;
   syncAskSomeoneElse: boolean;
   syncAskLocalOnly: boolean;
+  /** After a sync, comment on and close issues the deployed commits fix. */
+  syncCloseIssues: boolean;
   /** Backups kept per site; older ones are deleted. */
   backupKeep: number;
   /** Folder for backups; empty uses the app's data folder. */
   backupDir: string;
   /** What "Reconnect" connects to: a saved site, or the newest quick connection. */
   lastConnection: { type: 'site'; id: string } | { type: 'quick' } | null;
+  /** Repositories added in the GitHub tab (site repositories are listed anyway). */
+  repos: string[];
+  /** Repository shown in the GitHub tab. */
+  githubRepo: string;
 }
 
 export const defaultPrefs: Prefs = {
@@ -71,9 +77,12 @@ export const defaultPrefs: Prefs = {
   syncAskVersionsDiffer: true,
   syncAskSomeoneElse: true,
   syncAskLocalOnly: false,
+  syncCloseIssues: true,
   backupKeep: 5,
   backupDir: '',
   lastConnection: null,
+  repos: [],
+  githubRepo: '',
 };
 
 /** Applies the parts of the preferences that change the page itself. */

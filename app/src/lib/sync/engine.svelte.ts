@@ -4,6 +4,7 @@ import { connection, describeError } from '../connection.svelte';
 import { call } from '../daemon';
 import { remoteJoin } from '../files';
 import { prefs } from '../prefs.svelte';
+import { closeDeployedIssues } from '../deployed';
 import { sites, type Site } from '../sites.svelte';
 import { backupsRoot, git, host, joinLocal, type RepoStatus } from './host';
 import { classify, parseRules, type Rules } from './managed';
@@ -48,7 +49,7 @@ export interface Check {
 export type StepState = 'pending' | 'running' | 'done' | 'skipped' | 'failed';
 
 export interface Step {
-  key: 'check' | 'lock' | 'backup' | 'upload' | 'marker' | 'command';
+  key: 'check' | 'lock' | 'backup' | 'upload' | 'marker' | 'issues' | 'command';
   state: StepState;
   detail: string;
 }
@@ -67,7 +68,7 @@ export interface Run {
 const lockTtl = 900;
 
 function newRun(): Run {
-  const keys: Step['key'][] = ['check', 'lock', 'backup', 'upload', 'marker', 'command'];
+  const keys: Step['key'][] = ['check', 'lock', 'backup', 'upload', 'marker', 'issues', 'command'];
   return {
     steps: keys.map((key) => ({ key, state: 'pending', detail: '' })),
     done: 0,
@@ -556,7 +557,23 @@ class SyncEngine {
         step('marker').state = 'skipped';
       }
 
-      // 6. Optional command on this computer (e.g. a hosting panel restart call).
+      // 6. Issues the deployed commits close ("Fixes #12"): a comment, then
+      //    closed. Best effort: a failure here does not undo the sync.
+      if (prefs.value.syncCloseIssues && previous?.sha) {
+        step('issues').state = 'running';
+        try {
+          const closed = await closeDeployedIssues(dir, previous.sha, head, c.site.name);
+          step('issues').state = closed === null ? 'skipped' : 'done';
+          step('issues').detail = closed?.length ? closed.map((n) => `#${n}`).join(' ') : '';
+        } catch (e) {
+          step('issues').state = 'failed';
+          step('issues').detail = describeError(e);
+        }
+      } else {
+        step('issues').state = 'skipped';
+      }
+
+      // 7. Optional command on this computer (e.g. a hosting panel restart call).
       const command = c.site.postSync.trim();
       if (command) {
         step('command').state = 'running';

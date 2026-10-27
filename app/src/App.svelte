@@ -8,10 +8,12 @@
   import GitHubTab from './components/GitHubTab.svelte';
   import SiteManager from './components/SiteManager.svelte';
   import { sites } from './lib/sites.svelte';
+  import { github } from './lib/github.svelte';
   import { ui } from './lib/ui.svelte';
   import { prefs } from './lib/prefs.svelte';
   import { sync } from './lib/sync/engine.svelte';
   import Preferences from './components/Preferences.svelte';
+  import SignInDialogs from './components/SignInDialogs.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
@@ -50,6 +52,8 @@
       .then(() => {
         engine = 'ready';
         void sites.load();
+        // Needed outside the GitHub tab too: syncs close fixed issues.
+        void github.load();
       })
       .catch(() => (engine = 'unavailable'));
 
@@ -92,6 +96,7 @@
 {#if ui.preferences}
   <Preferences onClose={() => (ui.preferences = false)} />
 {/if}
+<SignInDialogs />
 
 <style>
   .app {
