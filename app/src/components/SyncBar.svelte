@@ -57,7 +57,7 @@
       {#if sync.preparing || sync.checking}
         <button class="control small primary" onclick={() => sync.stopWalk()}>{t(sync.preparing ? 'sync.cancel_sync' : 'sync.cancel_check')}</button>
       {:else}
-        <button class="control small primary" disabled={!c || busy || connection.state !== 'connected'} onclick={() => sync.start()}>
+        <button class="control small primary" disabled={!c || busy || connection.state !== 'connected'} onclick={() => (sync.choosing = true)}>
           {t('sync.sync_with_server')}
         </button>
       {/if}

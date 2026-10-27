@@ -6,6 +6,9 @@ import { remoteJoin } from '../files';
 import { prefs } from '../prefs.svelte';
 import { closeDeployedIssues } from '../deployed';
 import { sites, type Site } from '../sites.svelte';
+import { invoke } from '@tauri-apps/api/core';
+import { repo, type LogEntry } from '../repo.svelte';
+import { ui } from '../ui.svelte';
 import { backupsRoot, git, host, joinLocal, type RepoStatus } from './host';
 import { classify, parseRules, type Rules } from './managed';
 import { lockActive, markerName, newNonce, parseMarker, serializeMarker, treeFingerprint, type Marker } from './marker';
@@ -14,9 +17,12 @@ import {
   foldersFor,
   needsConfirmation,
   planSync,
+  pullCandidates,
   serverState,
   type Edits,
+  type ListedFile,
   type Plan,
+  type PreviewItem,
   type ServerFile,
   type ServerState,
   type TreeEntry,
@@ -44,6 +50,20 @@ export interface Check {
   /** Managed files with uncommitted changes; a sync deploys the commit, not these. */
   dirtyManaged: string[];
   rules: Rules;
+}
+
+export interface Preview {
+  direction: 'deploy' | 'pull';
+  items: PreviewItem[];
+  /** Deploy: commits the server does not have yet. */
+  commits: LogEntry[];
+  /** Deploy: the plan the items came from. */
+  plan: Plan | null;
+  /** Deploy: versions differ or the server was edited by hand. */
+  warn: boolean;
+  backup: boolean;
+  /** Pull: where the server files were downloaded. */
+  folder: string;
 }
 
 export type StepState = 'pending' | 'running' | 'done' | 'skipped' | 'failed';
@@ -97,7 +117,10 @@ class SyncEngine {
   /** Set when the server has no marker and the site says "ask". */
   offerMarker = $state(false);
   /** Set when "Versions differ" must be confirmed before syncing. */
-  confirming = $state<{ plan: Plan; backup: boolean } | null>(null);
+  /** "Sync with server" was pressed: which direction? */
+  choosing = $state(false);
+  /** What a sync would do, shown before it starts (either direction). */
+  preview = $state<Preview | null>(null);
   run = $state<Run | null>(null);
   /** What a check or the preparation of a sync is doing right now ("" when idle). */
   progress = $state('');
@@ -116,7 +139,8 @@ class SyncEngine {
     this.check = null;
     this.error = '';
     this.offerMarker = false;
-    this.confirming = null;
+    this.choosing = false;
+    void this.cancelPreview();
   }
 
   #session(): number {
@@ -416,10 +440,149 @@ class SyncEngine {
       changedBySomeoneElse: prefs.value.syncAskSomeoneElse,
       localOnly: prefs.value.syncAskLocalOnly,
     };
-    if (needsConfirmation(c.state, c.edits, ask)) {
-      this.confirming = { plan, backup: prefs.value.syncBackup };
-    } else {
+    const warn = needsConfirmation(c.state, c.edits, ask);
+    if (!prefs.value.syncPreview && !warn) {
       await this.execute(plan, prefs.value.syncBackup);
+      return;
+    }
+    // Which uploads replace a file on the server: the same folder listings
+    // the upload uses afterwards (cached), so no extra requests.
+    const existing = await this.#serverFiles(c.root, plan.upload);
+    const edited = new Set([...c.edits.edited, ...c.edits.missing]);
+    this.preview = {
+      direction: 'deploy',
+      items: plan.upload.map((path) => ({
+        path,
+        kind: edited.has(path) ? 'edited' : existing.has(path) ? 'overwrite' : 'new',
+        include: true,
+      })),
+      commits: await this.#commits(c.site.localDir.trim(), c.marker?.sha ?? null, c.repo.head!),
+      plan,
+      warn,
+      backup: prefs.value.syncBackup,
+      folder: '',
+    };
+  }
+
+  /** Commits the server does not have yet, newest first (at most 50). */
+  async #commits(dir: string, from: string | null, to: string): Promise<LogEntry[]> {
+    const log = await invoke<LogEntry[]>('repo_log', { dir, limit: 300 }).catch(() => [] as LogEntry[]);
+    const start = Math.max(0, log.findIndex((c) => c.sha === to));
+    const end = from ? log.findIndex((c) => c.sha === from) : -1;
+    return log.slice(start, end > start ? end : start + 50).slice(0, 50);
+  }
+
+  /** "Server to GitHub": finds server files that differ from the local folder and previews them. */
+  async startPull(): Promise<void> {
+    if (this.preparing || this.run) {
+      return;
+    }
+    this.choosing = false;
+    this.preparing = true;
+    this.#stopWalk = false;
+    try {
+      await this.#startPull();
+    } catch (e) {
+      this.error = this.#stopWalk ? '' : describeError(e);
+    } finally {
+      this.preparing = false;
+      this.progress = '';
+    }
+  }
+
+  async #startPull(): Promise<void> {
+    this.#cache.clear();
+    await this.refresh({ keepCache: true, skipEdits: true });
+    const c = this.check;
+    if (!c || this.run || this.#stopWalk) {
+      return;
+    }
+    const dir = c.site.localDir.trim();
+    // "Changed on the server" means changed since the deployed commit: a server
+    // that is simply behind must not offer its older files as changes.
+    const deployed = c.marker?.sha && (await git.hasCommit(dir, c.marker.sha)) ? c.marker.sha : c.repo.head!;
+    const head = (await git.tree(dir, deployed)).filter((f) => classify(f.path, c.rules) === 'managed');
+    const server = await this.#serverFiles(c.root, head.map((f) => f.path));
+    // Folders the walk listed (the repository's folders that exist on the server).
+    const listings = new Map<string, ListedFile[]>();
+    const folders = new Set(['', ...head.map((f) => (f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : ''))]);
+    for (const folder of folders) {
+      const listing = this.#cache.get(folder ? remoteJoin(c.root, folder) : c.root);
+      if (listing) {
+        listings.set(folder, [...listing.values()]);
+      }
+    }
+    const candidates = pullCandidates({ head, server, listings, markerMtime: c.markerMtime, rules: c.rules });
+
+    // Download them next to the repository, then keep only real differences.
+    const folder = joinLocal((await host.paths()).data, 'tmp', `pull-${newNonce()}`);
+    const items: PreviewItem[] = [];
+    const dirty = new Set(c.repo.dirty);
+    let n = 0;
+    for (const p of candidates) {
+      if (this.#stopWalk) {
+        await host.removeBackup(folder).catch(() => {});
+        throw new Error('Canceled');
+      }
+      this.progress = `${++n} / ${candidates.length}`;
+      const i = p.lastIndexOf('/');
+      await call('transfer.download', {
+        session: this.#session(),
+        remote_path: i < 0 ? c.root : remoteJoin(c.root, p.slice(0, i)),
+        remote_name: p.slice(i + 1),
+        local: joinLocal(folder, p),
+        exists: 'overwrite',
+      });
+      const same = await host.compareFiles(joinLocal(folder, p), joinLocal(dir, p));
+      if (same === 'missing') {
+        items.push({ path: p, kind: 'new', include: true });
+      } else if (same === 'different') {
+        // Uncommitted local edits are not overwritten unless asked to.
+        items.push({ path: p, kind: dirty.has(p) ? 'dirty' : 'overwrite', include: !dirty.has(p) });
+      }
+    }
+    this.preview = { direction: 'pull', items, commits: [], plan: null, warn: false, backup: false, folder };
+  }
+
+  /** Runs the previewed sync with the files left ticked. */
+  async applyPreview(): Promise<void> {
+    const p = this.preview;
+    if (!p) {
+      return;
+    }
+    const chosen = p.items.filter((i) => i.include).map((i) => i.path);
+    if (p.direction === 'deploy' && p.plan) {
+      this.preview = null;
+      await this.execute({ ...p.plan, upload: chosen }, p.backup);
+      return;
+    }
+    const c = this.check;
+    if (!c) {
+      return;
+    }
+    const dir = c.site.localDir.trim();
+    try {
+      for (const path of chosen) {
+        await host.copyFile(joinLocal(p.folder, path), joinLocal(dir, path));
+      }
+      this.error = '';
+    } catch (e) {
+      this.error = describeError(e);
+    } finally {
+      await this.cancelPreview();
+    }
+    // The files are now local changes: review and commit them in Changes.
+    repo.changed++;
+    if (chosen.length) {
+      ui.tab = 'github';
+    }
+  }
+
+  async cancelPreview(): Promise<void> {
+    const folder = this.preview?.folder;
+    this.preview = null;
+    if (folder) {
+      await host.removeBackup(folder).catch(() => {});
     }
   }
 
@@ -440,7 +603,7 @@ class SyncEngine {
     if (!c || this.run) {
       return;
     }
-    this.confirming = null;
+    this.preview = null;
     this.#cancel = false;
     this.run = newRun();
     const run = this.run;

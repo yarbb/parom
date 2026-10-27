@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classify, globToRegExp, parseRules } from './managed';
 import { lockActive, MarkerError, newNonce, parseMarker, serializeMarker, treeFingerprint, type Marker } from './marker';
-import { detectServerEdits, foldersFor, needsConfirmation, planSync, serverState, type ServerFile } from './plan';
+import { detectServerEdits, foldersFor, groupByFolder, needsConfirmation, planSync, pullCandidates, serverState, type ServerFile } from './plan';
 
 const sha = (c: string) => c.repeat(40);
 
@@ -153,5 +153,46 @@ describe('server edits and plans', () => {
     expect(needsConfirmation('diverged', none, ask)).toBe(true);
     expect(needsConfirmation('unknown-commit', none, { ...ask, changedBySomeoneElse: false })).toBe(false);
     expect(needsConfirmation('unknown-commit', { edited: [], missing: ['y'] }, { ...ask, changedBySomeoneElse: false })).toBe(true);
+  });
+});
+
+describe('two-way sync', () => {
+  const rules = parseRules('addons/\ninit.lua\n!addons/x/data/**\n');
+  const head = [
+    { path: 'init.lua', size: 10, oid: 'a' },
+    { path: 'addons/x/a.lua', size: 20, oid: 'b' },
+    { path: 'addons/x/b.lua', size: 30, oid: 'c' },
+  ];
+  const server = new Map<string, ServerFile>([
+    ['init.lua', { size: 10, mtime: 1000 }],
+    ['addons/x/a.lua', { size: 21, mtime: 1000 }],
+    ['addons/x/b.lua', { size: 30, mtime: 9000 }],
+  ]);
+  const listings = new Map([
+    ['', [{ name: 'init.lua', size: 10, dir: false }, { name: '.totzilla', size: 300, dir: false }, { name: 'addons', size: 0, dir: true }]],
+    ['addons/x', [{ name: 'a.lua', size: 21, dir: false }, { name: 'b.lua', size: 30, dir: false }, { name: 'sv_unit.lua', size: 5, dir: false }, { name: 'c.lua.totzilla-part', size: 1, dir: false }]],
+  ]);
+
+  it('takes changed and new server files, not the marker or temp files', () => {
+    expect(pullCandidates({ head, server, listings, markerMtime: 5000, rules })).toEqual(['addons/x/a.lua', 'addons/x/b.lua', 'addons/x/sv_unit.lua']);
+  });
+
+  it('takes every repository file the server has without a marker time', () => {
+    expect(pullCandidates({ head, server, listings, markerMtime: null, rules })).toContain('init.lua');
+  });
+
+  it('skips unmanaged and protected paths', () => {
+    const more = new Map(listings);
+    more.set('', [...listings.get('')!, { name: 'server.log', size: 1, dir: false }]);
+    more.set('addons/x/data', [{ name: 'sv.db', size: 1, dir: false }]);
+    const got = pullCandidates({ head, server, listings: more, markerMtime: 5000, rules });
+    expect(got).not.toContain('server.log');
+    expect(got).not.toContain('addons/x/data/sv.db');
+  });
+
+  it('groups the preview by folder, root first', () => {
+    const groups = groupByFolder([{ path: 'b/z.lua' }, { path: 'top.lua' }, { path: 'a/y.lua' }, { path: 'a/x.lua' }]);
+    expect(groups.map((g) => g.folder)).toEqual(['', 'a', 'b']);
+    expect(groups[1].items.map((i) => i.path)).toEqual(['a/x.lua', 'a/y.lua']);
   });
 });

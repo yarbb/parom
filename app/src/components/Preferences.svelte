@@ -314,6 +314,7 @@
             <input class="field mono grow" placeholder={defaultBackups} bind:value={draft.backupDir} />
             <button class="control" onclick={browseBackups}>{t('files.browse')}</button>
           </label>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncPreview} label={t('prefs.sync_preview')} /></div>
           <div class="section-label inline">{t('prefs.ask_before_sync')}</div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncAskVersionsDiffer} label={t('prefs.ask_versions_differ')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncAskSomeoneElse} label={t('prefs.ask_someone_else')} /></div>

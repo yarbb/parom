@@ -1,7 +1,7 @@
 // Pure sync decisions: how the server relates to the local repository, which
 // server files were edited by hand, and what a sync uploads.
 import { classify, type Rules } from './managed';
-import type { Marker } from './marker';
+import { markerName, type Marker } from './marker';
 
 export type ServerState =
   /** No marker on the server. */
@@ -178,4 +178,75 @@ export function needsConfirmation(
     return ask.versionsDiffer || handEdits;
   }
   return state === 'behind' && ask.localOnly;
+}
+
+/** One file in the preview before a sync, in either direction. */
+export interface PreviewItem {
+  path: string;
+  /**
+   * new: not on the target yet; overwrite: the target has another version;
+   * edited: (to the server) changed on the server by hand since the last sync;
+   * dirty: (from the server) the local file has uncommitted changes.
+   */
+  kind: 'new' | 'overwrite' | 'edited' | 'dirty';
+  include: boolean;
+}
+
+/** Items grouped by folder ("" first), folders and files sorted. */
+export function groupByFolder<T extends { path: string }>(items: readonly T[]): { folder: string; items: T[] }[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const i = item.path.lastIndexOf('/');
+    const folder = i < 0 ? '' : item.path.slice(0, i);
+    groups.set(folder, [...(groups.get(folder) ?? []), item]);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === b ? 0 : a === '' ? -1 : b === '' ? 1 : a < b ? -1 : 1))
+    .map(([folder, list]) => ({ folder, items: [...list].sort((x, y) => (x.path < y.path ? -1 : 1)) }));
+}
+
+export interface ListedFile {
+  name: string;
+  size: number;
+  dir: boolean;
+}
+
+/**
+ * Server files worth downloading for "server to GitHub", without downloading
+ * anything yet: repository files whose size differs from the commit or that
+ * changed after the marker (all of them when there is no marker time), and
+ * files the repository does not have in folders it does have. Ignored and
+ * protected paths, the marker and half-uploaded temp files are left out.
+ * The caller downloads these and compares their content with the local files.
+ */
+export function pullCandidates(input: {
+  head: readonly TreeEntry[];
+  server: ReadonlyMap<string, ServerFile>;
+  /** Listings of the repository's folders on the server, by relative folder ("" = root). */
+  listings: ReadonlyMap<string, readonly ListedFile[]>;
+  markerMtime: number | null;
+  rules: Rules;
+}): string[] {
+  const out = new Set<string>();
+  const inHead = new Set(input.head.map((f) => f.path));
+  for (const f of input.head) {
+    const s = input.server.get(f.path);
+    if (!s || classify(f.path, input.rules) !== 'managed') {
+      continue;
+    }
+    const changedSince = input.markerMtime === null || s.mtime === null || s.mtime > input.markerMtime + 1000;
+    if (s.size !== f.size || changedSince) {
+      out.add(f.path);
+    }
+  }
+  for (const [folder, entries] of input.listings) {
+    for (const e of entries) {
+      const path = folder ? `${folder}/${e.name}` : e.name;
+      const temp = e.name.startsWith(markerName) || e.name.endsWith('.totzilla-part');
+      if (!e.dir && !temp && !inHead.has(path) && classify(path, input.rules) === 'managed') {
+        out.add(path);
+      }
+    }
+  }
+  return [...out].sort();
 }
