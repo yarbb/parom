@@ -7,6 +7,8 @@ class Ui {
   appName = $state('');
   siteManager = $state(false);
   preferences = $state(false);
+  /** Help → About. */
+  about = $state(false);
   /** The message log panel above the status bar. */
   log = $state(false);
   /** Open sign-in dialog: device flow ("browser") or personal access token. */

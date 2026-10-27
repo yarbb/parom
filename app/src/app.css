@@ -1,4 +1,9 @@
 /* One token set, two themes. Values follow docs/design (Fd = dark, Main = light). */
+:root {
+  --font-ui: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', Consolas, 'Cascadia Code', ui-monospace, monospace;
+}
+
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
@@ -54,13 +59,13 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12.5px;
   overflow: hidden;
 }
 
 .mono {
-  font-family: Consolas, 'Cascadia Code', ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .muted {

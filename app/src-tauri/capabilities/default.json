@@ -1,7 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: core APIs (events, app name and version), UI zoom and the folder picker.",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:webview:allow-set-webview-zoom", "dialog:allow-open"]
+  "description": "Main window: core APIs (events, app name and version), UI zoom, the folder picker and the custom title bar (drag, minimize, maximize, close).",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-set-webview-zoom",
+    "dialog:allow-open",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-is-maximized"
+  ]
 }

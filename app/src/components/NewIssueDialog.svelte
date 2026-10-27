@@ -105,7 +105,7 @@
     border-radius: 4px;
     background: var(--bg);
     color: var(--text);
-    font-family: Consolas, 'Cascadia Code', ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
   }
 

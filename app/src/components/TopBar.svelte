@@ -2,7 +2,11 @@
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
   import type { Tab } from '../lib/types';
-  import EyeIcon from './EyeIcon.svelte';
+  import Eye from '@lucide/svelte/icons/eye';
+  import EyeOff from '@lucide/svelte/icons/eye-off';
+  import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
+  import MenuBar from './MenuBar.svelte';
+  import WindowControls from './WindowControls.svelte';
   import ServerMenu from './ServerMenu.svelte';
   import { ui } from '../lib/ui.svelte';
 
@@ -16,8 +20,11 @@
   let { name, tab, onTab, hideAddress = $bindable() }: Props = $props();
 </script>
 
-<header>
-  <b class="brand mono">{name}</b>
+<!-- The window's title bar: drag it by any empty spot (or the name),
+     double-click to maximize. Buttons and menus stay clickable. -->
+<header data-tauri-drag-region>
+  <b class="brand mono" data-tauri-drag-region>{name}</b>
+  <MenuBar bind:hideAddress />
   <div class="tabs" role="tablist">
     <button role="tab" class="tab" class:active={tab === 'files'} aria-selected={tab === 'files'} onclick={() => onTab('files')}>
       {t('tab.files')}
@@ -26,17 +33,12 @@
       {t('tab.github')}
     </button>
   </div>
-  <span class="spacer"></span>
+  <span class="spacer" data-tauri-drag-region></span>
   <div class="server">
     <ServerMenu {hideAddress} />
     <button class="control icon" aria-label={t('prefs.title')} title="{t('prefs.title')} (Ctrl+,)" onclick={() => (ui.preferences = true)}>
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
-        <!-- Sliders: reads as "settings", unlike a gear that looks like a sun. -->
-        <path d="M2 4h7M12 4h2M2 8h2M7 8h7M2 12h9" />
-        <circle cx="10.5" cy="4" r="1.5" />
-        <circle cx="5.5" cy="8" r="1.5" />
-        <circle cx="12.5" cy="12" r="1.5" />
-      </svg>
+      <!-- Sliders: reads as "settings", unlike a gear that looks like a sun. -->
+      <SlidersHorizontal size={15} strokeWidth={1.6} />
     </button>
     <button
       class="control icon"
@@ -45,7 +47,7 @@
       title={hideAddress ? t('topbar.show_address') : t('files.hide_address')}
       onclick={() => (hideAddress = !hideAddress)}
     >
-      <EyeIcon closed={hideAddress} />
+      {#if hideAddress}<EyeOff size={15} strokeWidth={1.6} />{:else}<Eye size={15} strokeWidth={1.6} />{/if}
     </button>
     <span
       class="dot"
@@ -54,8 +56,9 @@
       class:status-new={connection.state === 'connected'}
       aria-hidden="true">●</span
     >
-    <span class="muted">{t(`status.${connection.state}`)}</span>
+    <span class="muted" data-tauri-drag-region>{t(`status.${connection.state}`)}</span>
   </div>
+  <WindowControls />
 </header>
 
 <style>
@@ -70,7 +73,8 @@
   }
 
   .brand {
-    margin-right: 18px;
+    margin-right: 10px;
+    user-select: none;
   }
 
   .tabs {
