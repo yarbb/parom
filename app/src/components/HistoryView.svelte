@@ -6,6 +6,8 @@
   import { sync } from '../lib/sync/engine.svelte';
   import { relativeTime } from '../lib/when';
   import DiffView from './DiffView.svelte';
+  import Splitter from './Splitter.svelte';
+  import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
   import Avatar from './Avatar.svelte';
   import { avatars, coAuthors } from '../lib/people.svelte';
 
@@ -84,7 +86,7 @@
 </script>
 
 <div class="history">
-  <div class="commits">
+  <div class="commits" style:width="{colWidth('ghHistory', 340)}px">
     <div class="section-label">{t('github.commits', { branch: repo.info?.branch ?? 'HEAD', count: repo.log.length })}</div>
     <div class="list">
       {#each repo.log as c (c.sha)}
@@ -108,6 +110,13 @@
       {/each}
     </div>
   </div>
+  <Splitter
+    axis="x"
+    label={t('ui.resize')}
+    onMove={(d) => resizeCol('ghHistory', 340, d, 240, 700)}
+    onEnd={() => prefs.persist()}
+    onReset={() => resetCol('ghHistory')}
+  />
   {#if commit}
     <div class="detail">
       <div class="info">
@@ -156,7 +165,6 @@
   }
 
   .commits {
-    width: 340px;
     flex: none;
     display: flex;
     flex-direction: column;

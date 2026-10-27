@@ -409,6 +409,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_drag::init())
         .manage(DaemonState::default())
         .setup(|app| {
             let name = app.package_info().name.clone();

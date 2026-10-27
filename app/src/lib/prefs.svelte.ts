@@ -68,6 +68,8 @@ export interface Prefs {
   queueWithLog: boolean;
   /** Folder colour labels by folder key (lib/labels.ts). */
   folderLabels: Record<string, string>;
+  /** Widths of resizable columns in the GitHub tab (px), by column. */
+  widths: Record<string, number>;
   /** Passwords from the app's old name were copied (once). */
   secretsMigrated: boolean;
   /** Repository shown in the GitHub tab. */
@@ -111,6 +113,7 @@ export const defaultPrefs: Prefs = {
   hiddenRepos: [],
   githubRepo: '',
   secretsMigrated: false,
+  widths: {},
   folderLabels: {},
   paneSplit: 50,
   logHeight: 190,
@@ -175,6 +178,22 @@ class PrefsStore {
 }
 
 export const prefs = new PrefsStore();
+
+/** Width of a resizable column, or its default. */
+export const colWidth = (key: string, fallback: number) => prefs.value.widths[key] ?? fallback;
+
+/** Drags a column's right edge by `delta` px, within [min, max]. */
+export function resizeCol(key: string, fallback: number, delta: number, min: number, max: number): void {
+  prefs.value.widths = { ...prefs.value.widths, [key]: Math.max(min, Math.min(max, colWidth(key, fallback) + delta)) };
+}
+
+/** Back to the default width (double-click on the bar). */
+export function resetCol(key: string): void {
+  const next = { ...prefs.value.widths };
+  delete next[key];
+  prefs.value.widths = next;
+  void prefs.persist();
+}
 
 /** Largest height for the log or queue so the file panes keep room (the other panel open counts). */
 export function bottomPanelMax(other: number): number {

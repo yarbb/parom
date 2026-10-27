@@ -12,6 +12,7 @@
   import { paneDrag } from '../lib/panedrag.svelte';
   import { labelColors, labelOf, localLabelKey } from '../lib/labels';
   import LabelPicker from './LabelPicker.svelte';
+  import { dragOut } from '../lib/dragout';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -209,6 +210,11 @@
     onActivate={upload}
     folder={path}
     labelOf={folderLabel}
+    onDragOut={(rows) =>
+      void dragOut(
+        rows.map((r) => localJoin(path, r.name, separator)),
+        rows.length === 1 ? rows[0].name : t('files.drag_count', { count: rows.length }),
+      ).catch((e) => (error = String(e)))}
     dragFrom="local"
     bind:selected
     {loading}

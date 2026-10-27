@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { APP_INSTALL_URL, github, openGitHub, TOKEN_SETTINGS_URL } from '../lib/github.svelte';
   import { t } from '../lib/i18n';
   import {
@@ -21,7 +22,10 @@
   import { relativeTime } from '../lib/when';
   import Markdown from './Markdown.svelte';
   import NewIssueDialog from './NewIssueDialog.svelte';
+  import MarkdownEditor from './MarkdownEditor.svelte';
   import Modal from './Modal.svelte';
+  import Splitter from './Splitter.svelte';
+  import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
 
   // Boards Ix and Pr: list (search, open / closed) and the selected item with
   // its comments, a comment box, close / reopen and (pull requests) merge.
@@ -90,7 +94,6 @@
     comments = [];
     pull = null;
     checks = null;
-    draft = '';
     try {
       comments = await listComments(slug, n);
       if (kind === 'pulls') {
@@ -105,8 +108,19 @@
     }
   }
 
+  // Each issue keeps its own unsent comment while others are looked at.
+  const drafts = new Map<number, string>();
+  let draftFor: number | null = null;
+
   $effect(() => {
     const n = selected;
+    untrack(() => {
+      if (draftFor !== null) {
+        drafts.set(draftFor, draft);
+      }
+      draftFor = n;
+      draft = n !== null ? (drafts.get(n) ?? '') : '';
+    });
     if (n !== null) {
       void loadDetail(n);
     }
@@ -179,7 +193,7 @@
 </script>
 
 <div class="issues">
-  <div class="list-pane">
+  <div class="list-pane" style:width="{colWidth('ghIssues', 380)}px">
     <div class="filters">
       <div class="search-row">
         <input class="field search" placeholder={t(kind === 'issues' ? 'github.search_issues' : 'github.search_pulls')} bind:value={query} />
@@ -222,6 +236,13 @@
       {/each}
     </div>
   </div>
+  <Splitter
+    axis="x"
+    label={t('ui.resize')}
+    onMove={(d) => resizeCol('ghIssues', 380, d, 260, 760)}
+    onEnd={() => prefs.persist()}
+    onReset={() => resetCol('ghIssues')}
+  />
   <div class="detail">
     {#if error}
       <div class="note">
@@ -282,7 +303,7 @@
         {/each}
       </div>
       <div class="reply">
-        <textarea class="field" rows="3" placeholder={t('github.leave_comment')} bind:value={draft}></textarea>
+        <MarkdownEditor bind:value={draft} rows={3} placeholder={t('github.leave_comment')} />
         <div class="buttons">
           <button class="control" onclick={() => openGitHub(i.html_url)}>{t('github.view_on_github')}</button>
           <span class="grow"></span>
@@ -342,7 +363,6 @@
   }
 
   .list-pane {
-    width: 380px;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -507,16 +527,6 @@
     border-top: 1px solid var(--line);
   }
 
-  textarea.field {
-    padding: 6px 9px;
-    resize: vertical;
-    border: 1px solid var(--line-control);
-    border-radius: 4px;
-    background: var(--bg);
-    color: var(--text);
-    font: inherit;
-    font-size: 12px;
-  }
 
   .buttons {
     display: flex;

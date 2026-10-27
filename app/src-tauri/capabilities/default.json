@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: core APIs (events, app name and version), UI zoom, the folder picker and the custom title bar (drag, minimize, maximize, close).",
+  "description": "Main window: core APIs (events, app name and version), UI zoom, the folder picker and the custom title bar (drag, minimize, maximize, close), and dragging files out of the window.",
   "windows": [
     "main"
   ],
@@ -14,6 +14,7 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
-    "core:window:allow-is-maximized"
+    "core:window:allow-is-maximized",
+    "drag:default"
   ]
 }

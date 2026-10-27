@@ -22,6 +22,8 @@
   import { counts } from '../lib/issues.svelte';
   import SignedOut from './SignedOut.svelte';
   import SyncBar from './SyncBar.svelte';
+  import Splitter from './Splitter.svelte';
+  import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
 
   // Boards Bd, Hi, Ix, Pr, Bk: toolbar (repository, branch, fetch / pull /
   // push), sidebar, and the page. Changes and History work without signing in.
@@ -29,6 +31,13 @@
 
   type Page = 'changes' | 'history' | 'issues' | 'pulls' | 'backups';
   let page = $state<Page>('changes');
+  /** Pages opened so far; they stay mounted (hidden) so nothing typed is lost. */
+  let visited = $state<Page[]>(['changes']);
+  $effect(() => {
+    if (!visited.includes(page)) {
+      visited = [...visited, page];
+    }
+  });
   let menuOpen = $state(false);
   let accountOpen = $state(false);
   let menuRoot: HTMLDivElement;
@@ -185,7 +194,7 @@
 {/if}
 
 <div class="body">
-  <nav class="sidebar">
+  <nav class="sidebar" style:width="{colWidth('ghSidebar', 200)}px">
     <button class="nav" class:active={page === 'changes'} onclick={() => (page = 'changes')}>
       <span>{t('github.changes')}</span>{#if repo.changes.length}<span class="count mono">{repo.changes.length}</span>{/if}
     </button>
@@ -221,26 +230,44 @@
       {/if}
     </div>
   </nav>
+  <Splitter
+    axis="x"
+    label={t('ui.resize')}
+    onMove={(d) => resizeCol('ghSidebar', 200, d, 150, 360)}
+    onEnd={() => prefs.persist()}
+    onReset={() => resetCol('ghSidebar')}
+  />
   <section class="page">
     {#if !repo.dir}
       <SignedOut {name} repoMissing onAddRepo={addRepo} />
-    {:else if page === 'changes'}
-      <ChangesView />
-    {:else if page === 'history'}
-      <HistoryView />
-    {:else if page === 'backups'}
-      <div class="backups">
-        {#each repoSites as s (s.id)}
-          <div class="section-label">{t('backups.title', { server: s.name })}</div>
-          <div class="backup-list"><BackupsList site={s} /></div>
-        {/each}
-      </div>
-    {:else if !github.user}
-      <SignedOut {name} />
-    {:else if !info?.github}
-      <p class="muted note">{t('github.not_on_github')}</p>
     {:else}
-      {#key `${page}:${info.github}`}<IssuesView kind={page} slug={info.github} />{/key}
+      {#if visited.includes('changes')}
+        <div class="view" class:hidden={page !== 'changes'}><ChangesView /></div>
+      {/if}
+      {#if visited.includes('history')}
+        <div class="view" class:hidden={page !== 'history'}><HistoryView /></div>
+      {/if}
+      {#if visited.includes('backups')}
+        <div class="view backups" class:hidden={page !== 'backups'}>
+          {#each repoSites as s (s.id)}
+            <div class="section-label">{t('backups.title', { server: s.name })}</div>
+            <div class="backup-list"><BackupsList site={s} /></div>
+          {/each}
+        </div>
+      {/if}
+      {#each ['issues', 'pulls'] as const as kind (kind)}
+        {#if visited.includes(kind)}
+          <div class="view" class:hidden={page !== kind}>
+            {#if !github.user}
+              <SignedOut {name} />
+            {:else if !info?.github}
+              <p class="muted note">{t('github.not_on_github')}</p>
+            {:else}
+              {#key info.github}<IssuesView {kind} slug={info.github} />{/key}
+            {/if}
+          </div>
+        {/if}
+      {/each}
     {/if}
   </section>
 </div>
@@ -334,7 +361,6 @@
   }
 
   .sidebar {
-    width: 200px;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -421,6 +447,18 @@
   .note {
     margin: 0;
     padding: 14px;
+  }
+
+  .view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    animation: fade-in var(--motion) ease-out;
+  }
+
+  .view.hidden {
+    display: none;
   }
 
   .page {
