@@ -1,7 +1,7 @@
 // Pure sync decisions: how the server relates to the local repository, which
 // server files were edited by hand, and what a sync uploads.
 import { classify, type Rules } from './managed';
-import { markerName, type Marker } from './marker';
+import { isSyncFile, type Marker } from './marker';
 
 export type ServerState =
   /** No marker on the server. */
@@ -242,7 +242,7 @@ export function pullCandidates(input: {
   for (const [folder, entries] of input.listings) {
     for (const e of entries) {
       const path = folder ? `${folder}/${e.name}` : e.name;
-      const temp = e.name.startsWith(markerName) || e.name.endsWith('.totzilla-part');
+      const temp = isSyncFile(e.name);
       if (!e.dir && !temp && !inHead.has(path) && classify(path, input.rules) === 'managed') {
         out.add(path);
       }

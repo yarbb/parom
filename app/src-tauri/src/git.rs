@@ -172,7 +172,7 @@ pub fn diff(dir: &str, from: &str, to: &str) -> Result<Vec<Change>, String> {
     Ok(changes)
 }
 
-/// Contents of a file in a commit, for `.totzilla-ignore` (empty if missing).
+/// Contents of a file in a commit, for `.parom-ignore` (empty if missing).
 pub fn read_file(dir: &str, rev: &str, path: &str) -> Result<String, String> {
     let repo = open(dir)?;
     let commit = repo.find_commit(commit_oid(&repo, rev)?).map_err(|e| e.message().to_string())?;

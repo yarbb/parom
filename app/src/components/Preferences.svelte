@@ -251,7 +251,12 @@
               {#each ['ask', 'overwrite', 'overwrite_newer', 'skip'] as a (a)}<option value={a}>{t(`sites.exists.${a}`)}</option>{/each}
             </select>
           </label>
-          <label class="row"><span>{t('prefs.simultaneous')}</span><select class="field" disabled><option>1</option></select></label>
+          <label class="row"><span>{t('prefs.simultaneous')}</span>
+            <select class="field" bind:value={draft.simultaneous}>
+              {#each [1, 2, 3, 4, 5] as n (n)}<option value={n}>{n}</option>{/each}
+            </select>
+          </label>
+          <p class="muted">{t('prefs.simultaneous_hint')}</p>
           <div class="row"><span></span><Checkbox checked={false} disabled label={t('prefs.temp_upload')} /></div>
         {:else if page === 'timeouts'}
           <label class="row"><span>{t('prefs.connect_timeout')}</span>

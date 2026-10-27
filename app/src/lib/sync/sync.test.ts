@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classify, globToRegExp, parseRules } from './managed';
-import { lockActive, MarkerError, newNonce, parseMarker, serializeMarker, treeFingerprint, type Marker } from './marker';
+import { isSyncFile, lockActive, MarkerError, newNonce, parseMarker, serializeMarker, treeFingerprint, type Marker } from './marker';
 import { detectServerEdits, foldersFor, groupByFolder, needsConfirmation, planSync, pullCandidates, serverState, type ServerFile } from './plan';
 
 const sha = (c: string) => c.repeat(40);
@@ -205,5 +205,20 @@ describe('sync folders chosen per site', () => {
     expect(classify('maps/gm_x.bsp', rules)).toBe('unmanaged');
     expect(classify('addonsfoo/a.lua', rules)).toBe('unmanaged');
     expect(classify('maps/gm_x.bsp', { ...rules, within: [] })).toBe('managed');
+  });
+});
+
+describe('names after the rename', () => {
+  it('treats old and new sync files as sync files', () => {
+    for (const n of ['.parom', '.parom.tmp', '.totzilla', 'a.lua.parom-part', 'a.lua.totzilla-part']) {
+      expect(isSyncFile(n)).toBe(true);
+    }
+    expect(isSyncFile('init.lua')).toBe(false);
+  });
+
+  it('never syncs either rules file', () => {
+    const rules = parseRules('');
+    expect(classify('.parom-ignore', rules)).toBe('unmanaged');
+    expect(classify('.totzilla-ignore', rules)).toBe('unmanaged');
   });
 });

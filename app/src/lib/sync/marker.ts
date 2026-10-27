@@ -1,8 +1,23 @@
-// The sync marker: one small JSON file on the server (default "/.totzilla")
+// The sync marker: one small JSON file on the server (default "/.parom")
 // recording the last deployed commit. History stays on each user's computer.
 
 export const markerFormat = 1;
-export const markerName = '.totzilla';
+export const markerName = '.parom';
+/** The marker's name before the app was renamed; read, and replaced on the next write. */
+export const legacyMarkerName = '.totzilla';
+/** Suffix of files being uploaded, renamed into place when complete. */
+export const partSuffix = '.parom-part';
+const legacyPartSuffix = '.totzilla-part';
+
+/** Sync's own files on the server (marker, its temp copy, half-uploaded files). */
+export function isSyncFile(name: string): boolean {
+  return (
+    name.startsWith(markerName) ||
+    name.startsWith(legacyMarkerName) ||
+    name.endsWith(partSuffix) ||
+    name.endsWith(legacyPartSuffix)
+  );
+}
 
 export interface Lock {
   /** Who holds it (GitHub login or user@computer). */

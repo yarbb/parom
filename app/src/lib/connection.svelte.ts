@@ -33,6 +33,8 @@ export interface Transfer {
   /** Done, but the "file exists" answer meant nothing was transferred. */
   skipped?: boolean;
   error?: string;
+  /** Daemon session it was handed to (simultaneous transfers use extra sessions). */
+  session?: number;
 }
 
 function isCanceled(e: unknown): boolean {
@@ -125,6 +127,14 @@ class Connection {
   #started = false;
   /** How to open the current session again if the server drops it. */
   #reopen: Reopen | null = null;
+  /** session.open arguments of the current session, for extra transfer sessions. */
+  #openArgs: Record<string, unknown> | null = null;
+  /** Extra sessions to the same server for simultaneous transfers, opened per batch. */
+  #pool: number[] = [];
+  #poolReady: Promise<void> | null = null;
+  #poolIdle: ReturnType<typeof setTimeout> | null = null;
+  /** Transfers handed to each session and not finished yet. */
+  #busy = new Map<number, number>();
   /** Bumped by Disconnect and new connects: stops a pending reconnect. */
   #reconnectGen = 0;
   /** Attempt number while reconnecting (0: not reconnecting). */
@@ -179,7 +189,9 @@ class Connection {
       }
       case 'session.closed':
       case 'session.disconnected':
-        if (p.session === this.session) {
+        if (this.#pool.includes(Number(p.session))) {
+          this.#dropFromPool(Number(p.session));
+        } else if (p.session === this.session) {
           const dropped = e.method === 'session.disconnected';
           const path = this.remotePath;
           const reopen = this.#reopen;
@@ -193,6 +205,8 @@ class Connection {
   }
 
   #lost(reason = ''): void {
+    this.#closePool();
+    this.#openArgs = null;
     this.state = 'disconnected';
     this.session = null;
     this.site = null;
@@ -250,16 +264,18 @@ class Connection {
     const user = params.user.trim();
     this.label = `${user ? `${user}@` : ''}${target.host}${target.port ? `:${target.port}` : ''}`;
     try {
-      const res = await call<{ session: number }>('session.open', {
+      const args = {
         protocol: target.protocol,
         host: target.host,
         port: target.port,
         user,
         password: params.password,
         timeout: prefs.value.connectTimeout,
-      });
+      };
+      const res = await call<{ session: number }>('session.open', args);
       this.session = res.session;
       this.state = 'connected';
+      this.#openArgs = args;
       this.#reopen = { kind: 'quick', params: { ...params } };
       const port = Number.isFinite(target.port) ? target.port : undefined;
       await this.#remember({ protocol: target.protocol, host: target.host, port, user }, params);
@@ -304,6 +320,7 @@ class Connection {
       this.session = res.session;
       this.state = 'connected';
       this.site = site;
+      this.#openArgs = params;
       this.#reopen = { kind: 'site', site, password };
       void prefs.set('lastConnection', { type: 'site', id: site.id });
       await this.list(site.remoteDir.trim() || undefined);
@@ -411,9 +428,83 @@ class Connection {
     return this.transfers[this.transfers.length - 1];
   }
 
+  /** How many transfers may run at once: Preferences, but one for sites that pace requests. */
+  get #limit(): number {
+    return (this.site?.pace ?? 0) > 0 ? 1 : Math.max(1, Math.min(5, prefs.value.simultaneous));
+  }
+
+  /** Opens the extra sessions for a batch once; failures just mean fewer slots. */
+  #ensurePool(): Promise<void> {
+    if (this.#poolIdle) {
+      clearTimeout(this.#poolIdle);
+      this.#poolIdle = null;
+    }
+    const want = this.#limit - 1 - this.#pool.length;
+    if (want <= 0 || !this.#openArgs) {
+      return Promise.resolve();
+    }
+    this.#poolReady ??= (async () => {
+      const args = this.#openArgs!;
+      const opened = await Promise.all(
+        Array.from({ length: want }, () =>
+          call<{ session: number }>('session.open', args).then(
+            (r) => r.session,
+            () => null,
+          ),
+        ),
+      );
+      if (this.#openArgs === args) {
+        this.#pool.push(...opened.filter((id): id is number => id !== null));
+      } else {
+        // Disconnected meanwhile.
+        opened.forEach((id) => id !== null && void call('session.close', { session: id }).catch(() => {}));
+      }
+      this.#poolReady = null;
+    })();
+    return this.#poolReady;
+  }
+
+  /** The least busy session: the main one or an extra one. */
+  #pickSession(): number | null {
+    if (this.session === null) {
+      return null;
+    }
+    let best = this.session;
+    for (const id of this.#pool) {
+      if ((this.#busy.get(id) ?? 0) < (this.#busy.get(best) ?? 0)) {
+        best = id;
+      }
+    }
+    return best;
+  }
+
+  #dropFromPool(id: number): void {
+    this.#pool = this.#pool.filter((x) => x !== id);
+    this.#busy.delete(id);
+    void call('session.close', { session: id }).catch(() => {});
+  }
+
+  #closePool(): void {
+    if (this.#poolIdle) {
+      clearTimeout(this.#poolIdle);
+      this.#poolIdle = null;
+    }
+    for (const id of this.#pool) {
+      void call('session.close', { session: id }).catch(() => {});
+    }
+    this.#pool = [];
+    this.#busy.clear();
+  }
+
   async #run(tr: Transfer, params: Record<string, unknown>): Promise<Transfer> {
-    const session = this.session;
     if (tr.state === 'canceled') {
+      this.onTransferDone?.(tr);
+      return tr;
+    }
+    await this.#ensurePool();
+    const session = this.#pickSession();
+    // Canceled while the extra sessions opened (TypeScript cannot see that).
+    if ((tr.state as Transfer['state']) === 'canceled') {
       this.onTransferDone?.(tr);
       return tr;
     }
@@ -424,6 +515,8 @@ class Connection {
       return tr;
     }
     tr.sent = true;
+    tr.session = session;
+    this.#busy.set(session, (this.#busy.get(session) ?? 0) + 1);
     // A site can answer "file exists" for all its transfers.
     const preset = this.site && this.site.exists !== 'ask' ? this.site.exists : prefs.value.existsDefault;
     const exists = preset !== 'ask' ? { exists: preset } : {};
@@ -440,8 +533,13 @@ class Connection {
       tr.state = isCanceled(e) ? 'canceled' : 'failed';
       tr.error = describeError(e);
     }
+    this.#busy.set(session, Math.max(0, (this.#busy.get(session) ?? 1) - 1));
     if (!this.transfers.some((x) => x.state === 'running') && this.walks === 0) {
       this.existsAll = null;
+      // Idle extra sessions are closed before the server times them out.
+      if (this.#pool.length && !this.#poolIdle) {
+        this.#poolIdle = setTimeout(() => this.#closePool(), 20_000);
+      }
     }
     this.onTransferDone?.(tr);
     return tr;
@@ -462,7 +560,7 @@ class Connection {
       return;
     }
     try {
-      await call('session.cancel_request', { session: this.session, id: tr.id });
+      await call('session.cancel_request', { session: tr.session ?? this.session, id: tr.id });
     } catch {
       // Already finished; its own result stands.
     }

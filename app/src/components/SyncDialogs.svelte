@@ -31,7 +31,7 @@
   {@const c = sync.check}
   <Modal title={t('sync.marker.title', { server: c.site.name })} onCancel={() => markerAnswer('not_now')}>
     <p>{t('sync.marker.body', { path: `${c.root.replace(/\/$/, '')}/${markerName}` })}</p>
-    <pre class="mono preview">totzilla 1
+    <pre class="mono preview">{markerName.slice(1)} 1
 repo   {c.site.repo || '–'}
 commit {t('sync.marker.after_first_sync')}
 by     {t('sync.marker.you')}

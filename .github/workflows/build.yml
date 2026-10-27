@@ -173,7 +173,7 @@ jobs:
           $setup = Get-ChildItem app/src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
           Write-Host "Installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
           Start-Process -Wait -FilePath $setup.FullName -ArgumentList '/S'
-          $dir = Join-Path $env:LOCALAPPDATA 'TOTzilla'
+          $dir = Join-Path $env:LOCALAPPDATA 'Parom'
           Get-ChildItem -Recurse $dir | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 200
           $exe = Get-ChildItem $dir -Filter *.exe | Where-Object Name -notmatch 'uninstall' | Select-Object -First 1
           $report = Join-Path $env:RUNNER_TEMP 'self-test.json'

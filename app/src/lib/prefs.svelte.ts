@@ -27,6 +27,8 @@ export interface Prefs {
   existsDefault: ExistsDefault;
   /** Seconds. */
   connectTimeout: number;
+  /** Transfers at once (extra connections to the server); sites that pace requests use one. */
+  simultaneous: number;
   /** Open the session again when the server drops it. */
   autoReconnect: boolean;
   /** Program for editing server files; empty uses the system's choice. */
@@ -54,6 +56,8 @@ export interface Prefs {
   repos: string[];
   /** Site repositories removed from the GitHub tab's list. */
   hiddenRepos: string[];
+  /** Passwords from the app's old name were copied (once). */
+  secretsMigrated: boolean;
   /** Repository shown in the GitHub tab. */
   githubRepo: string;
 }
@@ -74,6 +78,7 @@ export const defaultPrefs: Prefs = {
   lastLocalDir: '',
   existsDefault: 'ask',
   connectTimeout: 20,
+  simultaneous: 2,
   autoReconnect: true,
   editorPath: '',
   editUploadOnSave: true,
@@ -92,6 +97,7 @@ export const defaultPrefs: Prefs = {
   repos: [],
   hiddenRepos: [],
   githubRepo: '',
+  secretsMigrated: false,
 };
 
 /** Applies the parts of the preferences that change the page itself. */

@@ -4,7 +4,8 @@ Technical guide for agents working on this repository. Public file: no personal 
 
 ## Project
 Cross-platform SFTP/FTP client built on the FileZilla 3.71.1 engine, with a GitHub tab (like GitHub Desktop) and safe, version-aware server sync. Generic tool: nothing specific to any particular server.
-- Product name is a placeholder ("TOTzilla"). Keep it in ONE constant. Do not use "-zilla" in the final name (FileZilla trademark).
+- Product name: **Parom** (Russian for "ferry"; formerly the working name TOTzilla). It lives in ONE place: `productName` in `app/src-tauri/tauri.conf.json` (window title, installer, credential service, user agent). Never "-zilla" (FileZilla trademark). Internal names still carry the working name for now: the daemon `totzillad`, the Rust crate, the repository, the GitHub App slug `totzilla-sync`.
+- Rename compatibility: on first start the old data folders (`org.totzilla.app`) are copied to the new identifier and saved passwords to the new credential service (`src-tauri/src/migrate.rs`); the old marker `/.totzilla` and `.totzilla-ignore` are still read (the marker is replaced by `/.parom` on the next write).
 - License: GPLv3 or later. fzssh is AGPLv3, so distributed binaries follow AGPLv3 terms. Keep upstream copyright headers, mark modified files, keep NOTICE up to date.
 - Remove FileZilla branding, client identification strings and update-check URLs; updates come from GitHub Releases.
 
@@ -61,7 +62,7 @@ One token set, two themes.
 - The app can download community translations from GitHub (public, no login).
 
 ## Sync marker
-One small file on the server, `/.totzilla` (~300 bytes, path configurable). Fields: format version, repo, last deployed commit SHA, tree fingerprint (hash over managed files: path+size+hash), who (GitHub login or machine), when (UTC), lock `{by, since, ttl}` or none.
+One small file on the server, `/.parom` (~300 bytes; `/.totzilla` from before the rename is still read). Fields: format version, repo, last deployed commit SHA, tree fingerprint (hash over managed files: path+size+hash), who (GitHub login or machine), when (UTC), lock `{by, since, ttl}` or none.
 - History is NOT stored on the server. Per-user history, backups and logs live locally in the app data dir (`{history,backups,logs}`).
 - On connect, read the marker:
   - same SHA: up to date;
@@ -69,7 +70,7 @@ One small file on the server, `/.totzilla` (~300 bytes, path configurable). Fiel
   - unknown/different SHA (someone else synced) or fingerprint mismatch (manual edits; diff against the git tree at that SHA shows which files): "Versions differ" dialog with Cancel / Show differences / Sync anyway, and "Back up the server first" checked by default.
 - First connect to a server: ask once to create the marker (Not now / Never for this server / Create), remembered per server ("Ask again" in Preferences). If declined, compare repo files with server files by size+hash (slower, no author info).
 - Lock: write lock with a nonce, re-read after a short delay, abort on mismatch. SFTP has no atomic compare-and-swap, so a small race remains (document it in the UI/docs). Upload to a temp name, then rename.
-- Managed paths: `.totzilla-ignore` in the repo (gitignore syntax); `!pattern` means never upload or overwrite (e.g. `!data/**`).
+- Managed paths: `.parom-ignore` in the repo (gitignore syntax; `.totzilla-ignore` still read); `!pattern` means never upload or overwrite (e.g. `!data/**`).
 - Sync steps (progress dialog): check marker, back up, upload N files, update marker, optionally close the linked issue with a comment, optionally run a post-sync command (e.g. restart).
 
 ## Roadmap
