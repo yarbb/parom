@@ -49,7 +49,7 @@ fn upstream_ref(repo: &Repository, branch: &str) -> Option<String> {
     let configured = repo
         .branch_upstream_name(&format!("refs/heads/{branch}"))
         .ok()
-        .and_then(|b| b.as_str().map(str::to_owned));
+        .and_then(|b| b.as_str().ok().map(str::to_owned));
     let fallback = format!("refs/remotes/origin/{branch}");
     configured.or_else(|| repo.find_reference(&fallback).ok().map(|_| fallback))
 }
