@@ -7,11 +7,13 @@ import { sites } from './sites.svelte';
 export interface BranchInfo {
   branch: string | null;
   head: string | null;
+  /** Remote the branch pushes to and pulls from. */
+  remote: string | null;
   upstream: string | null;
   ahead: number;
   behind: number;
   remote_url: string | null;
-  /** "owner/name" when origin is on github.com. */
+  /** "owner/name" when that remote is on github.com. */
   github: string | null;
 }
 
@@ -71,7 +73,7 @@ class Repo {
   error = $state('');
   /** "fetch" / "pull" / "push" / "commit" while running. */
   busy = $state('');
-  /** When origin was last fetched in this session (ms). */
+  /** When the remote was last fetched in this session (ms). */
   fetchedAt = $state<number | null>(null);
 
   /** Repositories linked to sites, then ones added by hand. */
@@ -166,7 +168,7 @@ class Repo {
     }
   }
 
-  /** Fetch, pull (fast-forward only) or push origin. */
+  /** Fetch, pull (fast-forward only) or push the branch's remote. */
   async remote(op: 'fetch' | 'pull' | 'push'): Promise<void> {
     this.busy = op;
     try {

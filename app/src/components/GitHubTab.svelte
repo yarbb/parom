@@ -76,6 +76,7 @@
 
   let info = $derived(repo.info);
   let remoteAction = $derived.by((): { op: 'fetch' | 'pull' | 'push'; label: string } => {
+    const remote = info?.remote ?? 'origin';
     if (repo.busy === 'fetch' || repo.busy === 'pull' || repo.busy === 'push') {
       return { op: repo.busy, label: t(`github.busy.${repo.busy}`) };
     }
@@ -83,14 +84,14 @@
       return { op: 'push', label: t('github.publish_branch') };
     }
     if (info?.behind) {
-      return { op: 'pull', label: t('github.pull_origin', { count: info.behind }) };
+      return { op: 'pull', label: t('github.pull_origin', { remote, count: info.behind }) };
     }
     if (info?.ahead) {
-      return { op: 'push', label: t('github.push_origin', { count: info.ahead }) };
+      return { op: 'push', label: t('github.push_origin', { remote, count: info.ahead }) };
     }
-    return { op: 'fetch', label: t('github.fetch_origin') };
+    return { op: 'fetch', label: t('github.fetch_origin', { remote }) };
   });
-  // Sidebar counts need an account and a github.com origin.
+  // Sidebar counts need an account and a remote on github.com.
   $effect(() => {
     const slug = github.user ? (info?.github ?? null) : null;
     void counts.load(slug);
@@ -126,7 +127,7 @@
     <button
       class="control"
       disabled={!!repo.busy}
-      title={repo.fetchedAt ? t('github.last_fetched', { when: relativeTime(repo.fetchedAt) }) : (info.remote_url ?? '')}
+      title={`${info.remote}: ${info.remote_url}${repo.fetchedAt ? ` · ${t('github.last_fetched', { when: relativeTime(repo.fetchedAt) })}` : ''}`}
       onclick={() => repo.remote(remoteAction.op)}
     >
       ⟳ {remoteAction.label}
