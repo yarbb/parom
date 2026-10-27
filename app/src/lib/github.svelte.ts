@@ -78,7 +78,7 @@ class GitHubAccount {
 
 export const github = new GitHubAccount();
 
-/** One REST call as the signed-in user. */
-export function api<T>(method: string, path: string, body?: unknown): Promise<T> {
-  return invoke<T>('github_api', { method, path, body: body ?? null });
+/** One REST call as the signed-in user; `html` adds GitHub-rendered Markdown (`body_html`). */
+export function api<T>(method: string, path: string, body?: unknown, html = false): Promise<T> {
+  return invoke<T>('github_api', { method, path, body: body ?? null, html });
 }

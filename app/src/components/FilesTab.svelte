@@ -20,6 +20,7 @@
   import SyncBar from './SyncBar.svelte';
   import SyncDialogs from './SyncDialogs.svelte';
   import { sync } from '../lib/sync/engine.svelte';
+  import { repo } from '../lib/repo.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -155,6 +156,21 @@
   $effect(() => {
     const ready = connection.state === 'connected' && !!connection.site?.localDir.trim();
     untrack(() => (ready ? void sync.refresh() : sync.reset()));
+  });
+
+  // A commit or pull in the GitHub tab: the local files and the local commit
+  // in the sync bar are out of date (the server side is not, so no walk).
+  $effect(() => {
+    if (!repo.changed) {
+      return;
+    }
+    untrack(() => {
+      localPane?.refresh();
+      const dir = connection.site?.localDir.trim().toLowerCase();
+      if (sync.active && dir === repo.dir.toLowerCase() && !sync.run && !sync.preparing) {
+        void sync.refresh({ skipEdits: true });
+      }
+    });
   });
 
   onMount(() => {

@@ -19,6 +19,7 @@
   } from '../lib/issues.svelte';
   import { repo } from '../lib/repo.svelte';
   import { relativeTime } from '../lib/when';
+  import Markdown from './Markdown.svelte';
   import Modal from './Modal.svelte';
 
   // Boards Ix and Pr: list (search, open / closed) and the selected item with
@@ -245,12 +246,16 @@
         {/if}
         <div class="post">
           <div class="who muted">{i.user?.login} · {relativeTime(ms(i.created_at))}</div>
-          <div class="text">{i.body?.trim() || t('github.no_description')}</div>
+          {#if i.body?.trim()}
+            <Markdown html={(pull ?? i).body_html} text={i.body} />
+          {:else}
+            <div class="muted">{t('github.no_description')}</div>
+          {/if}
         </div>
         {#each comments as c (c.id)}
           <div class="post">
             <div class="who muted">{c.user?.login} · {relativeTime(ms(c.created_at))}</div>
-            <div class="text">{c.body}</div>
+            <Markdown html={c.body_html} text={c.body} />
           </div>
         {/each}
       </div>
@@ -450,11 +455,6 @@
     font-size: 11.5px;
   }
 
-  .text {
-    white-space: pre-wrap;
-    word-break: break-word;
-    line-height: 1.5;
-  }
 
   .reply {
     display: flex;

@@ -275,19 +275,26 @@ async fn github_device_poll(app: tauri::AppHandle, device_code: String) -> Resul
 
 /// A REST call as the signed-in user; `path` is relative to api.github.com.
 #[tauri::command]
-async fn github_api(app: tauri::AppHandle, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
+async fn github_api(
+    app: tauri::AppHandle,
+    method: String,
+    path: String,
+    body: Option<Value>,
+    html: Option<bool>,
+) -> Result<Value, String> {
     blocking(move || {
         let token = github_token(&app)?.ok_or("Not signed in to GitHub")?;
-        Ok(github::api(&user_agent(&app), &token, &method, &path, body)?)
+        Ok(github::api(&user_agent(&app), &token, &method, &path, body, html.unwrap_or(false))?)
     })
     .await
 }
 
-/// Opens a github.com page in the default browser (nothing else).
+/// Opens a web page in the default browser (https only: links in issues and
+/// pull requests, GitHub settings pages).
 #[tauri::command]
 fn open_github_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://github.com/") {
-        return Err(format!("not a GitHub URL: {url}"));
+    if !url.starts_with("https://") {
+        return Err(format!("not an https URL: {url}"));
     }
     open::that_detached(&url).map_err(|e| e.to_string())
 }

@@ -73,6 +73,8 @@ class Repo {
   error = $state('');
   /** "fetch" / "pull" / "push" / "commit" while running. */
   busy = $state('');
+  /** Bumped when a commit or pull changed HEAD or the files on disk. */
+  changed = $state(0);
   /** When the remote was last fetched in this session (ms). */
   fetchedAt = $state<number | null>(null);
 
@@ -175,6 +177,7 @@ class Repo {
       const author = github.author;
       await invoke<string>('repo_commit', { dir: this.dir, paths, message, name: author?.name ?? null, email: author?.email ?? null });
       this.error = '';
+      this.changed++;
       await this.refresh();
       return true;
     } catch (e) {
@@ -192,6 +195,9 @@ class Repo {
       this.info = await invoke<BranchInfo>('repo_remote', { dir: this.dir, op });
       this.fetchedAt = Date.now();
       this.error = '';
+      if (op === 'pull') {
+        this.changed++;
+      }
       await this.refresh();
     } catch (e) {
       this.error = String(e);
