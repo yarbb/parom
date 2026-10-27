@@ -62,7 +62,18 @@
     </ul>
   {/if}
 
-  <div class="label">{t('sync.preview.files', { chosen, count: preview.items.length })}</div>
+  <div class="label files-label">
+    <span>{t('sync.preview.files', { chosen, count: preview.items.length })}</span>
+    {#if preview.items.length}
+      <span class="pick-all">
+        <button type="button" onclick={() => setFolder(preview.items, true)}>{t('sync.preview.all')}</button>
+        <button type="button" onclick={() => setFolder(preview.items, false)}>{t('sync.preview.none')}</button>
+      </span>
+    {/if}
+  </div>
+  {#if deploy && preview.items.length && chosen === 0}
+    <p class="muted small">{t('sync.preview.marker_only')}</p>
+  {/if}
   {#if preview.items.length}
     <div class="tree">
       {#each groups as g (g.folder)}
@@ -128,6 +139,34 @@
     font-size: 10.5px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
+  }
+
+  .files-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .pick-all {
+    display: flex;
+    gap: 10px;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .pick-all button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11.5px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .pick-all button:hover {
+    color: var(--text-strong);
   }
 
   .commits {

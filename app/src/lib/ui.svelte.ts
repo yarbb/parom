@@ -7,6 +7,8 @@ class Ui {
   appName = $state('');
   siteManager = $state(false);
   preferences = $state(false);
+  /** Page Preferences open on (set before opening them). */
+  preferencesPage = $state<string | null>(null);
   /** Help → About. */
   about = $state(false);
   /** The message log panel above the status bar. */

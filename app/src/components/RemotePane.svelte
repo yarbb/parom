@@ -86,7 +86,7 @@
     return c ? labelColors[c] : null;
   };
 
-  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[]) {
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[], quick = false) {
     if (!connected) {
       return;
     }
@@ -100,13 +100,26 @@
       const from = rows[0].name;
       op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && void connection.renameRemote(from, to) };
     } else if (cmd === 'delete' && rows.length) {
-      op = { kind: 'delete', names: rows.map((r) => r.name), remote: true, onSubmit: () => void connection.deleteRemote(rows) };
+      if (quick) {
+        void connection.deleteRemote(rows);
+      } else {
+        op = { kind: 'delete', names: rows.map((r) => r.name), remote: true, onSubmit: () => void connection.deleteRemote(rows) };
+      }
     }
   }
 
   function copyPath(rows: FileRow[]) {
     const paths = rows.length ? rows.map((r) => remoteJoin(connection.remotePath, r.name)) : [connection.remotePath];
     void navigator.clipboard?.writeText(paths.join('\n'));
+  }
+
+  /** sftp://user@host:port/path (Shift+right-click), for other clients and notes. */
+  function copyUrl(rows: FileRow[]) {
+    const site = connection.site;
+    const scheme = site?.protocol && site.protocol !== 'sftp' ? 'ftp' : 'sftp';
+    const auth = connection.label.split(' (').pop()!.replace(/\)$/, '');
+    const paths = rows.length ? rows.map((r) => remoteJoin(connection.remotePath, r.name)) : [connection.remotePath];
+    void navigator.clipboard?.writeText(paths.map((p) => `${scheme}://${auth}${p}`).join('\n'));
   }
 
   function openMenu(e: MouseEvent, rows: FileRow[]) {
@@ -126,7 +139,9 @@
         },
         { separator: true, label: '' },
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
-        { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+        e.shiftKey
+          ? { label: t('fileop.delete_now'), hint: 'Shift+Del', danger: true, disabled: !any, action: () => command('delete', rows, true) }
+          : { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         {
@@ -138,6 +153,7 @@
           },
         },
         { label: t('fileop.copy_path'), action: () => copyPath(rows) },
+        ...(e.shiftKey ? [{ label: t('fileop.copy_url'), action: () => copyUrl(rows) }] : []),
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: () => command('refresh', rows) },
       ],

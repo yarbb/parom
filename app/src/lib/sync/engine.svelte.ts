@@ -126,6 +126,8 @@ class SyncEngine {
   progress = $state('');
   /** Between "Sync with server" and the confirmation or the progress dialog. */
   preparing = $state(false);
+  /** A backup without a sync is running ("Back up now"). */
+  backingUp = $state(false);
   #askedThisSession = new Set<string>();
   #cancel = false;
   /** Server folders whose marker still has the old name (renamed on the next write). */
@@ -501,6 +503,62 @@ class SyncEngine {
   }
 
   /** "Server to GitHub": finds server files that differ from the local folder and previews them. */
+  /**
+   * Copies the synced files from the server into a new backup without
+   * syncing anything (Backups → "Back up now"). Returns the backup folder.
+   */
+  async backupNow(): Promise<string | null> {
+    if (this.preparing || this.run || !this.active) {
+      return null;
+    }
+    this.preparing = true;
+    this.backingUp = true;
+    this.#stopWalk = false;
+    try {
+      this.#cache.clear();
+      await this.refresh({ keepCache: true, skipEdits: true });
+      const c = this.check;
+      if (!c || this.#stopWalk) {
+        return null;
+      }
+      const dir = c.site.localDir.trim();
+      const head = (await git.tree(dir, c.repo.head!)).filter((f) => classify(f.path, c.rules) === 'managed');
+      const server = await this.#serverFiles(c.root, head.map((f) => f.path));
+      const files = [...server.keys()].sort();
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupDir = joinLocal(await backupsRoot(prefs.value.backupDir), c.site.id, `${stamp}-manual`);
+      let n = 0;
+      for (const p of files) {
+        if (this.#stopWalk) {
+          throw new Error('Canceled');
+        }
+        this.progress = `${++n} / ${files.length}`;
+        const i = p.lastIndexOf('/');
+        await call('transfer.download', {
+          session: this.#session(),
+          remote_path: i < 0 ? c.root : remoteJoin(c.root, p.slice(0, i)),
+          remote_name: p.slice(i + 1),
+          local: joinLocal(backupDir, p),
+          exists: 'overwrite',
+        });
+      }
+      await host.writeSmall(
+        joinLocal(backupDir, 'backup.json'),
+        JSON.stringify({ when: new Date().toISOString(), site: c.site.name, root: c.root, sha: c.marker?.sha ?? null, reason: 'manual', files }, null, 2),
+      );
+      await this.#pruneBackups(c.site.id);
+      this.error = '';
+      return backupDir;
+    } catch (e) {
+      this.error = this.#stopWalk ? '' : describeError(e);
+      return null;
+    } finally {
+      this.preparing = false;
+      this.backingUp = false;
+      this.progress = '';
+    }
+  }
+
   async startPull(): Promise<void> {
     if (this.preparing || this.run) {
       return;

@@ -37,6 +37,9 @@ class Avatars {
   bySha = new SvelteMap<string, string>();
   /** Email to avatar, learned from those commits. */
   byEmail = new SvelteMap<string, string>();
+  /** Commit sha and email to GitHub login, for links to profiles. */
+  loginBySha = new SvelteMap<string, string>();
+  loginByEmail = new SvelteMap<string, string>();
   #loaded = new Set<string>();
 
   /** Loads the newest commits of a branch from GitHub once per session. */
@@ -47,7 +50,7 @@ class Avatars {
     }
     this.#loaded.add(key);
     try {
-      const commits = await api<{ sha: string; author: { avatar_url: string } | null; commit: { author: { email: string } } }[]>(
+      const commits = await api<{ sha: string; author: { avatar_url: string; login: string } | null; commit: { author: { email: string } } }[]>(
         'GET',
         `/repos/${slug}/commits?sha=${encodeURIComponent(branch)}&per_page=100`,
       );
@@ -55,11 +58,19 @@ class Avatars {
         if (c.author?.avatar_url) {
           this.bySha.set(c.sha, c.author.avatar_url);
           this.byEmail.set(c.commit.author.email.toLowerCase(), c.author.avatar_url);
+          this.loginBySha.set(c.sha, c.author.login);
+          this.loginByEmail.set(c.commit.author.email.toLowerCase(), c.author.login);
         }
       }
     } catch {
       this.#loaded.delete(key);
     }
+  }
+
+  /** GitHub login of a commit's author or a co-author, when known. */
+  login(email: string, sha?: string): string | null {
+    const noreply = /^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i.exec(email.trim());
+    return (sha && this.loginBySha.get(sha)) || this.loginByEmail.get(email.toLowerCase()) || noreply?.[1] || null;
   }
 
   /** Best known avatar for a commit's author or a co-author. */

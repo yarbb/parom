@@ -10,6 +10,9 @@
   import { sync } from '../lib/sync/engine.svelte';
   import Checkbox from './Checkbox.svelte';
   import Select from './Select.svelte';
+  import Ferry from './Ferry.svelte';
+  import { fly } from 'svelte/transition';
+  import { ms } from '../lib/motion';
 
   // Board Sm: a tree of sites and folders on the left, the selected site's
   // settings in tabs on the right. Edits a copy; OK or Connect saves it.
@@ -262,7 +265,8 @@
               <button role="tab" class="tab" class:active={tab === id} aria-selected={tab === id} onclick={() => (tab = id as typeof tab)}>{t(key)}</button>
             {/each}
           </div>
-          <div class="form">
+          {#key tab}
+          <div class="form" in:fly={{ y: 6, duration: ms(180) }}>
             {#if tab === 'general'}
               <label><span>{t('sites.name')}</span><input class="field" bind:value={site.name} /></label>
               <label><span>{t('sites.folder')}</span>
@@ -349,6 +353,7 @@
               {/if}
             {/if}
           </div>
+          {/key}
         {:else if selectedFolder !== null}
           {@const f = selectedFolder}
           <div class="form">
@@ -362,6 +367,7 @@
       </section>
     </div>
     <footer>
+      <Ferry />
       {#if error}<span class="status-removed error" title={error}>{error}</span>{/if}
       <span class="spacer"></span>
       <button class="control" disabled={!site || !site.host.trim()} onclick={connect}>{t('common.connect')}</button>
@@ -470,6 +476,16 @@
 
   .node.folder {
     color: var(--muted);
+  }
+
+  .node {
+    transition:
+      background-color var(--motion-fast),
+      color var(--motion-fast);
+  }
+
+  .node:hover:not(.selected) {
+    background: color-mix(in srgb, var(--selected-bg) 60%, transparent);
   }
 
   .node.selected {

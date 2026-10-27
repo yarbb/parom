@@ -92,6 +92,25 @@
 </script>
 
 <div class="backups">
+  <!-- A backup without a sync: everything the site syncs, as it is on the server now. -->
+  <div class="now">
+    <div>
+      <div class="now-title">{t('backups.now_title')}</div>
+      <div class="muted small">{t('backups.now_body', { root: connected ? connection.siteRoot || '/' : site.remoteDir || '/' })}</div>
+    </div>
+    {#if sync.backingUp}
+      <button class="control" onclick={() => sync.stopWalk()}>{t('backups.now_cancel', { progress: sync.progress })}</button>
+    {:else}
+      <button
+        class="control primary"
+        disabled={!connected || !sync.active || sync.preparing || !!sync.run}
+        title={connected ? '' : t('backups.connect_first', { server: site.name })}
+        onclick={async () => (await sync.backupNow()) && load()}
+      >
+        {t('backups.now_button')}
+      </button>
+    {/if}
+  </div>
   <p class="muted">{t('backups.keep', { count: prefs.value.backupKeep })}</p>
   {#if loading}
     <p class="muted">{t('files.loading')}</p>
@@ -143,6 +162,28 @@
 <style>
   p {
     margin: 0 0 10px;
+  }
+
+  .now {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--panel);
+  }
+
+  .now-title {
+    margin-bottom: 2px;
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+
+  .small {
+    font-size: 11.5px;
   }
 
   .list {

@@ -8,6 +8,9 @@
   import { prefs, type Prefs } from '../lib/prefs.svelte';
   import Checkbox from './Checkbox.svelte';
   import Select from './Select.svelte';
+  import Ferry from './Ferry.svelte';
+  import { fly } from 'svelte/transition';
+  import { ms } from '../lib/motion';
   import Modal from './Modal.svelte';
   import { sites } from '../lib/sites.svelte';
   import { host } from '../lib/sync/host';
@@ -43,7 +46,8 @@
     logging: 'prefs.later.logging',
   };
 
-  let page = $state<Page>('interface');
+  let page = $state<Page>((ui.preferencesPage as Page | null) ?? 'interface');
+  ui.preferencesPage = null;
   const accents = ['neutral', 'blue', 'green', 'purple', 'orange', 'pink', 'teal'] as const;
   /** Dark-theme shade of each accent, for the little sample next to the list. */
   const swatch: Record<(typeof accents)[number], string> = {
@@ -209,6 +213,8 @@
         {/each}
       </nav>
       <section class="content">
+        {#key page}
+        <div in:fly={{ y: 6, duration: ms(180) }}>
         <h3>{t(pageKey[page])}</h3>
         {#if later[page]}
           <p class="muted note">{t(later[page]!)}</p>
@@ -232,6 +238,9 @@
             <Select bind:value={draft.fontScale} options={[80, 90, 100, 110, 125, 150, 175].map((s) => ({ value: s, label: `${s}%` }))} />
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.hideAddress} label={t('prefs.hide_address')} /></div>
+          <label class="row"><span>{t('prefs.hide_style')}</span>
+            <Select bind:value={draft.hideStyle} options={[{ value: 'blur', label: t('prefs.hide_style.blur') }, { value: 'text', label: t('prefs.hide_style.text') }]} />
+          </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
           <label class="row"><span>{t('prefs.accent')}</span>
             <Select bind:value={draft.accent} options={accents.map((a) => ({ value: a, label: t(`prefs.accent.${a}`) }))} />
@@ -389,9 +398,12 @@
           <div class="row"><span>{t('prefs.current_version')}</span><span class="mono">v{version}</span></div>
           <p class="muted">{t('prefs.updates_source')}</p>
         {/if}
+        </div>
+        {/key}
       </section>
     </div>
     <footer>
+      <Ferry />
       {#if error}<span class="status-removed error" title={error}>{error}</span>{/if}
       <span class="spacer"></span>
       <button class="control" onclick={onClose}>{t('common.cancel')}</button>
@@ -527,6 +539,16 @@
     font-size: 12.5px;
     text-align: left;
     cursor: pointer;
+  }
+
+  .page {
+    transition:
+      background-color var(--motion-fast),
+      color var(--motion-fast);
+  }
+
+  .page:hover:not(.active) {
+    background: color-mix(in srgb, var(--selected-bg) 60%, transparent);
   }
 
   .page.active {

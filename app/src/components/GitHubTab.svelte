@@ -222,7 +222,13 @@
         </button>
         {#if accountOpen}
           <div class="list up" role="menu">
-            <button class="pick" role="menuitem" onclick={() => ((accountOpen = false), github.signOut())}>{t('github.sign_out')}</button>
+            <button class="pick" role="menuitem" onclick={() => ((accountOpen = false), openGitHub(`https://github.com/${github.user?.login}`))}>
+              {t('github.open_profile')}
+            </button>
+            <button class="pick" role="menuitem" onclick={() => ((accountOpen = false), (ui.preferencesPage = 'account'), (ui.preferences = true))}>
+              {t('menu.preferences')}
+            </button>
+            <button class="pick danger" role="menuitem" onclick={() => ((accountOpen = false), github.signOut())}>{t('github.sign_out')}</button>
           </div>
         {/if}
       {:else}
@@ -347,6 +353,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .pick.danger {
+    border-top: 1px solid var(--line-row);
+    margin-top: 4px;
+    color: color-mix(in srgb, var(--removed) 80%, var(--text));
+  }
+
+  .pick.danger:hover {
+    background: color-mix(in srgb, var(--removed) 12%, transparent);
+    color: var(--removed);
   }
 
   .pick.add {

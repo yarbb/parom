@@ -4,6 +4,7 @@
   import { recentLabel, type RecentServer } from '../lib/recent';
   import { sites, type Site } from '../lib/sites.svelte';
   import { ui } from '../lib/ui.svelte';
+  import { prefs } from '../lib/prefs.svelte';
 
   // Top bar server selector: the current server, plus recent ones to reconnect.
   let { hideAddress }: { hideAddress: boolean } = $props();
@@ -12,8 +13,9 @@
   let root: HTMLDivElement;
 
   const hidden = $derived(t('topbar.address_hidden'));
+  const blur = $derived(prefs.value.hideStyle === 'blur');
   let current = $derived(
-    connection.state === 'disconnected' ? t('topbar.no_server') : hideAddress ? hidden : connection.label,
+    connection.state === 'disconnected' ? t('topbar.no_server') : hideAddress && !blur ? hidden : connection.label,
   );
 
   function choose(s: RecentServer) {
@@ -43,7 +45,9 @@
 <svelte:window onclick={onWindowClick} />
 
 <div class="menu" bind:this={root} {onkeydown} role="presentation">
-  <button class="control mono" aria-haspopup="menu" aria-expanded={open} onclick={() => (open = !open)}>{current} ▾</button>
+  <button class="control mono" aria-haspopup="menu" aria-expanded={open} onclick={() => (open = !open)}
+    ><span class:secret={hideAddress && blur && connection.state !== 'disconnected'}>{current}</span> ▾</button
+  >
   {#if open}
     <div class="list" role="menu">
       <button class="pick" role="menuitem" onclick={() => ((open = false), (ui.siteManager = true))}>{t('sites.title')}...</button>
@@ -51,14 +55,16 @@
         <div class="title">{t('sites.sites')}</div>
         {#each sites.list as s (s.id)}
           <button class="pick mono" role="menuitem" onclick={() => chooseSite(s)}>
-            {s.folder ? `${s.folder} / ` : ''}{s.name}{hideAddress ? '' : `  ·  ${s.host}`}
+            {s.folder ? `${s.folder} / ` : ''}{s.name}{#if !hideAddress || blur}<span class:secret={hideAddress}>{`  ·  ${s.host}`}</span>{/if}
           </button>
         {/each}
       {/if}
       <div class="title">{t('topbar.recent')}</div>
       {#each connection.recent as s (recentLabel(s, false, ''))}
         <div class="item">
-          <button class="pick mono" role="menuitem" onclick={() => choose(s)}>{recentLabel(s, hideAddress, hidden)}</button>
+          <button class="pick mono" role="menuitem" onclick={() => choose(s)}
+            ><span class:secret={hideAddress && blur}>{recentLabel(s, hideAddress && !blur, hidden)}</span></button
+          >
           <button class="forget" aria-label={t('topbar.forget')} title={t('topbar.forget')} onclick={() => connection.forget(s)}>✕</button>
         </div>
       {:else}

@@ -34,7 +34,8 @@
     /** Right click: the rows it applies to (empty for the blank area). */
     onContextMenu?: (e: MouseEvent, rows: FileRow[]) => void;
     /** F2, Delete and F5 on the selection. */
-    onCommand?: (command: 'rename' | 'delete' | 'refresh', rows: FileRow[]) => void;
+    /** F2, Delete (Shift+Delete: without asking) and F5 on the selection. */
+    onCommand?: (command: 'rename' | 'delete' | 'refresh', rows: FileRow[], quick?: boolean) => void;
     /** Rows can be dragged to the other pane. */
     dragFrom?: PaneSide;
     /** The folder shown: a new listing of the same folder keeps scroll and selection. */
@@ -249,7 +250,7 @@
         break;
       case 'Delete':
         if (selected.length) {
-          onCommand?.('delete', selected);
+          onCommand?.('delete', selected, e.shiftKey);
         }
         break;
       case 'F5':
