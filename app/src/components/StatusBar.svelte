@@ -5,6 +5,8 @@
     state: string;
     error?: boolean;
     ok?: boolean;
+    /** Part of `state` to blur (the server address when it is hidden). */
+    secret?: string | null;
     /** Latest engine message (status line, error, failing server reply). */
     message?: { level: string; text: string } | null;
     version: string;
@@ -17,12 +19,15 @@
     onQueue?: () => void;
   }
 
-  let { state, error = false, ok = false, message = null, version, onLog, logOpen = false, queued = 0, queueOpen = false, onQueue }: Props = $props();
+  let { state, secret = null, error = false, ok = false, message = null, version, onLog, logOpen = false, queued = 0, queueOpen = false, onQueue }: Props = $props();
+  const parts = $derived(secret && state.includes(secret) ? state.split(secret) : null);
   const logLabel = $derived(t('log.title'));
 </script>
 
 <footer class="mono muted">
-  <span class="side"><span class:status-removed={error} class:status-new={ok} aria-hidden="true">●</span> {state}</span>
+  <span class="side"><span class:status-removed={error} class:status-new={ok} aria-hidden="true">●</span>
+    {#if parts}{parts[0]}<span class="secret">{secret}</span>{parts.slice(1).join(secret ?? "")}{:else}{state}{/if}</span
+  >
   <span class="message" class:status-removed={message?.level === 'error' || message?.level === 'reply'} title={message?.text ?? ''}>
     {logOpen ? '' : (message?.text ?? '')}
   </span>

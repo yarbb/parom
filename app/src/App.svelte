@@ -112,9 +112,10 @@
     state={engine === 'unavailable'
       ? t('status.engine_unavailable')
       : connection.state === 'connected'
-        ? t('status.connected_to', { server: hideAddress ? t('topbar.address_hidden') : connection.label }) +
+        ? t('status.connected_to', { server: hideAddress && prefs.value.hideStyle === 'text' ? t('topbar.address_hidden') : connection.label }) +
           (sync.check?.marker?.sha ? `  ·  ${t('status.marker', { sha: sync.check.marker.sha.slice(0, 7) })}` : '')
         : t(`status.${connection.state}`)}
+    secret={hideAddress && prefs.value.hideStyle === 'blur' && connection.state === 'connected' ? connection.label : null}
     error={engine === 'unavailable'}
     ok={engine === 'ready' && connection.state === 'connected'}
     message={connection.message}

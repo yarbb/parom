@@ -18,13 +18,17 @@
   }
 
   let { name, tab, onTab, hideAddress = $bindable() }: Props = $props();
+  /** Files are moving: the "_" blinks like a cursor at work. */
+  const transferring = $derived(connection.transfers.some((x) => x.state === 'running') || connection.walks > 0);
 </script>
 
 <!-- The window's title bar: drag it by any empty spot (or the name),
      double-click to maximize. Buttons and menus stay clickable. -->
 <header data-tauri-drag-region>
   <!-- "_" before the name, like the "_P" app icon. -->
-  <b class="brand mono" data-tauri-drag-region><span class="prompt" data-tauri-drag-region>_</span>{name}</b>
+  <b class="brand mono" class:busy={transferring} data-tauri-drag-region
+    ><span class="prompt" data-tauri-drag-region>_</span>{#each [...name] as ch, i (i)}<span class="ch" style:--i={i} data-tauri-drag-region>{ch}</span>{/each}</b
+  >
   <MenuBar bind:hideAddress />
   <div class="tabs" role="tablist">
     <button role="tab" class="tab" class:active={tab === 'files'} aria-selected={tab === 'files'} onclick={() => onTab('files')}>
@@ -79,8 +83,46 @@
   }
 
   .prompt {
+    display: inline-block;
     margin-right: 1px;
     color: var(--accent);
+  }
+
+  .ch {
+    display: inline-block;
+  }
+
+  .brand.busy .prompt {
+    animation: blink 1s steps(1) infinite;
+  }
+
+  /* On hover the letters ride a small wave, one after another. */
+  .brand:hover .ch {
+    animation: wave 0.9s ease-in-out;
+    animation-delay: calc(var(--i) * 60ms);
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes wave {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-2px);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .brand.busy .prompt,
+    .brand:hover .ch {
+      animation: none;
+    }
   }
 
   .tabs {

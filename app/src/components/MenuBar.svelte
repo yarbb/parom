@@ -96,7 +96,7 @@
           { label: t('menu.about', { name: ui.appName }), action: () => (ui.about = true) },
           { separator: true, label: '' },
           { label: t('menu.project_page'), action: () => void openProject() },
-          { label: t('menu.report_problem'), action: () => void openProject('/issues/new') },
+          { label: t('menu.report_problem'), danger: true, action: () => void openProject('/issues/new') },
         ];
     }
   }

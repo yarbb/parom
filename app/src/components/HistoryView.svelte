@@ -9,6 +9,7 @@
   import Splitter from './Splitter.svelte';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
   import Avatar from './Avatar.svelte';
+  import Person from './Person.svelte';
   import { avatars, coAuthors } from '../lib/people.svelte';
 
   // Board Hi: commits with "local HEAD" and "on server" badges, the files a
@@ -126,9 +127,9 @@
           {#if serverIndex > index && index >= 0}· {t('github.ahead_of_server', { count: serverIndex - index })}{/if}
         </p>
         <div class="authors">
-          <span class="person"><Avatar name={commit.author} src={avatars.of(commit.email, commit.sha)} size={20} />{commit.author}</span>
+          <Person name={commit.author} login={avatars.login(commit.email, commit.sha)} src={avatars.of(commit.email, commit.sha)} />
           {#each detail?.people ?? [] as p (p.email)}
-            <span class="person co-person" title={p.email}><Avatar name={p.name} src={avatars.of(p.email)} size={20} />{p.name}</span>
+            <Person name={p.name} login={avatars.login(p.email)} src={avatars.of(p.email)} muted />
           {/each}
         </div>
         {#if detail?.body}<p class="body">{detail.body}</p>{/if}
@@ -246,16 +247,6 @@
     margin: 0 0 8px;
   }
 
-  .person {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-  }
-
-  .co-person {
-    color: var(--muted);
-  }
 
   .line2 {
     font-size: 11px;

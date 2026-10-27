@@ -110,7 +110,7 @@
   /** The folder's rows (command() takes the selected rows as `rows`). */
   const listed = () => rows;
 
-  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[]) {
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[], quick = false) {
     if (atRoots) {
       return;
     }
@@ -135,7 +135,11 @@
       op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && fsOp(() => localRename(full(from), full(to))) };
     } else if (cmd === 'delete' && rows.length) {
       const names = rows.map((r) => r.name);
-      op = { kind: 'delete', names, remote: false, onSubmit: () => fsOp(() => localTrash(names.map(full))) };
+      if (quick) {
+        void fsOp(() => localTrash(names.map(full)));
+      } else {
+        op = { kind: 'delete', names, remote: false, onSubmit: () => fsOp(() => localTrash(names.map(full))) };
+      }
     }
   }
 
@@ -156,7 +160,9 @@
         },
         { separator: true, label: '' },
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
-        { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+        e.shiftKey
+          ? { label: t('fileop.delete_now'), hint: 'Shift+Del', danger: true, disabled: !any, action: () => command('delete', rows, true) }
+          : { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         {
@@ -167,6 +173,13 @@
             labeling = { keys: dirs.map((r) => localLabelKey(localJoin(path, r.name, separator))), names: dirs.map((r) => r.name) };
           },
         },
+        ...(e.shiftKey
+          ? [
+              { separator: true, label: '' },
+              { label: t('fileop.copy_as_path'), action: () => void navigator.clipboard?.writeText((any ? rows.map((r) => localJoin(path, r.name, separator)) : [path]).join('\n')) },
+              { label: t('github.repo.open'), action: () => void openInEditor(any && rows.length === 1 && rows[0].dir ? localJoin(path, rows[0].name, separator) : path, '') },
+            ]
+          : []),
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: refresh },
       ],

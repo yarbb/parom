@@ -6,6 +6,8 @@
     /** Shortcut shown on the right, e.g. "F2". */
     hint?: string;
     separator?: boolean;
+    /** Shown in a soft red: signs out, deletes, reports. */
+    danger?: boolean;
   }
 </script>
 
@@ -58,7 +60,7 @@
     {#if item.separator}
       <div class="separator" role="separator"></div>
     {:else}
-      <button role="menuitem" disabled={item.disabled} onclick={() => run(item)}>
+      <button role="menuitem" class:danger={item.danger} disabled={item.disabled} onclick={() => run(item)}>
         <span>{item.label}</span>
         {#if item.hint}<span class="hint mono">{item.hint}</span>{/if}
       </button>
@@ -100,6 +102,16 @@
     background: var(--selected-bg);
     color: var(--text-strong);
     outline: none;
+  }
+
+  button.danger {
+    color: color-mix(in srgb, var(--removed) 80%, var(--text));
+  }
+
+  button.danger:hover:not(:disabled),
+  button.danger:focus-visible {
+    background: color-mix(in srgb, var(--removed) 12%, transparent);
+    color: var(--removed);
   }
 
   button:disabled {

@@ -23,6 +23,8 @@
   import { sync } from '../lib/sync/engine.svelte';
   import { repo } from '../lib/repo.svelte';
   import { paneAt, paneDrag } from '../lib/panedrag.svelte';
+  import { fly } from 'svelte/transition';
+  import { ms } from '../lib/motion';
   import { listLocal, localTrash } from '../lib/local';
   import { isTauri } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -411,7 +413,7 @@
 {#if paneDrag.active}
   {@const d = paneDrag.active}
   <div class="drag-ghost mono" style:left="{d.x + 14}px" style:top="{d.y + 12}px">
-    <span class="drag-mode">{d.move ? t('files.drag_move') : t('files.drag_copy')}</span>
+    {#key d.move}<span class="drag-mode" in:fly={{ y: d.move ? -6 : 6, duration: ms(140) }}>{d.move ? t('files.drag_move') : t('files.drag_copy')}</span>{/key}
     {d.rows.length === 1 ? d.rows[0].name : t('files.drag_count', { count: d.rows.length })}
   </div>
 {/if}
@@ -461,6 +463,7 @@
   }
 
   .drag-mode {
+    display: inline-block;
     margin-right: 6px;
     color: var(--muted);
   }

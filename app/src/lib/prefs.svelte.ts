@@ -17,6 +17,8 @@ export interface Prefs {
   fontScale: number;
   /** Start with the server address hidden. */
   hideAddress: boolean;
+  /** How a hidden address looks: blurred in place, or replaced by a word. */
+  hideStyle: 'blur' | 'text';
   showHidden: boolean;
   language: string;
   foldersFirst: boolean;
@@ -83,6 +85,7 @@ export const defaultPrefs: Prefs = {
   sizeUnits: 'binary',
   fontScale: 100,
   hideAddress: false,
+  hideStyle: 'blur',
   showHidden: true,
   language: 'en',
   foldersFirst: true,
