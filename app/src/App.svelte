@@ -8,6 +8,7 @@
   import GitHubTab from './components/GitHubTab.svelte';
   import SiteManager from './components/SiteManager.svelte';
   import { sites } from './lib/sites.svelte';
+  import { github } from './lib/github.svelte';
   import { ui } from './lib/ui.svelte';
   import { prefs } from './lib/prefs.svelte';
   import { sync } from './lib/sync/engine.svelte';
@@ -51,6 +52,8 @@
       .then(() => {
         engine = 'ready';
         void sites.load();
+        // Needed outside the GitHub tab too: syncs close fixed issues.
+        void github.load();
       })
       .catch(() => (engine = 'unavailable'));
 

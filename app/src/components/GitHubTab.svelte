@@ -11,6 +11,10 @@
   import { relativeTime } from '../lib/when';
   import ChangesView from './ChangesView.svelte';
   import HistoryView from './HistoryView.svelte';
+  import IssuesView from './IssuesView.svelte';
+  import BackupsList from './BackupsList.svelte';
+  import { sites } from '../lib/sites.svelte';
+  import { counts } from '../lib/issues.svelte';
   import SignedOut from './SignedOut.svelte';
   import SyncBar from './SyncBar.svelte';
 
@@ -18,7 +22,7 @@
   // push), sidebar, and the page. Changes and History work without signing in.
   let { name }: { name: string } = $props();
 
-  type Page = 'changes' | 'history';
+  type Page = 'changes' | 'history' | 'issues' | 'pulls' | 'backups';
   let page = $state<Page>('changes');
   let menuOpen = $state(false);
   let accountOpen = $state(false);
@@ -86,6 +90,15 @@
     }
     return { op: 'fetch', label: t('github.fetch_origin') };
   });
+  // Sidebar counts need an account and a github.com origin.
+  $effect(() => {
+    const slug = github.user ? (info?.github ?? null) : null;
+    void counts.load(slug);
+  });
+
+  /** Sites that deploy this repository (their backups are listed). */
+  let repoSites = $derived(sites.list.filter((s) => s.localDir.trim() && s.localDir.trim().toLowerCase() === repo.dir.toLowerCase()));
+
   let showSyncBar = $derived(sync.active && connection.site?.localDir.trim().toLowerCase() === repo.dir.toLowerCase());
 </script>
 
@@ -134,6 +147,18 @@
     <button class="nav" class:active={page === 'history'} onclick={() => (page = 'history')}>
       <span>{t('github.history')}</span>
     </button>
+    <button class="nav" class:active={page === 'issues'} onclick={() => (page = 'issues')}>
+      <span>{t('github.issues')}</span>{#if counts.issues}<span class="count mono">{counts.issues}</span>{/if}
+    </button>
+    <button class="nav" class:active={page === 'pulls'} onclick={() => (page = 'pulls')}>
+      <span>{t('github.pull_requests')}</span>{#if counts.pulls}<span class="count mono">{counts.pulls}</span>{/if}
+    </button>
+    {#if repoSites.length}
+      <div class="group">{t('github.server')}</div>
+      <button class="nav" class:active={page === 'backups'} onclick={() => (page = 'backups')}>
+        <span>{t('github.backups')}</span>
+      </button>
+    {/if}
     <span class="spacer"></span>
     <div class="account" bind:this={accountRoot}>
       {#if github.user}
@@ -156,8 +181,21 @@
       <SignedOut {name} repoMissing onAddRepo={addRepo} />
     {:else if page === 'changes'}
       <ChangesView />
-    {:else}
+    {:else if page === 'history'}
       <HistoryView />
+    {:else if page === 'backups'}
+      <div class="backups">
+        {#each repoSites as s (s.id)}
+          <div class="section-label">{t('backups.title', { server: s.name })}</div>
+          <div class="backup-list"><BackupsList site={s} /></div>
+        {/each}
+      </div>
+    {:else if !github.user}
+      <SignedOut {name} />
+    {:else if !info?.github}
+      <p class="muted note">{t('github.not_on_github')}</p>
+    {:else}
+      {#key `${page}:${info.github}`}<IssuesView kind={page} slug={info.github} />{/key}
     {/if}
   </section>
 </div>
@@ -278,6 +316,23 @@
     color: var(--text-strong);
   }
 
+  .group {
+    padding: 14px 16px 6px;
+    color: var(--muted);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .backups {
+    flex: 1;
+    overflow: auto;
+  }
+
+  .backup-list {
+    padding: 12px 14px;
+  }
+
   .count {
     font-size: 11px;
   }
@@ -316,6 +371,11 @@
 
   .wide {
     width: 100%;
+  }
+
+  .note {
+    margin: 0;
+    padding: 14px;
   }
 
   .page {

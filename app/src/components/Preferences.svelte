@@ -293,6 +293,7 @@
           <div class="row"><span></span><Checkbox bind:checked={draft.syncDetectEdits} label={t('prefs.detect_edits')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncLock} label={t('prefs.lock_server')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncBackup} label={t('prefs.backup_first')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.syncCloseIssues} label={t('prefs.close_issues')} /></div>
           <label class="row"><span>{t('prefs.backup_keep')}</span>
             <select class="field" bind:value={draft.backupKeep}>
               {#each [1, 3, 5, 10, 20] as n (n)}<option value={n}>{n}</option>{/each}

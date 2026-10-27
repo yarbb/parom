@@ -38,6 +38,8 @@ export interface Prefs {
   syncAskVersionsDiffer: boolean;
   syncAskSomeoneElse: boolean;
   syncAskLocalOnly: boolean;
+  /** After a sync, comment on and close issues the deployed commits fix. */
+  syncCloseIssues: boolean;
   /** Backups kept per site; older ones are deleted. */
   backupKeep: number;
   /** Folder for backups; empty uses the app's data folder. */
@@ -75,6 +77,7 @@ export const defaultPrefs: Prefs = {
   syncAskVersionsDiffer: true,
   syncAskSomeoneElse: true,
   syncAskLocalOnly: false,
+  syncCloseIssues: true,
   backupKeep: 5,
   backupDir: '',
   lastConnection: null,
