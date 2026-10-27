@@ -16,6 +16,7 @@
   import FolderUp from '@lucide/svelte/icons/folder-up';
   import FileIcon from './FileIcon.svelte';
   import { dragThreshold, paneDrag, type PaneSide } from '../lib/panedrag.svelte';
+  import { outsideWindow } from '../lib/dragout';
 
   interface Props {
     rows: FileRow[];
@@ -42,6 +43,10 @@
     unscanned?: (row: FileRow) => boolean;
     /** Colour label of a folder, if any. */
     labelOf?: (row: FileRow) => string | null;
+    /** A row drag started (e.g. to prepare server files for dragging out). */
+    onDragStart?: (rows: FileRow[]) => void;
+    /** A row drag left the window: hand the rows to the system's drag and drop. */
+    onDragOut?: (rows: FileRow[]) => void;
   }
 
   let {
@@ -61,6 +66,8 @@
     folder = '',
     unscanned,
     labelOf,
+    onDragStart,
+    onDragOut,
   }: Props = $props();
 
   // Only the rows in view are in the DOM, so 100k entries stay cheap.
@@ -283,6 +290,14 @@
   function onWindowMove(e: MouseEvent) {
     if (paneDrag.active) {
       if (paneDrag.active.from === dragFrom) {
+        if (onDragOut && outsideWindow(e.clientX, e.clientY)) {
+          // Out of the window: the system's drag takes over from here.
+          const rows = paneDrag.active.rows;
+          paneDrag.active = null;
+          paneDrag.over = null;
+          onDragOut(rows);
+          return;
+        }
         paneDrag.move(e.clientX, e.clientY, e.shiftKey);
       }
       return;
@@ -307,6 +322,7 @@
     if (dragged.length) {
       paneDrag.active = { from: dragFrom, rows: dragged, x: e.clientX, y: e.clientY, move: e.shiftKey };
       paneDrag.move(e.clientX, e.clientY, e.shiftKey);
+      onDragStart?.(dragged);
     }
   }
 

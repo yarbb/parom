@@ -19,6 +19,7 @@
   import SignInDialogs from './components/SignInDialogs.svelte';
   import AboutDialog from './components/AboutDialog.svelte';
   import { shortcut } from './lib/commands.svelte';
+  import { repo } from './lib/repo.svelte';
   import LogPanel from './components/LogPanel.svelte';
   import { connection } from './lib/connection.svelte';
   import { call, onExit } from './lib/daemon';
@@ -31,6 +32,12 @@
   let version = $state('');
   let engine = $state<EngineState>('starting');
   let hideAddress = $state(false);
+  let githubSeen = $state(false);
+  $effect(() => {
+    if (ui.tab === 'github') {
+      githubSeen = true;
+    }
+  });
 
   /** After the rename: passwords saved under the old name are copied once. */
   async function moveOldPasswords() {
@@ -70,6 +77,8 @@
         await moveOldPasswords();
         // Needed outside the GitHub tab too: syncs close fixed issues.
         void github.load();
+        // The GitHub tab's repository is fetched in the background from the start.
+        void repo.refresh().then(() => repo.startAutoFetch());
       })
       .catch(() => (engine = 'unavailable'));
 
@@ -88,8 +97,9 @@
     <!-- The Files tab stays mounted: it connects to servers picked in the top
          bar and shows server questions, whichever tab is open. -->
     <FilesTab {engine} visible={ui.tab === 'files'} />
-    {#if ui.tab === 'github'}
-      <GitHubTab {name} />
+    <!-- Mounted on first visit, then kept (hidden): typed text and lists survive tab switches. -->
+    {#if githubSeen}
+      <div class="tab-view" class:hidden={ui.tab !== 'github'}><GitHubTab {name} /></div>
     {/if}
   </main>
   {#if ui.log}<LogPanel onClose={() => (ui.log = false)} />{/if}
@@ -136,5 +146,17 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+  }
+
+  .tab-view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    animation: fade-in var(--motion) ease-out;
+  }
+
+  .tab-view.hidden {
+    display: none;
   }
 </style>

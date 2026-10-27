@@ -4,6 +4,8 @@
   import { fileDiff, repo, type FileChange, type FileDiff } from '../lib/repo.svelte';
   import Checkbox from './Checkbox.svelte';
   import DiffView from './DiffView.svelte';
+  import Splitter from './Splitter.svelte';
+  import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
 
   // Board Bd: uncommitted files with checkboxes, commit box, diff.
   /** Unticked files; everything else is part of the next commit. */
@@ -76,7 +78,7 @@
 </script>
 
 <div class="changes">
-  <div class="files">
+  <div class="files" style:width="{colWidth('ghChanges', 320)}px">
     <div class="section-label head">
       <Checkbox
         bind:checked={() => allChecked, (on) => toggleAll(on)}
@@ -105,6 +107,13 @@
       </button>
     </form>
   </div>
+  <Splitter
+    axis="x"
+    label={t('ui.resize')}
+    onMove={(d) => resizeCol('ghChanges', 320, d, 220, 700)}
+    onEnd={() => prefs.persist()}
+    onReset={() => resetCol('ghChanges')}
+  />
   {#if selected}
     <DiffView path={selected} {diff} {loading} error={diffError} />
   {:else}
@@ -120,7 +129,6 @@
   }
 
   .files {
-    width: 320px;
     flex: none;
     display: flex;
     flex-direction: column;

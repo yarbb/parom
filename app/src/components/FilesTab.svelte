@@ -465,8 +465,13 @@
     color: var(--muted);
   }
 
+  /* A box (not display: contents) so switching tabs can fade it in. */
   .view {
-    display: contents;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    animation: fade-in var(--motion) ease-out;
   }
 
   .view.hidden {

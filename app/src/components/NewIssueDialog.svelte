@@ -1,18 +1,21 @@
+<script lang="ts" module>
+  /** The issue being written survives closing the dialog (cleared once created). */
+  const saved = $state({ title: '', body: '', labels: [] as string[] });
+</script>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { t } from '../lib/i18n';
   import { createIssue, listLabels, renderMarkdown, type Item, type Label } from '../lib/issues.svelte';
   import Checkbox from './Checkbox.svelte';
   import Markdown from './Markdown.svelte';
+  import MarkdownEditor from './MarkdownEditor.svelte';
   import Modal from './Modal.svelte';
 
   // New issue: title, Markdown body with a preview GitHub renders, labels.
   let { slug, onClose, onCreated }: { slug: string; onClose: () => void; onCreated: (issue: Item) => void } = $props();
 
-  let title = $state('');
-  let body = $state('');
   let labels = $state<Label[]>([]);
-  let chosen = $state<string[]>([]);
   let preview = $state<string | null>(null);
   let busy = $state(false);
   let error = $state('');
@@ -29,25 +32,28 @@
       return;
     }
     try {
-      preview = body.trim() ? await renderMarkdown(slug, body) : '';
+      preview = saved.body.trim() ? await renderMarkdown(slug, saved.body) : '';
     } catch (e) {
       error = String(e);
     }
   }
 
   function toggle(name: string, on: boolean) {
-    chosen = on ? [...chosen, name] : chosen.filter((n) => n !== name);
+    saved.labels = on ? [...saved.labels, name] : saved.labels.filter((n) => n !== name);
   }
 
   async function submit(e?: SubmitEvent) {
     e?.preventDefault();
-    if (!title.trim() || busy) {
+    if (!saved.title.trim() || busy) {
       return;
     }
     busy = true;
     error = '';
     try {
-      const issue = await createIssue(slug, { title: title.trim(), body, labels: chosen });
+      const issue = await createIssue(slug, { title: saved.title.trim(), body: saved.body, labels: saved.labels });
+      saved.title = '';
+      saved.body = '';
+      saved.labels = [];
       onCreated(issue);
       onClose();
     } catch (err) {
@@ -60,19 +66,19 @@
 
 <Modal title={t('github.new_issue.title', { repo: slug })} wide onCancel={onClose}>
   <form id="new-issue" onsubmit={submit}>
-    <input class="field wide-field" placeholder={t('github.new_issue.name')} aria-label={t('github.new_issue.name')} bind:value={title} />
+    <input class="field wide-field" placeholder={t('github.new_issue.name')} aria-label={t('github.new_issue.name')} bind:value={saved.title} />
     {#if preview === null}
-      <textarea class="field body" rows="9" placeholder={t('github.new_issue.body')} aria-label={t('github.new_issue.body')} bind:value={body}></textarea>
+      <MarkdownEditor bind:value={saved.body} rows={9} placeholder={t('github.new_issue.body')} />
     {:else}
       <div class="preview">
-        {#if preview}<Markdown html={preview} text={body} />{:else}<span class="muted">{t('github.no_description')}</span>{/if}
+        {#if preview}<Markdown html={preview} text={saved.body} />{:else}<span class="muted">{t('github.no_description')}</span>{/if}
       </div>
     {/if}
     {#if labels.length}
       <div class="label-title">{t('github.new_issue.labels')}</div>
       <div class="labels">
         {#each labels as l (l.name)}
-          <Checkbox bind:checked={() => chosen.includes(l.name), (on) => toggle(l.name, on)} label={l.name} />
+          <Checkbox bind:checked={() => saved.labels.includes(l.name), (on) => toggle(l.name, on)} label={l.name} />
         {/each}
       </div>
     {/if}
@@ -82,7 +88,7 @@
     <button class="control" type="button" onclick={showPreview}>{preview === null ? t('github.new_issue.preview') : t('github.new_issue.write')}</button>
     <span class="grow"></span>
     <button class="control" type="button" onclick={onClose}>{t('common.cancel')}</button>
-    <button class="control primary" type="submit" form="new-issue" disabled={busy || !title.trim()}>{t('github.new_issue.create')}</button>
+    <button class="control primary" type="submit" form="new-issue" disabled={busy || !saved.title.trim()}>{t('github.new_issue.create')}</button>
   {/snippet}
 </Modal>
 
@@ -97,17 +103,6 @@
     width: 100%;
   }
 
-  textarea.body {
-    width: 100%;
-    padding: 6px 9px;
-    resize: vertical;
-    border: 1px solid var(--line-control);
-    border-radius: 4px;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 12px;
-  }
 
   .preview {
     min-height: 160px;

@@ -104,7 +104,8 @@ class Repo {
   }
 
   async select(dir: string): Promise<void> {
-    if (dir !== this.dir) {
+    const other = dir !== this.dir;
+    if (other) {
       this.info = null;
       this.changes = [];
       this.log = [];
@@ -112,6 +113,10 @@ class Repo {
       await prefs.set('githubRepo', dir);
     }
     await this.refresh();
+    if (other && dir) {
+      // A repository just opened: see what the remote has, as on start.
+      void this.fetchQuietly();
+    }
   }
 
   /** Adds a folder by hand; fails if it is not a git repository. */
@@ -185,6 +190,41 @@ class Repo {
       return false;
     } finally {
       this.busy = '';
+    }
+  }
+
+  #autoTimer: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Fetches in the background, like GitHub Desktop: at start, when the
+   * window comes back after a while, and every 10 minutes. Quiet: failures
+   * (offline, no access) do not show as errors.
+   */
+  startAutoFetch(): void {
+    if (this.#autoTimer) {
+      return;
+    }
+    const quiet = () => this.fetchQuietly(false);
+    void quiet();
+    this.#autoTimer = setInterval(() => void quiet(), 10 * 60_000);
+    window.addEventListener('focus', () => void quiet());
+  }
+
+  /** Fetches without showing failures; unless `force`, only if the last fetch is 5 minutes old. */
+  async fetchQuietly(force = true): Promise<void> {
+    const due = force || !this.fetchedAt || Date.now() - this.fetchedAt > 5 * 60_000;
+    const dir = this.dir;
+    if (!dir || this.busy || !due) {
+      return;
+    }
+    try {
+      const info = await invoke<BranchInfo>('repo_remote', { dir, op: 'fetch', name: null, email: null });
+      if (dir === this.dir) {
+        this.info = info;
+        this.fetchedAt = Date.now();
+      }
+    } catch {
+      // Offline or no access: the button still works and shows the reason.
     }
   }
 

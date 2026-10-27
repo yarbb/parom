@@ -9,6 +9,9 @@
   import { paneDrag } from '../lib/panedrag.svelte';
   import { labelColors, labelOf, remoteLabelKey } from '../lib/labels';
   import LabelPicker from './LabelPicker.svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { dragOut } from '../lib/dragout';
+  import { localJoin } from '../lib/files';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
 
   interface Props {
@@ -33,6 +36,49 @@
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let op = $state<FileOp | null>(null);
   let labeling = $state<{ keys: string[]; names: string[] } | null>(null);
+
+  // Dragging server files out of the window: the system needs files that
+  // exist, so a drag starts downloading them to a temp folder at once
+  // (files only, up to 200 MB), and leaving the window hands them over.
+  let prepared: { names: string[]; ready: Promise<string[] | null> } | null = null;
+
+  function prepareDragOut(rows: FileRow[]) {
+    const files = rows.filter((r) => !r.dir);
+    const size = files.reduce((n, r) => n + Math.max(0, r.size), 0);
+    prepared = null;
+    if (!files.length || files.length !== rows.length || size > 200 * 1024 * 1024) {
+      return;
+    }
+    const remotePath = connection.remotePath;
+    const ready = (async () => {
+      const dir = await invoke<string>('edit_new_dir');
+      const sep = dir.includes('\\') ? '\\' : '/';
+      const done = await Promise.all(
+        files.map((f) =>
+          connection.transfer(true, f.name, { remote_path: remotePath, remote_name: f.name, local: localJoin(dir, f.name, sep), exists: 'overwrite' }),
+        ),
+      );
+      return done.every((tr) => tr.state === 'done') ? files.map((f) => localJoin(dir, f.name, sep)) : null;
+    })();
+    prepared = { names: files.map((f) => f.name), ready };
+  }
+
+  async function finishDragOut(rows: FileRow[]) {
+    const p = prepared;
+    if (!p || rows.some((r) => !p.names.includes(r.name))) {
+      connection.message = { level: 'error', text: t('files.drag_out_folders') };
+      return;
+    }
+    // Small files are usually there by the time the mouse leaves the window.
+    const paths = await Promise.race([p.ready, new Promise<null>((r) => setTimeout(() => r(null), 4000))]);
+    if (!paths) {
+      connection.message = { level: 'status', text: t('files.drag_out_wait') };
+      return;
+    }
+    await dragOut(paths, rows.length === 1 ? rows[0].name : t('files.drag_count', { count: rows.length })).catch(
+      (e) => (connection.message = { level: 'error', text: String(e) }),
+    );
+  }
   /** Labels belong to a server: the saved site, or the address of a quick connection. */
   const server = $derived(connection.site?.id ?? connection.label);
   const folderLabel = (row: FileRow) => {
@@ -125,6 +171,8 @@
     onActivate={download}
     folder={connection.remotePath}
     labelOf={folderLabel}
+    onDragStart={prepareDragOut}
+    onDragOut={finishDragOut}
     unscanned={(row) => row.dir && !connection.listed.has(remoteJoin(connection.remotePath, row.name))}
     dragFrom="server"
     bind:selected
