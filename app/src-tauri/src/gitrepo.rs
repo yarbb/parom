@@ -396,7 +396,7 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         }
         if repo.branch_upstream_name(&format!("refs/heads/{branch}")).is_err() {
             if let Ok(mut b) = repo.find_branch(&branch, BranchType::Local) {
-                let _ = b.set_upstream(Some(&format!("origin/{branch}")));
+                let _ = b.set_upstream(Some(format!("origin/{branch}").as_str()));
             }
         }
     }
