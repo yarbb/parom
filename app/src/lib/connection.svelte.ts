@@ -424,10 +424,11 @@ class Connection {
   }
 
   /** Uploads a local folder into `remotePath`, creating the folder tree first. */
-  async uploadFolder(localDir: string, separator: string, name: string, remotePath: string): Promise<void> {
+  /** Uploads a folder; true when every file arrived (none failed, canceled or skipped). */
+  async uploadFolder(localDir: string, separator: string, name: string, remotePath: string): Promise<boolean> {
     const session = this.session;
     if (session === null) {
-      return;
+      return false;
     }
     const gen = this.#abort;
     this.walks++;
@@ -436,7 +437,7 @@ class Connection {
     try {
       const tree = await localWalk(localDir);
       if (gen !== this.#abort) {
-        return;
+        return false;
       }
       // Every file is in the queue before anything moves, so the count is final.
       rows = tree.files.map((rel) => ({ rel, row: this.#addRow(false, `${name}/${rel}`) }));
@@ -449,13 +450,13 @@ class Connection {
       }
     } catch (e) {
       this.remoteError = String(e);
-      return;
+      return false;
     } finally {
       this.#walkDone();
     }
     if (gen !== this.#abort) {
       rows.forEach(({ row }) => (row.state = 'canceled'));
-      return;
+      return false;
     }
     const toLocal = (rel: string) => localJoin(localDir, rel.split('/').join(separator), separator);
     await Promise.all(
@@ -465,6 +466,7 @@ class Connection {
         return this.#run(row, { local: toLocal(rel), remote_path: dir, remote_name: rel.slice(slash + 1) });
       }),
     );
+    return rows.every(({ row }) => row.state === 'done' && !row.skipped);
   }
 
   /**
@@ -472,11 +474,13 @@ class Connection {
    * (the queue header shows the count growing), then every file is queued at
    * once, so the queue's total is right from the first transfer.
    */
-  async downloadFolder(remotePath: string, name: string, localDir: string, separator: string): Promise<void> {
+  /** Downloads a folder; true when every file arrived (none failed, canceled or skipped). */
+  async downloadFolder(remotePath: string, name: string, localDir: string, separator: string): Promise<boolean> {
     const session = this.session;
     if (session === null) {
-      return;
+      return false;
     }
+    let complete = true;
     const gen = this.#abort;
     this.walks++;
     const files: { remote: string; name: string; local: string; rel: string }[] = [];
@@ -502,6 +506,7 @@ class Connection {
             }
           }
         } catch (e) {
+          complete = false;
           this.remoteError = `${dir.rel}: ${describeError(e)}`;
         }
       }
@@ -509,10 +514,11 @@ class Connection {
       this.#walkDone();
     }
     if (gen !== this.#abort) {
-      return;
+      return false;
     }
     const rows = files.map((f) => ({ f, row: this.#addRow(true, f.rel) }));
     await Promise.all(rows.map(({ f, row }) => this.#run(row, { remote_path: f.remote, remote_name: f.name, local: f.local })));
+    return complete && rows.every(({ row }) => row.state === 'done' && !row.skipped);
   }
 
   #walkDone(): void {

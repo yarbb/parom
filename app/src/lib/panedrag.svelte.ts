@@ -16,19 +16,20 @@ export function paneAt(x: number, y: number): PaneSide | null {
 }
 
 class PaneDrag {
-  /** Rows being dragged and where the mouse is. */
-  active = $state<{ from: PaneSide; rows: FileRow[]; x: number; y: number } | null>(null);
+  /** Rows being dragged and where the mouse is; Shift moves instead of copying. */
+  active = $state<{ from: PaneSide; rows: FileRow[]; x: number; y: number; move: boolean } | null>(null);
   /** Pane under the mouse while dragging (files from the system included). */
   over = $state<PaneSide | null>(null);
   /** Files dragged in from the system, while over the window. */
   external = $state(false);
   /** Set by the Files tab: transfers dropped rows to the other pane. */
-  onDrop: ((from: PaneSide, rows: FileRow[]) => void) | null = null;
+  onDrop: ((from: PaneSide, rows: FileRow[], move: boolean) => void) | null = null;
 
-  move(x: number, y: number): void {
+  move(x: number, y: number, shift: boolean): void {
     if (this.active) {
       this.active.x = x;
       this.active.y = y;
+      this.active.move = shift;
     }
     this.over = paneAt(x, y);
   }
@@ -39,7 +40,7 @@ class PaneDrag {
     this.active = null;
     this.over = null;
     if (a && to && to !== a.from) {
-      this.onDrop?.(a.from, a.rows);
+      this.onDrop?.(a.from, a.rows, a.move);
     }
   }
 }

@@ -254,6 +254,8 @@
   "queue.canceled": "canceled",
   "dialog.exists.apply_all": "Do the same for all files in the queue",
   "fileop.rename.title": "Rename",
+  "files.drag_copy": "Copy",
+  "files.drag_move": "Move",
   "files.drag_count": "{count, plural, one {# item} other {# items}}",
   "fileop.mkfile.title": "Create new file",
   "fileop.mkdir.title": "New folder",

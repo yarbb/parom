@@ -22,7 +22,7 @@
   import { sync } from '../lib/sync/engine.svelte';
   import { repo } from '../lib/repo.svelte';
   import { paneAt, paneDrag } from '../lib/panedrag.svelte';
-  import { listLocal } from '../lib/local';
+  import { listLocal, localTrash } from '../lib/local';
   import { isTauri } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
 
@@ -177,6 +177,44 @@
     });
   });
 
+  // Move (Shift while dragging): the source is removed only after its
+  // transfer finished completely; anything skipped, failed or canceled stays.
+  async function moveUp(items: { name: string; local: string; dir: boolean }[]) {
+    const target = connection.remotePath;
+    const done = await Promise.all(
+      items.map(async (f) =>
+        f.dir
+          ? connection.uploadFolder(f.local, localSeparator, f.name, target)
+          : connection
+              .transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name })
+              .then((tr) => tr.state === 'done' && !tr.skipped),
+      ),
+    );
+    const moved = items.filter((_, i) => done[i]).map((f) => f.local);
+    if (moved.length) {
+      await localTrash(moved).catch((e) => (connection.message = { level: 'error', text: String(e) }));
+      localPane?.refresh();
+    }
+  }
+
+  async function moveDown(items: { name: string; remotePath: string; dir: boolean }[]) {
+    const target = localPath;
+    const done = await Promise.all(
+      items.map(async (f) =>
+        f.dir
+          ? connection.downloadFolder(f.remotePath, f.name, target, localSeparator)
+          : connection
+              .transfer(true, f.name, { remote_path: f.remotePath, remote_name: f.name, local: localJoin(target, f.name, localSeparator) })
+              .then((tr) => tr.state === 'done' && !tr.skipped),
+      ),
+    );
+    const moved = connection.remoteRows.filter((r) => items.some((f, i) => done[i] && f.name === r.name));
+    if (moved.length) {
+      await connection.deleteRemote(moved);
+    }
+    localPane?.refresh();
+  }
+
   /** Files or folders dropped from the system file manager onto the server pane. */
   async function uploadPaths(paths: string[]) {
     const items = [];
@@ -193,11 +231,21 @@
 
   onMount(() => {
     // Rows dragged from one pane to the other transfer like the buttons do.
-    paneDrag.onDrop = (from, rows) => {
+    paneDrag.onDrop = (from, rows, move) => {
       if (from === 'local' && connected) {
-        upload(rows.map((r) => ({ name: r.name, local: localJoin(localPath, r.name, localSeparator), dir: r.dir })));
+        const items = rows.map((r) => ({ name: r.name, local: localJoin(localPath, r.name, localSeparator), dir: r.dir }));
+        if (move) {
+          void moveUp(items);
+        } else {
+          upload(items);
+        }
       } else if (from === 'server') {
-        download(rows.map((r) => ({ name: r.name, remotePath: connection.remotePath, dir: r.dir })));
+        const items = rows.map((r) => ({ name: r.name, remotePath: connection.remotePath, dir: r.dir }));
+        if (move) {
+          void moveDown(items);
+        } else {
+          download(items);
+        }
       }
     };
     // Files dragged in from the system: positions come in physical pixels.
@@ -349,6 +397,7 @@
 {#if paneDrag.active}
   {@const d = paneDrag.active}
   <div class="drag-ghost mono" style:left="{d.x + 14}px" style:top="{d.y + 12}px">
+    <span class="drag-mode">{d.move ? t('files.drag_move') : t('files.drag_copy')}</span>
     {d.rows.length === 1 ? d.rows[0].name : t('files.drag_count', { count: d.rows.length })}
   </div>
 {/if}
@@ -395,6 +444,11 @@
     font-size: 12px;
     pointer-events: none;
     white-space: nowrap;
+  }
+
+  .drag-mode {
+    margin-right: 6px;
+    color: var(--muted);
   }
 
   .view {
