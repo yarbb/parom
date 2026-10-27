@@ -20,12 +20,15 @@ fn msg(e: git2::Error) -> String {
 pub struct BranchInfo {
     branch: Option<String>,
     head: Option<String>,
+    /// Remote the current branch pushes to and pulls from (its upstream's
+    /// remote, else "origin", else the only remote).
+    remote: Option<String>,
     /// e.g. "origin/main"; None when the branch has never been pushed.
     upstream: Option<String>,
     ahead: usize,
     behind: usize,
     remote_url: Option<String>,
-    /// "owner/name" when origin is on github.com.
+    /// "owner/name" when that remote is on github.com.
     github: Option<String>,
 }
 
@@ -44,14 +47,46 @@ pub fn github_slug(url: &str) -> Option<String> {
     (!owner.is_empty() && !name.is_empty() && parts.next().is_none()).then(|| format!("{owner}/{name}"))
 }
 
-/// The upstream ref of the current branch, or origin/<branch> when none is set.
+/// The remote of the branch's upstream; without one, "origin" or the only remote.
+fn branch_remote(repo: &Repository, branch: Option<&str>) -> Option<String> {
+    let configured = branch.and_then(|b| {
+        repo.branch_upstream_remote(&format!("refs/heads/{b}"))
+            .ok()
+            .and_then(|r| r.as_str().ok().map(str::to_owned))
+    });
+    if configured.is_some() {
+        return configured;
+    }
+    let names = repo.remotes().ok()?;
+    let names: Vec<String> = names.iter().filter_map(|r| r.ok().flatten().map(str::to_owned)).collect();
+    if names.iter().any(|n| n == "origin") {
+        Some("origin".into())
+    } else if names.len() == 1 {
+        names.into_iter().next()
+    } else {
+        None
+    }
+}
+
+/// The upstream ref of the current branch, or <remote>/<branch> when none is set.
 fn upstream_ref(repo: &Repository, branch: &str) -> Option<String> {
     let configured = repo
         .branch_upstream_name(&format!("refs/heads/{branch}"))
         .ok()
         .and_then(|b| b.as_str().ok().map(str::to_owned));
-    let fallback = format!("refs/remotes/origin/{branch}");
-    configured.or_else(|| repo.find_reference(&fallback).ok().map(|_| fallback))
+    if configured.is_some() {
+        return configured;
+    }
+    let fallback = format!("refs/remotes/{}/{branch}", branch_remote(repo, Some(branch))?);
+    repo.find_reference(&fallback).ok().map(|_| fallback)
+}
+
+/// The current branch's remote, opened; an error names what is missing.
+fn current_remote(repo: &Repository) -> Result<git2::Remote<'_>, String> {
+    let head = repo.head().ok();
+    let branch = head.as_ref().filter(|h| h.is_branch()).and_then(|h| h.shorthand().ok().map(str::to_owned));
+    let name = branch_remote(repo, branch.as_deref()).ok_or("This repository has no remote to use (add one named origin)")?;
+    repo.find_remote(&name).map_err(|e| format!("{name}: {}", e.message()))
 }
 
 pub fn branch_info(dir: &str) -> Result<BranchInfo, String> {
@@ -66,7 +101,8 @@ pub fn branch_info(dir: &str) -> Result<BranchInfo, String> {
             (ahead, behind) = repo.graph_ahead_behind(local, remote).unwrap_or((0, 0));
         }
     }
-    let remote_url = repo.find_remote("origin").ok().and_then(|r| r.url().ok().map(str::to_owned));
+    let remote = branch_remote(&repo, branch.as_deref());
+    let remote_url = remote.as_deref().and_then(|n| repo.find_remote(n).ok()).and_then(|r| r.url().ok().map(str::to_owned));
     Ok(BranchInfo {
         github: remote_url.as_deref().and_then(github_slug),
         branch,
@@ -74,6 +110,7 @@ pub fn branch_info(dir: &str) -> Result<BranchInfo, String> {
         upstream: upstream.map(|u| u.trim_start_matches("refs/remotes/").to_owned()),
         ahead,
         behind,
+        remote,
         remote_url,
     })
 }
@@ -324,11 +361,11 @@ fn proxy<'a>() -> ProxyOptions<'a> {
     p
 }
 
-/// Fetches origin (all branches, like "Fetch origin" in GitHub Desktop).
+/// Fetches the branch's remote (all branches, like "Fetch origin" in GitHub Desktop).
 pub fn fetch(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     {
         let repo = open(dir)?;
-        let mut remote = repo.find_remote("origin").map_err(|_| "This repository has no origin remote".to_string())?;
+        let mut remote = current_remote(&repo)?;
         let mut opts = FetchOptions::new();
         opts.remote_callbacks(callbacks(&repo, token)).proxy_options(proxy());
         remote.fetch::<&str>(&[], Some(&mut opts), None).map_err(msg)?;
@@ -343,7 +380,7 @@ pub fn pull(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     let repo = open(dir)?;
     let head = repo.head().map_err(msg)?;
     let branch = head.shorthand().map_err(msg)?.to_owned();
-    let up = upstream_ref(&repo, &branch).ok_or("This branch has no upstream on origin")?;
+    let up = upstream_ref(&repo, &branch).ok_or("This branch has no upstream branch on its remote")?;
     let target = repo.refname_to_id(&up).map_err(msg)?;
     let local = head.target().ok_or("HEAD is not a branch")?;
     let (ahead, behind) = repo.graph_ahead_behind(local, target).map_err(msg)?;
@@ -367,7 +404,7 @@ pub fn pull(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     branch_info(dir)
 }
 
-/// Pushes the current branch to origin and sets the upstream the first time.
+/// Pushes the current branch to its remote and sets the upstream the first time.
 pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     {
         let repo = open(dir)?;
@@ -376,7 +413,8 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
             return Err("HEAD is not a branch".into());
         }
         let branch = head.shorthand().map_err(msg)?.to_owned();
-        let mut remote = repo.find_remote("origin").map_err(|_| "This repository has no origin remote".to_string())?;
+        let mut remote = current_remote(&repo)?;
+        let remote_name = remote.name().ok().flatten().unwrap_or("origin").to_owned();
         let rejected = std::cell::RefCell::new(None::<String>);
         {
             let mut cb = callbacks(&repo, token);
@@ -396,7 +434,7 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         }
         if repo.branch_upstream_name(&format!("refs/heads/{branch}")).is_err() {
             if let Ok(mut b) = repo.find_branch(&branch, BranchType::Local) {
-                let _ = b.set_upstream(Some(format!("origin/{branch}").as_str()));
+                let _ = b.set_upstream(Some(format!("{remote_name}/{branch}").as_str()));
             }
         }
     }
