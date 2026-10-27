@@ -203,6 +203,9 @@
             <span class="mono muted">#{i.number}</span>
             <span class="title">{i.title}</span>
             {#each i.labels.slice(0, 2) as l (l.name)}<span class="label">{l.name}</span>{/each}
+            {#if i.labels.length > 2}
+              <span class="label more" title={i.labels.slice(2).map((l) => l.name).join(', ')}>+{i.labels.length - 2}</span>
+            {/if}
           </span>
           <span class="line2 muted">
             {#if kind === 'pulls'}
@@ -284,8 +287,15 @@
           <button class="control" onclick={() => openGitHub(i.html_url)}>{t('github.view_on_github')}</button>
           <span class="grow"></span>
           {#if !pull?.merged}
+            <!-- Like on github.com: a typed comment is posted with the close / reopen. -->
             <button class="control" disabled={busy} onclick={() => toggleState(i)}>
-              {i.state === 'open' ? t(kind === 'issues' ? 'github.close_issue' : 'github.close_pr') : t('github.reopen')}
+              {i.state === 'open'
+                ? draft.trim()
+                  ? t('github.close_with_comment')
+                  : t(kind === 'issues' ? 'github.close_issue' : 'github.close_pr')
+                : draft.trim()
+                  ? t('github.reopen_with_comment')
+                  : t('github.reopen')}
             </button>
           {/if}
           <button class="control" class:primary={!(pull && i.state === 'open')} disabled={busy || !draft.trim()} onclick={() => comment(i.number)}>
@@ -417,6 +427,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .label.more {
+    color: var(--muted);
   }
 
   .label {

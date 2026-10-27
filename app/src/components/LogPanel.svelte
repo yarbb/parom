@@ -2,6 +2,8 @@
   import { tick } from 'svelte';
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
+  import { prefs } from '../lib/prefs.svelte';
+  import Splitter from './Splitter.svelte';
 
   // The engine's message log (status, commands, server replies, errors),
   // newest at the bottom; opened from the status bar.
@@ -9,10 +11,25 @@
 
   let box: HTMLDivElement;
   let follow = true;
+  // Repeats in a row (keep-alive and the like) fold into one line with a count.
   let lines = $derived.by(() => {
     void connection.logVersion;
-    return connection.log.slice();
+    const out: { time: number; level: string; text: string; count: number }[] = [];
+    for (const l of connection.log) {
+      const prev = out[out.length - 1];
+      if (prev && prev.level === l.level && prev.text === l.text) {
+        prev.count++;
+        prev.time = l.time;
+      } else {
+        out.push({ ...l, count: 1 });
+      }
+    }
+    return out;
   });
+
+  const resize = (delta: number) => {
+    prefs.value.logHeight = Math.max(80, Math.min(window.innerHeight - 220, prefs.value.logHeight - delta));
+  };
 
   const pad = (n: number) => String(n).padStart(2, '0');
   const clock = (ms: number) => {
@@ -33,12 +50,19 @@
   }
 
   function copy() {
-    const text = lines.map((l) => `${clock(l.time)} ${l.level.padEnd(7)} ${l.text}`).join('\n');
+    const text = lines.map((l) => `${clock(l.time)} ${l.level.padEnd(7)} ${l.text}${l.count > 1 ? ` (x${l.count})` : ''}`).join('\n');
     void navigator.clipboard.writeText(text).catch(() => {});
   }
 </script>
 
-<section class="log" aria-label={t('log.title')}>
+<Splitter
+  axis="y"
+  label={t('ui.resize')}
+  onMove={resize}
+  onEnd={() => prefs.persist()}
+  onReset={() => prefs.set('logHeight', 190)}
+/>
+<section class="log" aria-label={t('log.title')} style:height="{prefs.value.logHeight}px">
   <div class="section-label head">
     <span>{t('log.title')}</span>
     <span class="buttons">
@@ -52,7 +76,7 @@
       <div class="line {l.level}">
         <span class="time">{clock(l.time)}</span>
         <span class="level">{l.level}</span>
-        <span class="text">{l.text}</span>
+        <span class="text">{l.text}{#if l.count > 1}<span class="count"> (x{l.count})</span>{/if}</span>
       </div>
     {:else}
       <p class="muted empty">{t('log.empty')}</p>
@@ -62,7 +86,6 @@
 
 <style>
   .log {
-    height: 190px;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -80,7 +103,8 @@
   .line {
     display: flex;
     gap: 10px;
-    padding: 0 14px;
+    padding: 2px 14px;
+    border-bottom: 1px solid var(--line-row);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -98,6 +122,10 @@
   .text {
     flex: 1;
     min-width: 0;
+  }
+
+  .count {
+    color: var(--muted);
   }
 
   .command .text {

@@ -98,6 +98,9 @@
   <StatusBar
     onLog={() => (ui.log = !ui.log)}
     logOpen={ui.log}
+    queued={ui.log ? connection.transfers.length : 0}
+    queueOpen={prefs.value.queueWithLog}
+    onQueue={() => prefs.set('queueWithLog', !prefs.value.queueWithLog)}
     state={engine === 'unavailable'
       ? t('status.engine_unavailable')
       : connection.state === 'connected'

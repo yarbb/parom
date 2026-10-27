@@ -37,7 +37,8 @@ export interface Prefs {
   editAsk: boolean;
   // Server sync (Preferences: Marker and history).
   syncLock: boolean;
-  syncDetectEdits: boolean;
+  /** Walk the whole server for hand edits on connect and Check (slow on big servers). */
+  syncScanEdits: boolean;
   syncBackup: boolean;
   syncAskVersionsDiffer: boolean;
   syncAskSomeoneElse: boolean;
@@ -56,6 +57,13 @@ export interface Prefs {
   repos: string[];
   /** Site repositories removed from the GitHub tab's list. */
   hiddenRepos: string[];
+  /** Width of the local pane, percent of the Files tab. */
+  paneSplit: number;
+  /** Heights in pixels. */
+  logHeight: number;
+  queueHeight: number;
+  /** Show the queue while the log is open (otherwise a status bar button opens it). */
+  queueWithLog: boolean;
   /** Passwords from the app's old name were copied (once). */
   secretsMigrated: boolean;
   /** Repository shown in the GitHub tab. */
@@ -84,7 +92,7 @@ export const defaultPrefs: Prefs = {
   editUploadOnSave: true,
   editAsk: true,
   syncLock: true,
-  syncDetectEdits: true,
+  syncScanEdits: false,
   syncBackup: true,
   syncAskVersionsDiffer: true,
   syncAskSomeoneElse: true,
@@ -98,6 +106,10 @@ export const defaultPrefs: Prefs = {
   hiddenRepos: [],
   githubRepo: '',
   secretsMigrated: false,
+  paneSplit: 50,
+  logHeight: 190,
+  queueHeight: 160,
+  queueWithLog: false,
 };
 
 /** Applies the parts of the preferences that change the page itself. */
@@ -134,6 +146,11 @@ class PrefsStore {
     this.value = { ...next };
     applyPrefs(this.value);
     await call('store.set', { name: 'preferences', value: $state.snapshot(this.value) });
+  }
+
+  /** Saves the current values (after a field was changed in place, e.g. while dragging a splitter). */
+  async persist(): Promise<void> {
+    await call('store.set', { name: 'preferences', value: $state.snapshot(this.value) }).catch(() => {});
   }
 
   /** Saves one field without a dialog (e.g. the last local folder). */

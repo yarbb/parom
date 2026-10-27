@@ -11,18 +11,25 @@
     /** Opens or closes the message log. */
     onLog?: () => void;
     logOpen?: boolean;
+    /** Transfers in the queue, for its button while the log is open (0: no button). */
+    queued?: number;
+    queueOpen?: boolean;
+    onQueue?: () => void;
   }
 
-  let { state, error = false, ok = false, message = null, version, onLog, logOpen = false }: Props = $props();
+  let { state, error = false, ok = false, message = null, version, onLog, logOpen = false, queued = 0, queueOpen = false, onQueue }: Props = $props();
   const logLabel = $derived(t('log.title'));
 </script>
 
 <footer class="mono muted">
   <span class="side"><span class:status-removed={error} class:status-new={ok} aria-hidden="true">●</span> {state}</span>
   <span class="message" class:status-removed={message?.level === 'error' || message?.level === 'reply'} title={message?.text ?? ''}>
-    {message?.text ?? ''}
+    {logOpen ? '' : (message?.text ?? '')}
   </span>
   <span class="side right">
+    {#if onQueue && queued}
+      <button class="log-button mono" class:open={queueOpen} onclick={onQueue}>{t('queue.button', { count: queued })}</button>
+    {/if}
     {#if onLog}<button class="log-button mono" class:open={logOpen} onclick={onLog}>{logLabel}</button>{/if}
     {version}
   </span>

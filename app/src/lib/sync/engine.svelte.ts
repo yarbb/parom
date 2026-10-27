@@ -302,9 +302,11 @@ class SyncEngine {
   /**
    * Compares the server with the local repository. Called after connecting,
    * from Check, before and after a sync. `keepCache` reuses this operation's
-   * listings; `skipEdits` skips walking the folders (right after a sync).
+   * listings. The whole server is walked for hand edits only with
+   * `scanEdits` ("Scan for edits") or when Preferences ask for it on every
+   * check; `skipEdits` never walks (right after a sync, while preparing one).
    */
-  async refresh(opts: { keepCache?: boolean; skipEdits?: boolean } = {}): Promise<void> {
+  async refresh(opts: { keepCache?: boolean; skipEdits?: boolean; scanEdits?: boolean } = {}): Promise<void> {
     const site = connection.site;
     if (!this.active || !site) {
       this.reset();
@@ -334,7 +336,8 @@ class SyncEngine {
       const state = serverState({ marker, head: repo.head, markerKnown: known, markerIsAncestor: ancestor });
 
       let edits: Edits = { edited: [], missing: [] };
-      if (prefs.value.syncDetectEdits && !opts.skipEdits && known && marker?.sha) {
+      const walk = !opts.skipEdits && (opts.scanEdits || prefs.value.syncScanEdits);
+      if (walk && known && marker?.sha) {
         const deployed = (await git.tree(dir, marker.sha)).filter((f) => classify(f.path, rules) === 'managed');
         const server = await this.#serverFiles(root, deployed.map((f) => f.path));
         edits = detectServerEdits(deployed, server, mtime, rules);
@@ -435,9 +438,11 @@ class SyncEngine {
   }
 
   async #start(): Promise<void> {
-    // One fresh walk of the server for the whole sync.
+    // Fresh listings for the whole sync, but no walk of the whole server:
+    // hand edits matter for the files this sync overwrites, and their folders
+    // are listed anyway (for the backup and the preview).
     this.#cache.clear();
-    await this.refresh({ keepCache: true });
+    await this.refresh({ keepCache: true, skipEdits: true });
     const c = this.check;
     if (!c || this.run || this.#stopWalk) {
       return;
@@ -446,6 +451,17 @@ class SyncEngine {
     const plan = await this.#plan(c);
     if (this.#stopWalk) {
       return;
+    }
+    if (c.marker?.sha && (await git.hasCommit(c.site.localDir.trim(), c.marker.sha))) {
+      const upload = new Set(plan.upload);
+      const deployed = (await git.tree(c.site.localDir.trim(), c.marker.sha)).filter((f) => upload.has(f.path));
+      const server = await this.#serverFiles(c.root, deployed.map((f) => f.path));
+      const found = detectServerEdits(deployed, server, c.markerMtime, c.rules);
+      // Files a full scan already found stay listed as well.
+      c.edits = {
+        edited: [...new Set([...c.edits.edited, ...found.edited])],
+        missing: [...new Set([...c.edits.missing, ...found.missing])],
+      };
     }
     const ask = {
       versionsDiffer: prefs.value.syncAskVersionsDiffer,

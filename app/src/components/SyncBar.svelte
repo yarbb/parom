@@ -54,6 +54,9 @@
     <div class="buttons">
       <button class="control small" onclick={() => (backups = true)}>{t('backups.button')}</button>
       <button class="control small" disabled={busy} onclick={() => sync.refresh()}>{t('sync.check')}</button>
+      <button class="control small" disabled={busy} title={t('sync.scan_edits_hint')} onclick={() => sync.refresh({ scanEdits: true })}>
+        {t('sync.scan_edits')}
+      </button>
       {#if sync.preparing || sync.checking}
         <button class="control small primary" onclick={() => sync.stopWalk()}>{t(sync.preparing ? 'sync.cancel_sync' : 'sync.cancel_check')}</button>
       {:else}

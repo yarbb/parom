@@ -1,6 +1,8 @@
 <script lang="ts">
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
+  import { prefs } from '../lib/prefs.svelte';
+  import Splitter from './Splitter.svelte';
 
   let running = $derived(connection.transfers.filter((x) => x.state === 'running').length);
   let failed = $derived(connection.transfers.filter((x) => x.state === 'failed').length);
@@ -26,7 +28,14 @@
   });
 </script>
 
-<section class="queue">
+<Splitter
+  axis="y"
+  label={t('ui.resize')}
+  onMove={(d) => (prefs.value.queueHeight = Math.max(70, Math.min(window.innerHeight - 260, prefs.value.queueHeight - d)))}
+  onEnd={() => prefs.persist()}
+  onReset={() => prefs.set('queueHeight', 160)}
+/>
+<section class="queue" style:height="{prefs.value.queueHeight}px">
   <div class="section-label head">
     <span>{t('queue.header', { queued: running, failed, succeeded: done })}{skipped ? ` · ${t('queue.skipped_count', { count: skipped })}` : ''}</span>
     <span class="buttons">
@@ -70,7 +79,6 @@
 
 <style>
   .queue {
-    height: 160px;
     flex: none;
     display: flex;
     flex-direction: column;
