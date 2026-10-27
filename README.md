@@ -1,4 +1,4 @@
-# TOTzilla (working name)
+# Parom
 
 A modern SFTP/FTP client built on the FileZilla engine, with a GitHub tab (like GitHub Desktop) and one-click, version-aware server sync. Aimed at people who deploy to servers (game servers, small sites) from a git repository.
 

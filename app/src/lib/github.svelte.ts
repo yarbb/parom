@@ -19,6 +19,9 @@ export interface DeviceCode {
   interval: number;
 }
 
+/** Credential store key of the GitHub token (TOKEN_KEY in github.rs). */
+export const GITHUB_TOKEN_KEY = 'github:token';
+
 /** Fine-grained token page, prefilled with what the app needs. */
 export const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new';
 

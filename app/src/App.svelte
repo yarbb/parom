@@ -7,7 +7,10 @@
   import FilesTab from './components/FilesTab.svelte';
   import GitHubTab from './components/GitHubTab.svelte';
   import SiteManager from './components/SiteManager.svelte';
-  import { sites } from './lib/sites.svelte';
+  import { siteSecretKey, sites } from './lib/sites.svelte';
+  import { migrateSecrets } from './lib/secrets';
+  import { credentialKey } from './lib/recent';
+  import { GITHUB_TOKEN_KEY } from './lib/github.svelte';
   import { github } from './lib/github.svelte';
   import { ui } from './lib/ui.svelte';
   import { prefs } from './lib/prefs.svelte';
@@ -26,6 +29,20 @@
   let version = $state('');
   let engine = $state<EngineState>('starting');
   let hideAddress = $state(false);
+
+  /** After the rename: passwords saved under the old name are copied once. */
+  async function moveOldPasswords() {
+    if (prefs.value.secretsMigrated) {
+      return;
+    }
+    const keys = [
+      GITHUB_TOKEN_KEY,
+      ...sites.list.filter((s) => s.savedPassword).map(siteSecretKey),
+      ...connection.recent.filter((r) => r.remember).map(credentialKey),
+    ];
+    await migrateSecrets(keys).catch(() => 0);
+    await prefs.set('secretsMigrated', true);
+  }
 
   onMount(() => {
     const stopWatching = watchSystemTheme(loadTheme);
@@ -49,9 +66,10 @@
       onExit(() => (engine = 'unavailable')).then((un) => (stopExit = un));
     }
     call('daemon.hello')
-      .then(() => {
+      .then(async () => {
         engine = 'ready';
-        void sites.load();
+        await sites.load();
+        await moveOldPasswords();
         // Needed outside the GitHub tab too: syncs close fixed issues.
         void github.load();
       })

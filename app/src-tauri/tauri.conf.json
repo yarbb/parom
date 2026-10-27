@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "TOTzilla",
+  "productName": "Parom",
   "version": "../package.json",
-  "identifier": "org.totzilla.app",
+  "identifier": "org.parom.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

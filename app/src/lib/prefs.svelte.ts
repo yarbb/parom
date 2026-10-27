@@ -54,6 +54,8 @@ export interface Prefs {
   repos: string[];
   /** Site repositories removed from the GitHub tab's list. */
   hiddenRepos: string[];
+  /** Passwords from the app's old name were copied (once). */
+  secretsMigrated: boolean;
   /** Repository shown in the GitHub tab. */
   githubRepo: string;
 }
@@ -92,6 +94,7 @@ export const defaultPrefs: Prefs = {
   repos: [],
   hiddenRepos: [],
   githubRepo: '',
+  secretsMigrated: false,
 };
 
 /** Applies the parts of the preferences that change the page itself. */

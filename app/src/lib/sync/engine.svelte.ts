@@ -10,8 +10,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { repo, type LogEntry } from '../repo.svelte';
 import { ui } from '../ui.svelte';
 import { backupsRoot, git, host, joinLocal, type RepoStatus } from './host';
-import { classify, parseRules, type Rules } from './managed';
-import { lockActive, markerName, newNonce, parseMarker, serializeMarker, treeFingerprint, type Marker } from './marker';
+import { classify, ignoreName, legacyIgnoreName, parseRules, type Rules } from './managed';
+import { legacyMarkerName, lockActive, markerName, newNonce, parseMarker, partSuffix, serializeMarker, treeFingerprint, type Marker } from './marker';
 import {
   detectServerEdits,
   foldersFor,
@@ -128,6 +128,8 @@ class SyncEngine {
   preparing = $state(false);
   #askedThisSession = new Set<string>();
   #cancel = false;
+  /** Server folders whose marker still has the old name (renamed on the next write). */
+  #legacyMarkerAt = new Set<string>();
   /** "Cancel sync" while a check or the preparation walks the server. */
   #stopWalk = false;
 
@@ -254,12 +256,17 @@ class SyncEngine {
     if (!listing) {
       throw new Error(`Cannot open ${root} on the server. Check the site's remote directory.`);
     }
-    const entry = listing.get(markerName);
+    // A marker under the old name is read; the next write replaces it.
+    const current = listing.get(markerName);
+    const entry = current && !current.dir ? current : listing.get(legacyMarkerName);
     if (!entry || entry.dir) {
       return { marker: null, mtime: null };
     }
+    if (entry.name === legacyMarkerName) {
+      this.#legacyMarkerAt.add(root);
+    }
     const local = await this.#tempFile('marker.json');
-    await call('transfer.download', { session: this.#session(), remote_path: root, remote_name: markerName, local, exists: 'overwrite' });
+    await call('transfer.download', { session: this.#session(), remote_path: root, remote_name: entry.name, local, exists: 'overwrite' });
     return { marker: parseMarker(await host.readSmall(local)), mtime: parse(entry.time) };
   }
 
@@ -271,6 +278,9 @@ class SyncEngine {
     const temp = `${markerName}.tmp`;
     await call('transfer.upload', { session, local, remote_path: root, remote_name: temp, exists: 'overwrite' });
     await this.#replace(root, temp, markerName);
+    if (this.#legacyMarkerAt.delete(root)) {
+      await call('remote.delete', { session, path: root, names: [legacyMarkerName] }).catch(() => {});
+    }
   }
 
   /** Renames over an existing file; servers without atomic rename get delete + rename. */
@@ -316,7 +326,8 @@ class SyncEngine {
         throw new Error('The local folder is a repository without commits.');
       }
       const root = site.remoteDir.trim() || connection.siteRoot;
-      const rules = { ...parseRules(await git.readFile(dir, repo.head, '.totzilla-ignore')), within: site.syncPaths ?? [] };
+      const ignore = (await git.readFile(dir, repo.head, ignoreName)) || (await git.readFile(dir, repo.head, legacyIgnoreName));
+      const rules = { ...parseRules(ignore), within: site.syncPaths ?? [] };
       const { marker, mtime } = await this.#readMarker(root);
       const known = marker?.sha ? await git.hasCommit(dir, marker.sha) : false;
       const ancestor = known && marker?.sha ? await git.isAncestor(dir, marker.sha, repo.head) : false;
@@ -708,13 +719,13 @@ class SyncEngine {
         const tr = await connection.transfer(false, p, {
           local: joinLocal(exportDir, p),
           remote_path: remoteDir,
-          remote_name: `${name}.totzilla-part`,
+          remote_name: `${name}${partSuffix}`,
           exists: 'overwrite',
         });
         if (tr.state !== 'done') {
           throw new Error(`${p}: ${tr.error ?? 'upload failed'}`);
         }
-        await this.#replace(remoteDir, `${name}.totzilla-part`, name);
+        await this.#replace(remoteDir, `${name}${partSuffix}`, name);
         run.done++;
       }
       run.current = '';

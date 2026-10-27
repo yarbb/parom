@@ -4,6 +4,7 @@ mod git;
 mod github;
 mod gitrepo;
 mod local;
+mod migrate;
 mod secrets;
 mod support;
 
@@ -217,6 +218,12 @@ fn secret_set(app: tauri::AppHandle, key: String, password: String) -> Result<()
     secrets::set(&secret_service(&app), &key, &password)
 }
 
+/// Copies passwords saved under the app's old name (once, after a rename).
+#[tauri::command]
+async fn secret_migrate(app: tauri::AppHandle, keys: Vec<String>) -> Result<usize, String> {
+    blocking(move || Ok(migrate::secrets(&secret_service(&app), &keys))).await
+}
+
 #[tauri::command]
 fn secret_delete(app: tauri::AppHandle, key: String) -> Result<(), String> {
     secrets::delete(&secret_service(&app), &key)
@@ -396,6 +403,10 @@ pub fn run() {
         std::process::exit(self_test(&args[2]));
     }
 
+    let context = tauri::generate_context!();
+    // Data from the app's working name moves over before any window opens.
+    migrate::data_dirs(&context.config().identifier);
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(DaemonState::default())
@@ -459,6 +470,7 @@ pub fn run() {
             secret_get,
             secret_set,
             secret_delete,
+            secret_migrate,
             edit_new_dir,
             edit_open,
             edit_watch,
@@ -497,6 +509,6 @@ pub fn run() {
             repo_commit_files,
             repo_remote
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running the application");
 }

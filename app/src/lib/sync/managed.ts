@@ -1,4 +1,4 @@
-// Which repository files sync may touch, from `.totzilla-ignore` in the repo
+// Which repository files sync may touch, from `.parom-ignore` in the repo
 // (gitignore syntax). Plain lines list managed paths (none: everything is
 // managed); lines starting with "!" are protected: never uploaded or
 // overwritten, e.g. "!data/**" for files the game server writes itself.
@@ -13,7 +13,11 @@ export interface Rules {
 export type FileClass = 'managed' | 'protected' | 'unmanaged';
 
 /** Repository plumbing that has no business on a server. */
-const alwaysSkipped = ['.git/', '.github/', '.gitignore', '.gitattributes', '.gitmodules', '.totzilla-ignore'];
+const alwaysSkipped = ['.git/', '.github/', '.gitignore', '.gitattributes', '.gitmodules', '.parom-ignore', '.totzilla-ignore'];
+
+/** The rules file in the repository root, and its name before the app was renamed. */
+export const ignoreName = '.parom-ignore';
+export const legacyIgnoreName = '.totzilla-ignore';
 
 /** gitignore-style pattern to a regular expression over "/"-separated relative paths. */
 export function globToRegExp(pattern: string): RegExp {
