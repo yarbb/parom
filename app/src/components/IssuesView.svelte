@@ -209,7 +209,7 @@
       <div class="note">
         <p class="status-removed">{error}</p>
         {#if noAccess}
-          <p class="muted">{t('github.no_access')}</p>
+          <p class="muted">{t('github.no_access', { repo: slug, owner: slug.split('/')[0] })}</p>
           <button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.device.install_button')}</button>
         {/if}
       </div>

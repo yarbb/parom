@@ -14,6 +14,11 @@
   import IssuesView from './IssuesView.svelte';
   import BackupsList from './BackupsList.svelte';
   import { sites } from '../lib/sites.svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { openGitHub } from '../lib/github.svelte';
+  import { openInEditor } from '../lib/local';
+  import type { BranchInfo, RepoChoice } from '../lib/repo.svelte';
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import { counts } from '../lib/issues.svelte';
   import SignedOut from './SignedOut.svelte';
   import SyncBar from './SyncBar.svelte';
@@ -53,6 +58,35 @@
     }
   });
 
+  // Right-click on a repository in the menu.
+  let context = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+
+  async function openContext(e: MouseEvent, c: RepoChoice) {
+    e.preventDefault();
+    const info = await invoke<BranchInfo>('repo_info', { dir: c.dir }).catch(() => null);
+    context = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: t('github.repo.open'), action: () => void openInEditor(c.dir, '') },
+        {
+          label: t('github.view_on_github'),
+          disabled: !info?.github,
+          action: () => void openGitHub(`https://github.com/${info?.github}`),
+        },
+        { label: t('github.repo.copy_path'), action: () => void navigator.clipboard.writeText(c.dir).catch(() => {}) },
+        { separator: true, label: '' },
+        {
+          label: c.site ? t('github.repo.hide', { site: c.site }) : t('github.repo.remove'),
+          action: () => {
+            menuOpen = false;
+            void repo.remove(c.dir);
+          },
+        },
+      ],
+    };
+  }
+
   async function addRepo() {
     menuOpen = false;
     addError = '';
@@ -66,7 +100,7 @@
   }
 
   function onWindowClick(e: MouseEvent) {
-    if (menuOpen && !menuRoot?.contains(e.target as Node)) {
+    if (menuOpen && !context && !menuRoot?.contains(e.target as Node)) {
       menuOpen = false;
     }
     if (accountOpen && !accountRoot?.contains(e.target as Node)) {
@@ -113,7 +147,13 @@
     {#if menuOpen}
       <div class="list" role="menu">
         {#each repo.choices as c (c.dir)}
-          <button class="pick" role="menuitem" class:current={c.dir === repo.dir} onclick={() => ((menuOpen = false), repo.select(c.dir))}>
+          <button
+            class="pick"
+            role="menuitem"
+            class:current={c.dir === repo.dir}
+            onclick={() => ((menuOpen = false), repo.select(c.dir))}
+            oncontextmenu={(e) => openContext(e, c)}
+          >
             <span class="mono">{repoName(c.dir)}</span>
             <span class="muted small">{c.site ? `${c.site} · ` : ''}{c.dir}</span>
           </button>
@@ -139,6 +179,10 @@
 </div>
 
 {#if showSyncBar}<SyncBar />{/if}
+
+{#if context}
+  <ContextMenu x={context.x} y={context.y} items={context.items} onClose={() => (context = null)} />
+{/if}
 
 <div class="body">
   <nav class="sidebar">

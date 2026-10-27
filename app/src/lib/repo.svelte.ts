@@ -80,9 +80,10 @@ class Repo {
   get choices(): RepoChoice[] {
     const out: RepoChoice[] = [];
     const seen = new Set<string>();
+    const hidden = new Set(prefs.value.hiddenRepos.map((d) => d.toLowerCase()));
     for (const s of sites.list) {
       const dir = s.localDir.trim();
-      if (dir && !seen.has(dir.toLowerCase())) {
+      if (dir && !seen.has(dir.toLowerCase()) && !hidden.has(dir.toLowerCase())) {
         seen.add(dir.toLowerCase());
         out.push({ dir, site: s.name });
       }
@@ -114,20 +115,36 @@ class Repo {
   /** Adds a folder by hand; fails if it is not a git repository. */
   async add(dir: string): Promise<void> {
     await invoke<BranchInfo>('repo_info', { dir });
+    const hidden = prefs.value.hiddenRepos.filter((d) => d.toLowerCase() !== dir.toLowerCase());
+    if (hidden.length !== prefs.value.hiddenRepos.length) {
+      await prefs.set('hiddenRepos', hidden);
+    }
     if (!this.choices.some((c) => c.dir.toLowerCase() === dir.toLowerCase())) {
       await prefs.set('repos', [...prefs.value.repos, dir]);
     }
     await this.select(dir);
   }
 
+  /** Takes a repository off the list; one linked to a site is hidden instead. */
   async remove(dir: string): Promise<void> {
-    await prefs.set(
-      'repos',
-      prefs.value.repos.filter((d) => d !== dir),
-    );
+    if (prefs.value.repos.includes(dir)) {
+      await prefs.set(
+        'repos',
+        prefs.value.repos.filter((d) => d !== dir),
+      );
+    } else {
+      await prefs.set('hiddenRepos', [...prefs.value.hiddenRepos, dir]);
+    }
     if (this.dir === dir) {
       await this.select(this.choices[0]?.dir ?? '');
     }
+  }
+
+  async unhide(dir: string): Promise<void> {
+    await prefs.set(
+      'hiddenRepos',
+      prefs.value.hiddenRepos.filter((d) => d !== dir),
+    );
   }
 
   async refresh(): Promise<void> {

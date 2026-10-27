@@ -18,12 +18,11 @@
   import { call, onExit } from './lib/daemon';
   import { loadTheme, watchSystemTheme } from './lib/theme';
   import { t } from './lib/i18n';
-  import type { EngineState, Tab } from './lib/types';
+  import type { EngineState } from './lib/types';
 
   // The product name lives only in tauri.conf.json (productName).
   let name = $state('');
   let version = $state('');
-  let tab = $state<Tab>('files');
   let engine = $state<EngineState>('starting');
   let hideAddress = $state(false);
 
@@ -67,11 +66,12 @@
 
 {#if prefs.loaded}
 <div class="app">
-  <TopBar {name} {tab} onTab={(next) => (tab = next)} bind:hideAddress />
+  <TopBar {name} tab={ui.tab} onTab={(next) => (ui.tab = next)} bind:hideAddress />
   <main>
-    {#if tab === 'files'}
-      <FilesTab {engine} />
-    {:else}
+    <!-- The Files tab stays mounted: it connects to servers picked in the top
+         bar and shows server questions, whichever tab is open. -->
+    <FilesTab {engine} visible={ui.tab === 'files'} />
+    {#if ui.tab === 'github'}
       <GitHubTab {name} />
     {/if}
   </main>

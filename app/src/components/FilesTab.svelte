@@ -6,6 +6,7 @@
   import { t } from '../lib/i18n';
   import { credentialKey, recentLabel } from '../lib/recent';
   import { prefs } from '../lib/prefs.svelte';
+  import { ui } from '../lib/ui.svelte';
   import { sites } from '../lib/sites.svelte';
   import { getSecret } from '../lib/secrets';
   import Checkbox from './Checkbox.svelte';
@@ -20,7 +21,7 @@
   import SyncDialogs from './SyncDialogs.svelte';
   import { sync } from '../lib/sync/engine.svelte';
 
-  let { engine }: { engine: EngineState } = $props();
+  let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
   let host = $state('');
   let user = $state('');
@@ -113,6 +114,8 @@
     if (password) {
       void connection.connect({ host, user, password, port, remember });
     } else {
+      // The password goes into the connect bar, so show it.
+      ui.tab = 'files';
       await tick();
       passwordInput?.focus();
     }
@@ -207,6 +210,7 @@
   }
 </script>
 
+<div class="view" class:hidden={!visible}>
 <form class="connect" onsubmit={submit}>
   <input class="field mono host" placeholder={t('files.connect.host')} aria-label={t('files.connect.host')} disabled={connected || busy} bind:value={host} />
   <input class="field mono user" placeholder={t('files.connect.user')} aria-label={t('files.connect.user')} disabled={connected || busy} bind:value={user} />
@@ -254,6 +258,7 @@
 {#if connection.transfers.length || connection.walks}
   <QueuePanel />
 {/if}
+</div>
 
 <RequestDialog />
 <SyncDialogs />
@@ -286,6 +291,14 @@
 {/if}
 
 <style>
+  .view {
+    display: contents;
+  }
+
+  .view.hidden {
+    display: none;
+  }
+
   .connect {
     display: flex;
     align-items: center;

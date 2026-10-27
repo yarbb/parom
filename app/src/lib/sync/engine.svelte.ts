@@ -105,6 +105,8 @@ class SyncEngine {
   preparing = $state(false);
   #askedThisSession = new Set<string>();
   #cancel = false;
+  /** "Cancel sync" while a check or the preparation walks the server. */
+  #stopWalk = false;
 
   get active(): boolean {
     return !!connection.site?.localDir.trim() && connection.state === 'connected';
@@ -135,6 +137,9 @@ class SyncEngine {
   async #list(path: string, fresh = false): Promise<Map<string, RemoteEntry> | null> {
     if (!fresh && this.#cache.has(path)) {
       return this.#cache.get(path)!;
+    }
+    if (this.#stopWalk) {
+      throw new Error('Canceled');
     }
     const wait = this.#lastList + SyncEngine.listGapMs - Date.now();
     if (wait > 0) {
@@ -274,6 +279,10 @@ class SyncEngine {
     if (!opts.keepCache) {
       this.#cache.clear();
     }
+    if (!this.preparing) {
+      this.#stopWalk = false;
+    }
+    const before = this.check;
     this.checking = true;
     this.error = '';
     try {
@@ -315,8 +324,9 @@ class SyncEngine {
         await this.createMarker();
       }
     } catch (e) {
-      this.check = null;
-      this.error = describeError(e);
+      // A canceled walk keeps the last result instead of an error.
+      this.check = this.#stopWalk ? before : null;
+      this.error = this.#stopWalk ? '' : describeError(e);
     } finally {
       this.checking = false;
       if (!this.preparing) {
@@ -377,10 +387,11 @@ class SyncEngine {
       return;
     }
     this.preparing = true;
+    this.#stopWalk = false;
     try {
       await this.#start();
     } catch (e) {
-      this.error = describeError(e);
+      this.error = this.#stopWalk ? '' : describeError(e);
     } finally {
       this.preparing = false;
       this.progress = '';
@@ -392,11 +403,14 @@ class SyncEngine {
     this.#cache.clear();
     await this.refresh({ keepCache: true });
     const c = this.check;
-    if (!c || this.run) {
+    if (!c || this.run || this.#stopWalk) {
       return;
     }
 
     const plan = await this.#plan(c);
+    if (this.#stopWalk) {
+      return;
+    }
     const ask = {
       versionsDiffer: prefs.value.syncAskVersionsDiffer,
       changedBySomeoneElse: prefs.value.syncAskSomeoneElse,
@@ -407,6 +421,11 @@ class SyncEngine {
     } else {
       await this.execute(plan, prefs.value.syncBackup);
     }
+  }
+
+  /** Stops a check or the preparation of a sync at the next folder listing. */
+  stopWalk(): void {
+    this.#stopWalk = true;
   }
 
   cancel(): void {
