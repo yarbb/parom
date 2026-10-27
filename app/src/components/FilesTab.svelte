@@ -37,6 +37,11 @@
 
   let localPath = $state('');
   let panesWidth = $state(0);
+  /** Each pane keeps at least 380 px (or half the room in a narrow window). */
+  function clampSplit(percent: number): number {
+    const min = panesWidth ? Math.min(50, (380 / panesWidth) * 100) : 20;
+    return Math.max(min, Math.min(100 - min, percent));
+  }
   let localSeparator = $state('/');
   let localPane: LocalPane;
 
@@ -391,7 +396,7 @@
   <Splitter
     axis="x"
     label={t('ui.resize')}
-    onMove={(d) => (prefs.value.paneSplit = Math.max(20, Math.min(80, prefs.value.paneSplit + (d / Math.max(1, panesWidth)) * 100)))}
+    onMove={(d) => (prefs.value.paneSplit = clampSplit(prefs.value.paneSplit + (d / Math.max(1, panesWidth)) * 100))}
     onEnd={() => prefs.persist()}
     onReset={() => prefs.set('paneSplit', 50)}
   />

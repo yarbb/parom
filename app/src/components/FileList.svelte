@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import {
     clickSelection,
     formatFullTime,
@@ -35,6 +36,12 @@
     onCommand?: (command: 'rename' | 'delete' | 'refresh', rows: FileRow[]) => void;
     /** Rows can be dragged to the other pane. */
     dragFrom?: PaneSide;
+    /** The folder shown: a new listing of the same folder keeps scroll and selection. */
+    folder?: string;
+    /** Folders not listed yet in this session (shown with a "?"). */
+    unscanned?: (row: FileRow) => boolean;
+    /** Colour label of a folder, if any. */
+    labelOf?: (row: FileRow) => string | null;
   }
 
   let {
@@ -51,6 +58,9 @@
     onContextMenu,
     onCommand,
     dragFrom,
+    folder = '',
+    unscanned,
+    labelOf,
   }: Props = $props();
 
   // Only the rows in view are in the DOM, so 100k entries stay cheap.
@@ -76,15 +86,52 @@
   let anchor: number | null = null;
   let focusIndex = $state(-1);
 
-  // A new listing or sort order invalidates indexes.
+  // Rows that appeared or changed in a new listing of the same folder.
+  let flashing = $state(new Set<string>());
+  let flashTimer: ReturnType<typeof setTimeout> | null = null;
+  let previous: { folder: string; rows: Map<string, string>; selected: Set<string> } | null = null;
+  const stamp = (r: FileRow) => `${r.dir}:${r.size}:${r.time}`;
+
+  // A new listing or sort order invalidates indexes. The same folder again
+  // (refresh, after an upload or a new folder) keeps its place.
   $effect(() => {
-    void sorted;
-    selection = new Set();
-    anchor = null;
-    focusIndex = -1;
-    if (viewport) {
-      viewport.scrollTop = 0;
-      scrollTop = 0;
+    const rows = sorted;
+    const now = new Map(rows.map((r) => [r.name, stamp(r)]));
+    const same = previous !== null && previous.folder === folder;
+    const keep = same ? previous!.selected : new Set<string>();
+    const fresh = same && previous!.rows.size ? rows.filter((r) => previous!.rows.get(r.name) !== stamp(r)).map((r) => r.name) : [];
+    untrack(() => {
+      selection = new Set(rows.flatMap((r, i) => (keep.has(r.name) ? [i + offset] : [])));
+      anchor = null;
+      focusIndex = -1;
+      if (viewport && !same) {
+        viewport.scrollTop = 0;
+        scrollTop = 0;
+      }
+      if (fresh.length && fresh.length < 50) {
+        flashing = new Set(fresh);
+        if (flashTimer) {
+          clearTimeout(flashTimer);
+        }
+        flashTimer = setTimeout(() => (flashing = new Set()), 1400);
+        // Bring the first new row into view: new names are often off screen.
+        const first = rows.findIndex((r) => r.name === fresh[0]);
+        if (viewport && first >= 0) {
+          const top = (first + offset) * rowHeight;
+          if (top < viewport.scrollTop || top + rowHeight > viewport.scrollTop + height) {
+            viewport.scrollTop = Math.max(0, top - height / 3);
+            scrollTop = viewport.scrollTop;
+          }
+        }
+      }
+    });
+    previous = { folder, rows: now, selected: new Set() };
+  });
+
+  $effect(() => {
+    const names = new Set([...selection].filter((i) => i >= offset && i < count).map((i) => sorted[i - offset]?.name));
+    if (previous) {
+      previous.selected = names as Set<string>;
     }
   });
 
@@ -304,6 +351,7 @@
         <div
           class="row"
           class:selected={selection.has(i)}
+          class:flash={!!row && flashing.has(row.name)}
           class:focused={focusIndex === i}
           role="option"
           tabindex="-1"
@@ -317,7 +365,7 @@
           onkeydown={() => {}}
         >
           {#if row}
-            <span class="col name mono" title={row.name}><FileIcon name={row.name} dir={row.dir} link={row.link} /><span class="label">{row.name}</span></span>
+            <span class="col name mono" title={row.name}><FileIcon name={row.name} dir={row.dir} link={row.link} unknown={!!unscanned?.(row)} color={row.dir ? (labelOf?.(row) ?? null) : null} /><span class="label">{row.name}</span></span>
             <span class="col size mono muted">{row.dir ? '' : formatSize(row.size, decimal)}</span>
             <span class="col time mono muted" title={formatFullTime(row.time)}>{formatTime(row.time, Date.now(), iso)}</span>
           {:else}
@@ -410,6 +458,10 @@
   .name {
     flex: 1;
     min-width: 0;
+  }
+
+  .row.flash {
+    animation: flash 1.4s ease-out;
   }
 
   .row .name {

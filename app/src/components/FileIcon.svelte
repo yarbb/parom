@@ -40,11 +40,24 @@
 
 <script lang="ts">
   // The icon in front of a name in the file lists.
-  let { name, dir = false, link = false }: { name: string; dir?: boolean; link?: boolean } = $props();
+  interface Props {
+    name: string;
+    dir?: boolean;
+    link?: boolean;
+    unknown?: boolean;
+    /** Colour label of a folder (CSS colour). */
+    color?: string | null;
+  }
+
+  let { name, dir = false, link = false, unknown = false, color = null }: Props = $props();
   const Icon = $derived(iconFor(name, dir, link));
 </script>
 
-<span class="file-icon" class:dir aria-hidden="true"><Icon size={14} strokeWidth={1.6} /></span>
+<!-- A "?" on a folder: not listed yet in this session (as in FileZilla). -->
+<span class="file-icon" class:dir class:unknown={dir && unknown} class:labeled={!!color} style:--label={color} aria-hidden="true">
+  <Icon size={14} strokeWidth={1.6} />
+  {#if dir && unknown}<span class="q">?</span>{/if}
+</span>
 
 <style>
   .file-icon {
@@ -53,7 +66,35 @@
     color: var(--muted);
   }
 
+  .file-icon {
+    position: relative;
+  }
+
   .file-icon.dir {
     color: var(--text);
+  }
+
+  .file-icon.unknown {
+    color: var(--muted);
+  }
+
+  .file-icon.labeled {
+    color: var(--label);
+  }
+
+  .file-icon.labeled :global(svg) {
+    fill: color-mix(in srgb, var(--label) 35%, transparent);
+  }
+
+  .q {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 3px;
+    font-family: var(--font-ui);
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
   }
 </style>

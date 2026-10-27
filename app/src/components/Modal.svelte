@@ -47,6 +47,7 @@
     justify-content: center;
     background: rgb(0 0 0 / 0.55);
     z-index: 10;
+    animation: fade-in var(--motion) ease-out;
   }
 
   .dialog {
@@ -57,6 +58,8 @@
     border-radius: 6px;
     background: var(--panel);
     outline: none;
+    animation: pop-in var(--motion) ease-out;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
   }
 
   .dialog.wide {

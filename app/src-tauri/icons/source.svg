@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 120 120">
+  <!-- Parom app icon: "_P" in thin white lines on true black. Source for `tauri icon`. -->
+  <rect width="120" height="120" rx="22" fill="#000"/>
+  <path d="M58 32 V88 M58 32 H74 A14 14 0 0 1 74 60 H58" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M30 88 H46" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="square"/>
+</svg>

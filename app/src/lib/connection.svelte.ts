@@ -2,6 +2,7 @@
 // questions the engine asks (host key, passwords, file exists) and transfers.
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
 import { invoke } from '@tauri-apps/api/core';
+import { SvelteSet } from 'svelte/reactivity';
 import { localJoin, parseHost, parseRemoteTime, remoteJoin, type FileRow } from './files';
 import { localMkdir, localWalk } from './local';
 import { t } from './i18n';
@@ -85,6 +86,10 @@ class Connection {
 
   remotePath = $state('');
   remoteRows = $state<FileRow[]>([]);
+  /** Server folders listed in this session (others get a "?" folder icon). */
+  listed = new SvelteSet<string>();
+  /** Last listing of each folder in this session, shown at once when it is opened again. */
+  #listings = new Map<string, FileRow[]>();
   remoteLoading = $state(false);
   remoteError = $state('');
 
@@ -206,6 +211,8 @@ class Connection {
 
   #lost(reason = ''): void {
     this.#closePool();
+    this.#listings.clear();
+    this.listed.clear();
     this.#openArgs = null;
     this.state = 'disconnected';
     this.session = null;
@@ -385,16 +392,28 @@ class Connection {
     }
     this.remoteLoading = true;
     this.remoteError = '';
+    const cached = path ? this.#listings.get(path) : undefined;
+    if (path && cached) {
+      // Seen before in this session: show it now, the fresh listing follows.
+      this.remotePath = path;
+      this.remoteRows = cached;
+    }
     try {
       const res = await call<{ path: string; entries: RemoteEntry[] }>('remote.list', path ? { session, path } : { session });
-      this.remotePath = res.path;
-      this.remoteRows = res.entries.map((e) => ({
+      if (session !== this.session) {
+        return;
+      }
+      const rows = res.entries.map((e) => ({
         name: e.name,
         size: e.size,
         dir: e.dir,
         link: e.link,
         time: parseRemoteTime(e.time),
       }));
+      this.#listings.set(res.path, rows);
+      this.listed.add(res.path);
+      this.remotePath = res.path;
+      this.remoteRows = rows;
     } catch (e) {
       this.remoteError = describeError(e);
     } finally {

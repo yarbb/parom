@@ -6,6 +6,8 @@
   import { sync } from '../lib/sync/engine.svelte';
   import { relativeTime } from '../lib/when';
   import DiffView from './DiffView.svelte';
+  import Avatar from './Avatar.svelte';
+  import { avatars, coAuthors } from '../lib/people.svelte';
 
   // Board Hi: commits with "local HEAD" and "on server" badges, the files a
   // commit changed, and the diff of one of them.
@@ -22,6 +24,18 @@
   );
   let serverIndex = $derived(serverSha ? repo.log.findIndex((c) => c.sha === serverSha) : -1);
   let commit = $derived(repo.log.find((c) => c.sha === selected) ?? null);
+  /** Co-authors come from the message trailers, which are not shown as text. */
+  let people = $derived(new Map(repo.log.map((c) => [c.sha, coAuthors(c.body)])));
+  let detail = $derived(commit ? people.get(commit.sha) : undefined);
+
+  // Avatars of authors from GitHub's commit list (once per branch and session).
+  $effect(() => {
+    const slug = repo.info?.github;
+    const branch = repo.info?.branch;
+    if (slug && branch) {
+      void avatars.load(slug, branch);
+    }
+  });
   let index = $derived(repo.log.findIndex((c) => c.sha === selected));
 
   $effect(() => {
@@ -74,13 +88,20 @@
     <div class="section-label">{t('github.commits', { branch: repo.info?.branch ?? 'HEAD', count: repo.log.length })}</div>
     <div class="list">
       {#each repo.log as c (c.sha)}
+        {@const co = people.get(c.sha)?.people ?? []}
         <button class="row" class:selected={c.sha === selected} onclick={() => (selected = c.sha)}>
           <span class="line1">
             <span class="summary">{c.summary}</span>
             {#if c.sha === repo.info?.head}<span class="badge">{t('github.badge.head')}</span>{/if}
             {#if c.sha === serverSha}<span class="badge server">{t('github.badge.server')}</span>{/if}
           </span>
-          <span class="line2 muted"><span class="mono">{c.sha.slice(0, 7)}</span> · {c.author} · {relativeTime(c.time * 1000)}</span>
+          <span class="line2 muted">
+            <span class="faces" title={[c.author, ...co.map((p) => p.name)].join(', ')}>
+              <Avatar name={c.author} src={avatars.of(c.email, c.sha)} size={16} />
+              {#each co as p (p.email)}<span class="co"><Avatar name={p.name} src={avatars.of(p.email)} size={16} /></span>{/each}
+            </span>
+            <span class="mono">{c.sha.slice(0, 7)}</span> · {c.author}{co.length ? ` +${co.length}` : ''} · {relativeTime(c.time * 1000)}
+          </span>
         </button>
       {:else}
         <p class="muted empty">{t('github.no_commits')}</p>
@@ -92,10 +113,16 @@
       <div class="info">
         <h2>{commit.summary}</h2>
         <p class="muted">
-          <span class="mono">{commit.sha.slice(0, 7)}</span> · {commit.author} · {relativeTime(commit.time * 1000)}
+          <span class="mono">{commit.sha.slice(0, 7)}</span> · {relativeTime(commit.time * 1000)}
           {#if serverIndex > index && index >= 0}· {t('github.ahead_of_server', { count: serverIndex - index })}{/if}
         </p>
-        {#if commit.body}<p class="body">{commit.body}</p>{/if}
+        <div class="authors">
+          <span class="person"><Avatar name={commit.author} src={avatars.of(commit.email, commit.sha)} size={20} />{commit.author}</span>
+          {#each detail?.people ?? [] as p (p.email)}
+            <span class="person co-person" title={p.email}><Avatar name={p.name} src={avatars.of(p.email)} size={20} />{p.name}</span>
+          {/each}
+        </div>
+        {#if detail?.body}<p class="body">{detail.body}</p>{/if}
         <div class="buttons">
           <button class="control small" onclick={copySha}>{copied ? t('github.copied') : t('github.copy_sha')}</button>
           {#if repo.info?.github}
@@ -190,6 +217,36 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .faces {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+    vertical-align: -4px;
+  }
+
+  .co {
+    display: inline-flex;
+    margin-left: -6px;
+  }
+
+  .authors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 0 0 8px;
+  }
+
+  .person {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .co-person {
+    color: var(--muted);
   }
 
   .line2 {

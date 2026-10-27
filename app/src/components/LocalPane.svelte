@@ -10,6 +10,8 @@
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
   import FileList from './FileList.svelte';
   import { paneDrag } from '../lib/panedrag.svelte';
+  import { labelColors, labelOf, localLabelKey } from '../lib/labels';
+  import LabelPicker from './LabelPicker.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -88,6 +90,11 @@
 
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let op = $state<FileOp | null>(null);
+  let labeling = $state<{ keys: string[]; names: string[] } | null>(null);
+  const folderLabel = (row: FileRow) => {
+    const c = labelOf(localLabelKey(localJoin(path, row.name, separator)));
+    return c ? labelColors[c] : null;
+  };
 
   /** Runs a local file operation, then reloads the folder; failures show in the list. */
   async function fsOp(run: () => Promise<void>) {
@@ -151,6 +158,14 @@
         { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
+        {
+          label: t('labels.menu'),
+          disabled: !rows.some((r) => r.dir),
+          action: () => {
+            const dirs = rows.filter((r) => r.dir);
+            labeling = { keys: dirs.map((r) => localLabelKey(localJoin(path, r.name, separator))), names: dirs.map((r) => r.name) };
+          },
+        },
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: refresh },
       ],
@@ -192,6 +207,8 @@
     onUp={up}
     onOpenDir={(row) => load(atRoots ? row.name : localJoin(path, row.name, separator))}
     onActivate={upload}
+    folder={path}
+    labelOf={folderLabel}
     dragFrom="local"
     bind:selected
     {loading}
@@ -207,4 +224,7 @@
 {/if}
 {#if op}
   <FileOpDialog {op} onClose={() => (op = null)} />
+{/if}
+{#if labeling}
+  <LabelPicker keys={labeling.keys} names={labeling.names} onClose={() => (labeling = null)} />
 {/if}

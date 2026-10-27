@@ -9,6 +9,7 @@
   import { git } from '../lib/sync/host';
   import { sync } from '../lib/sync/engine.svelte';
   import Checkbox from './Checkbox.svelte';
+  import Select from './Select.svelte';
 
   // Board Sm: a tree of sites and folders on the left, the selected site's
   // settings in tabs on the right. Edits a copy; OK or Connect saves it.
@@ -265,15 +266,10 @@
             {#if tab === 'general'}
               <label><span>{t('sites.name')}</span><input class="field" bind:value={site.name} /></label>
               <label><span>{t('sites.folder')}</span>
-                <select class="field" bind:value={site.folder}>
-                  <option value="">{t('sites.no_folder')}</option>
-                  {#each folders as f (f)}<option value={f}>{f}</option>{/each}
-                </select>
+                <Select bind:value={site.folder} options={[{ value: '', label: t('sites.no_folder') }, ...folders.map((f) => ({ value: f, label: f }))]} />
               </label>
               <label><span>{t('sites.protocol')}</span>
-                <select class="field" bind:value={site.protocol}>
-                  {#each protocols as p (p)}<option value={p}>{t(`sites.protocol.${p}`)}</option>{/each}
-                </select>
+                <Select bind:value={site.protocol} options={protocols.map((p) => ({ value: p, label: t(`sites.protocol.${p}`) }))} />
               </label>
               <div class="row2">
                 <label class="grow"><span>{t('files.connect.host')}</span><input class="field mono" bind:value={site.host} onblur={() => site && tidyHost(site)} onpaste={() => setTimeout(() => site && tidyHost(site))} /></label>
@@ -282,9 +278,7 @@
                 </label>
               </div>
               <label><span>{t('sites.logon')}</span>
-                <select class="field" bind:value={site.logon}>
-                  {#each ['normal', 'ask', 'key', 'anonymous'] as l (l)}<option value={l}>{t(`sites.logon.${l}`)}</option>{/each}
-                </select>
+                <Select bind:value={site.logon} options={(['normal', 'ask', 'key', 'anonymous'] as const).map((l) => ({ value: l, label: t(`sites.logon.${l}`) }))} />
               </label>
               {#if site.logon !== 'anonymous'}
                 <label><span>{t('files.connect.user')}</span><input class="field mono" bind:value={site.user} /></label>
@@ -321,23 +315,21 @@
               </label>
             {:else if tab === 'transfer'}
               <label><span>{t('sites.exists')}</span>
-                <select class="field" bind:value={site.exists}>
-                  {#each ['ask', 'overwrite', 'overwrite_newer', 'skip'] as a (a)}<option value={a}>{t(`sites.exists.${a}`)}</option>{/each}
-                </select>
+                <Select bind:value={site.exists} options={(['ask', 'overwrite', 'overwrite_newer', 'skip'] as const).map((a) => ({ value: a, label: t(`sites.exists.${a}`) }))} />
               </label>
               <label><span>{t('sites.pace')}</span>
-                <select class="field" value={site.pace ?? 0} onchange={(e) => (site.pace = Number(e.currentTarget.value))}>
-                  {#each [0, 100, 250, 500, 1000] as ms (ms)}<option value={ms}>{ms ? `${ms} ms` : t('sites.pace.none')}</option>{/each}
-                </select>
+                <Select
+                  value={site.pace ?? 0}
+                  options={[0, 100, 250, 500, 1000].map((ms) => ({ value: ms, label: ms ? `${ms} ms` : t('sites.pace.none') }))}
+                  onchange={(v) => site && (site.pace = v)}
+                />
               </label>
               <p class="muted note">{t('sites.pace_hint')}</p>
             {:else}
               <div class="section-label inline">{t('sites.tab.sync')}</div>
               <label><span>{t('sites.repo')}</span><input class="field mono" bind:value={site.repo} placeholder="owner/repository" /></label>
               <label><span>{t('sites.marker')}</span>
-                <select class="field" bind:value={site.marker}>
-                  {#each ['ask', 'on', 'off'] as m (m)}<option value={m}>{t(`sites.marker.${m}`)}</option>{/each}
-                </select>
+                <Select bind:value={site.marker} options={(['ask', 'on', 'off'] as const).map((m) => ({ value: m, label: t(`sites.marker.${m}`) }))} />
               </label>
               <label><span>{t('sites.post_sync')}</span><input class="field mono" bind:value={site.postSync} placeholder={t('sites.post_sync_hint')} /></label>
               <div class="section-label inline">{t('sites.sync_paths')}</div>
@@ -624,9 +616,5 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  select.field {
-    height: 28px;
   }
 </style>
