@@ -28,6 +28,8 @@
   import { listLocal, localTrash } from '../lib/local';
   import { isTauri } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { joinRelative, normalizePath, relativeTo } from '../lib/browsing';
+  import { canSyncBrowse } from '../lib/commands.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -163,6 +165,41 @@
     if (connection.state === 'disconnected') {
       void untrack(() => edits.stopAll());
     }
+  });
+
+  // Synchronized browsing: a folder opened on one side opens the same folder,
+  // relative to the site's local folder and server folder, on the other.
+  let seenLocal = '';
+  let seenRemote = '';
+  $effect(() => {
+    const lp = localPath;
+    const rp = connection.remotePath;
+    const on = ui.syncBrowse && canSyncBrowse() && !!connection.siteRoot;
+    untrack(() => {
+      const localMoved = normalizePath(lp) !== normalizePath(seenLocal);
+      const remoteMoved = normalizePath(rp) !== normalizePath(seenRemote);
+      seenLocal = lp;
+      seenRemote = rp;
+      const localRoot = connection.site?.localDir.trim() ?? '';
+      if (!on || !lp || !rp) {
+        return;
+      }
+      if (localMoved) {
+        const rel = relativeTo(localRoot, lp);
+        const target = rel === null ? null : joinRelative(connection.siteRoot, rel, '/');
+        if (target && normalizePath(target) !== normalizePath(rp)) {
+          seenRemote = target;
+          void connection.list(target);
+        }
+      } else if (remoteMoved) {
+        const rel = relativeTo(connection.siteRoot, rp);
+        const target = rel === null ? null : joinRelative(localRoot, rel, localSeparator);
+        if (target && normalizePath(target) !== normalizePath(lp)) {
+          seenLocal = target;
+          void localPane?.load(target);
+        }
+      }
+    });
   });
 
   // Sites with a local repository get their server compared on connect.
@@ -414,7 +451,10 @@
   {@const d = paneDrag.active}
   <div class="drag-ghost mono" style:left="{d.x + 14}px" style:top="{d.y + 12}px">
     {#key d.move}<span class="drag-mode" in:fly={{ y: d.move ? -6 : 6, duration: ms(140) }}>{d.move ? t('files.drag_move') : t('files.drag_copy')}</span>{/key}
-    {d.rows.length === 1 ? d.rows[0].name : t('files.drag_count', { count: d.rows.length })}
+    <!-- The slash tells which side the rows come from: "/" server, the local separator. -->
+    {d.rows.length === 1
+      ? `${d.from === 'server' || prefs.value.forwardSlashes ? '/' : localSeparator}${d.rows[0].name}`
+      : t('files.drag_count', { count: d.rows.length })}
   </div>
 {/if}
 

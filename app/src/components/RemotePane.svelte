@@ -13,6 +13,10 @@
   import { dragOut } from '../lib/dragout';
   import { localJoin } from '../lib/files';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
+  import Link2 from '@lucide/svelte/icons/link-2';
+  import { ui } from '../lib/ui.svelte';
+  import { canSyncBrowse } from '../lib/commands.svelte';
+  import { twinColor, twins } from '../lib/twins.svelte';
 
   interface Props {
     onDownload: (items: { name: string; remotePath: string; dir: boolean }[]) => void;
@@ -81,9 +85,10 @@
   }
   /** Labels belong to a server: the saved site, or the address of a quick connection. */
   const server = $derived(connection.site?.id ?? connection.label);
+  const localDirs = $derived(new Set(twins.local));
   const folderLabel = (row: FileRow) => {
     const c = labelOf(remoteLabelKey(server, remoteJoin(connection.remotePath, row.name)));
-    return c ? labelColors[c] : null;
+    return c ? labelColors[c] : prefs.value.markTwins && localDirs.has(row.name) ? twinColor : null;
   };
 
   function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[], quick = false) {
@@ -169,6 +174,17 @@
   <div class="section-label head">
     <span>{t('files.remote')}<span class="picked">{selectionSummary(selected, (count) => t('files.selected', { count }), prefs.value.sizeUnits === 'decimal')}</span></span>
     <span class="buttons">
+      <button
+        class="control small icon-btn"
+        class:on={ui.syncBrowse}
+        aria-pressed={ui.syncBrowse}
+        aria-label={t('files.sync_browse')}
+        title={t('files.sync_browse_hint')}
+        disabled={!canSyncBrowse()}
+        onclick={() => (ui.syncBrowse = !ui.syncBrowse)}
+      >
+        <Link2 size={13} strokeWidth={1.8} />
+      </button>
       <button class="control small" disabled={!connected} onclick={() => connection.list(connection.remotePath)}>{t('files.refresh')}</button>
       <button class="control small" disabled={!connected || selected.length === 0} onclick={() => download(selected)}>
         ← {t('files.download')}

@@ -216,3 +216,19 @@ describe('selectionSummary', () => {
     expect(selectionSummary([], text)).toBe('');
   });
 });
+
+describe('synchronized browsing paths', () => {
+  it('finds a path relative to a root', async () => {
+    const { joinRelative, relativeTo } = await import('./browsing');
+    const B = String.fromCharCode(92);
+    const win = (p: string) => p.split('/').join(B);
+    expect(relativeTo(win('C:/Users/me/repo'), 'C:/users/me/repo/addons/X')).toBe('addons/X');
+    expect(relativeTo(win('C:/Users/me/repo'), win('C:/Users/me/repo'))).toBe('');
+    expect(relativeTo(win('C:/Users/me/repo'), win('D:/other'))).toBeNull();
+    expect(relativeTo('/garrysmod', '/garrysmod/addons/x')).toBe('addons/x');
+    expect(relativeTo('/', '/garrysmod')).toBe('garrysmod');
+    expect(relativeTo('/garrysmod', '/garrysmodx')).toBeNull();
+    expect(joinRelative('/garrysmod', 'addons/x', '/')).toBe('/garrysmod/addons/x');
+    expect(joinRelative(win('C:/repo/'), 'addons/x', B)).toBe(win('C:/repo/addons/x'));
+  });
+});

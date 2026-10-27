@@ -119,6 +119,7 @@
     onReset={() => resetCol('ghHistory')}
   />
   {#if commit}
+    {#key commit.sha}
     <div class="detail">
       <div class="info">
         <h2>{commit.summary}</h2>
@@ -153,8 +154,9 @@
         {/each}
       </div>
       {#if error}<p class="status-removed empty">{error}</p>{/if}
-      {#if file}<DiffView path={file} {diff} loading={!diff} />{/if}
+      {#if file}{#key file}<DiffView path={file} {diff} loading={!diff} />{/key}{/if}
     </div>
+    {/key}
   {/if}
 </div>
 
@@ -178,6 +180,7 @@
   }
 
   .detail {
+    animation: fade-in var(--motion) ease-out;
     flex: 1;
     min-width: 0;
     min-height: 0;

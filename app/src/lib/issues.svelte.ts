@@ -47,6 +47,7 @@ export interface Comment {
   body: string;
   body_html?: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface CheckRun {
@@ -59,6 +60,24 @@ export interface CheckRun {
 }
 
 const repoPath = (slug: string) => `/repos/${slug}`;
+
+// Session caches: lists and opened issues show at once when revisited, and
+// unchanged entries keep their rendered HTML (with GitHub's signed image
+// links), so images are not downloaded again. Text only: a few KB each.
+export const listCache = new Map<string, Item[]>();
+export const detailCache = new Map<string, { comments: Comment[]; pull: PullDetail | null; checks: CheckRun[] | null }>();
+
+/** Fresh entries, but the cached object wherever nothing changed on GitHub. */
+export function keepUnchanged<T extends { updated_at?: string }>(fresh: T[], old: T[] | undefined, id: (x: T) => number): T[] {
+  if (!old) {
+    return fresh;
+  }
+  const byId = new Map(old.map((x) => [id(x), x]));
+  return fresh.map((f) => {
+    const o = byId.get(id(f));
+    return o && o.updated_at && o.updated_at === f.updated_at ? o : f;
+  });
+}
 
 export async function listItems(slug: string, kind: Kind, state: 'open' | 'closed'): Promise<Item[]> {
   const items = await api<Item[]>('GET', `${repoPath(slug)}/${kind}?state=${state}&per_page=100&sort=updated&direction=desc`, undefined, true);

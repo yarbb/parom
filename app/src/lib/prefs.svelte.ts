@@ -20,6 +20,10 @@ export interface Prefs {
   /** How a hidden address looks: blurred in place, or replaced by a word. */
   hideStyle: 'blur' | 'text';
   showHidden: boolean;
+  /** Show local paths with "/" like server paths, so a path can be pasted from one side into the other. */
+  forwardSlashes: boolean;
+  /** Tint folders grey that exist with the same name in both panes. */
+  markTwins: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -87,6 +91,8 @@ export const defaultPrefs: Prefs = {
   hideAddress: false,
   hideStyle: 'blur',
   showHidden: true,
+  forwardSlashes: false,
+  markTwins: true,
   language: 'en',
   foldersFirst: true,
   caseSensitive: false,

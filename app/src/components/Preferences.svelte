@@ -266,6 +266,8 @@
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.rememberDirs} label={t('prefs.remember_dirs')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.forwardSlashes} label={t('prefs.forward_slashes')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.markTwins} label={t('prefs.mark_twins')} /></div>
         {:else if page === 'file_editing'}
           <div class="row"><span>{t('prefs.default_editor')}</span>
             <span class="segmented">

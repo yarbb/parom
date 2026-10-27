@@ -13,6 +13,8 @@
   import { labelColors, labelOf, localLabelKey } from '../lib/labels';
   import LabelPicker from './LabelPicker.svelte';
   import { dragOut } from '../lib/dragout';
+  import { shownLocal } from '../lib/browsing';
+  import { twinColor, twins } from '../lib/twins.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -34,6 +36,15 @@
   let typed = $state('');
   let selected = $state<FileRow[]>([]);
 
+  /** A path as shown and copied; the list itself keeps the system's form. */
+  const shown = (p: string) => shownLocal(p, prefs.value.forwardSlashes);
+
+  $effect(() => {
+    if (!atRoots && path) {
+      typed = shown(path);
+    }
+  });
+
   export async function load(dir: string) {
     loading = true;
     error = '';
@@ -44,7 +55,6 @@
       separator = res.separator;
       rows = res.rows;
       atRoots = false;
-      typed = res.path;
       if (prefs.value.rememberDirs) {
         void prefs.set('lastLocalDir', res.path);
       }
@@ -92,10 +102,15 @@
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let op = $state<FileOp | null>(null);
   let labeling = $state<{ keys: string[]; names: string[] } | null>(null);
+  const remoteDirs = $derived(new Set(twins.remote));
   const folderLabel = (row: FileRow) => {
     const c = labelOf(localLabelKey(localJoin(path, row.name, separator)));
-    return c ? labelColors[c] : null;
+    return c ? labelColors[c] : !atRoots && prefs.value.markTwins && remoteDirs.has(row.name) ? twinColor : null;
   };
+
+  $effect(() => {
+    twins.local = atRoots ? [] : rows.filter((r) => r.dir).map((r) => r.name);
+  });
 
   /** Runs a local file operation, then reloads the folder; failures show in the list. */
   async function fsOp(run: () => Promise<void>) {
@@ -176,7 +191,7 @@
         ...(e.shiftKey
           ? [
               { separator: true, label: '' },
-              { label: t('fileop.copy_as_path'), action: () => void navigator.clipboard?.writeText((any ? rows.map((r) => localJoin(path, r.name, separator)) : [path]).join('\n')) },
+              { label: t('fileop.copy_as_path'), action: () => void navigator.clipboard?.writeText((any ? rows.map((r) => localJoin(path, r.name, separator)) : [path]).map(shown).join('\n')) },
               { label: t('github.repo.open'), action: () => void openInEditor(any && rows.length === 1 && rows[0].dir ? localJoin(path, rows[0].name, separator) : path, '') },
             ]
           : []),

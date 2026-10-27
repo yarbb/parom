@@ -120,7 +120,10 @@
     cursor: pointer;
   }
 
+  /* Rows are as wide as the menu, so the highlight reaches its edge. */
   .pick {
+    display: block;
+    width: 100%;
     flex: 1;
     min-width: 0;
     padding: 7px 12px;
@@ -130,10 +133,20 @@
     white-space: nowrap;
   }
 
+  /* A recent server is one row: the highlight covers the name and the ✕. */
   .pick:hover,
-  .forget:hover {
+  .item:hover {
     background: var(--selected-bg);
     color: var(--text-strong);
+  }
+
+  .item:hover .pick,
+  .forget:hover {
+    color: var(--text-strong);
+  }
+
+  .item .pick:hover {
+    background: none;
   }
 
   .forget {
