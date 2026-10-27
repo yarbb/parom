@@ -192,7 +192,8 @@ class Repo {
   async remote(op: 'fetch' | 'pull' | 'push'): Promise<void> {
     this.busy = op;
     try {
-      this.info = await invoke<BranchInfo>('repo_remote', { dir: this.dir, op });
+      const author = github.author;
+      this.info = await invoke<BranchInfo>('repo_remote', { dir: this.dir, op, name: author?.name ?? null, email: author?.email ?? null });
       this.fetchedAt = Date.now();
       this.error = '';
       if (op === 'pull') {
@@ -200,6 +201,9 @@ class Repo {
       }
       await this.refresh();
     } catch (e) {
+      this.error = String(e);
+      // A failed push fetched first: the button can now offer the pull.
+      await this.refresh();
       this.error = String(e);
     } finally {
       this.busy = '';

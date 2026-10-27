@@ -2,7 +2,7 @@
 //! fetch, pull and push (libgit2 through git2; HTTPS remotes only).
 
 use git2::{
-    BranchType, Cred, CredentialType, Delta, DiffOptions, ErrorCode, FetchOptions, ProxyOptions, PushOptions,
+    BranchType, Oid, Cred, CredentialType, Delta, DiffOptions, ErrorCode, FetchOptions, ProxyOptions, PushOptions,
     RemoteCallbacks, Repository, Signature, Status, StatusOptions,
 };
 use serde::Serialize;
@@ -403,9 +403,11 @@ pub fn fetch(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     branch_info(dir)
 }
 
-/// Fast-forwards the current branch to its upstream. Refuses when the
-/// branches diverged or local changes would be overwritten.
-pub fn pull(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
+/// Brings the current branch up to date with its upstream: a fast-forward,
+/// or a merge commit when both sides have new commits and they touch
+/// different lines. Refuses on merge conflicts or when local uncommitted
+/// changes would be overwritten.
+pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&str>) -> Result<BranchInfo, String> {
     fetch(dir, token)?;
     let repo = open(dir)?;
     let head = repo.head().map_err(msg)?;
@@ -418,10 +420,9 @@ pub fn pull(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         return branch_info(dir);
     }
     if ahead > 0 {
-        return Err(format!(
-            "{branch} and {} have diverged ({ahead} local, {behind} remote commits); merge them in git first",
-            up.trim_start_matches("refs/remotes/")
-        ));
+        let sig = signature(&repo, name, email)?;
+        merge(&repo, &branch, local, target, up.trim_start_matches("refs/remotes/"), &sig)?;
+        return branch_info(dir);
     }
     let object = repo.find_object(target, None).map_err(msg)?;
     let mut checkout = git2::build::CheckoutBuilder::new();
@@ -434,8 +435,49 @@ pub fn pull(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
     branch_info(dir)
 }
 
+/// Merges `theirs` into the current branch without touching anything when
+/// it cannot finish: conflicts, or local edits in the way of the result.
+fn merge(repo: &Repository, branch: &str, ours: Oid, theirs: Oid, upstream: &str, sig: &Signature<'_>) -> Result<(), String> {
+    let our_commit = repo.find_commit(ours).map_err(msg)?;
+    let their_commit = repo.find_commit(theirs).map_err(msg)?;
+    let mut index = repo.merge_commits(&our_commit, &their_commit, None).map_err(msg)?;
+    if index.has_conflicts() {
+        let files: Vec<String> = index
+            .conflicts()
+            .map_err(msg)?
+            .filter_map(Result::ok)
+            .filter_map(|c| c.our.or(c.their).map(|e| String::from_utf8_lossy(&e.path).into_owned()))
+            .take(8)
+            .collect();
+        return Err(format!(
+            "{branch} and {upstream} both changed the same lines in {}. Merge them in git or GitHub Desktop, then come back",
+            files.join(", ")
+        ));
+    }
+    let tree = repo.find_tree(index.write_tree_to(repo).map_err(msg)?).map_err(msg)?;
+    // The working tree first: a safe checkout stops before changing anything
+    // if uncommitted local edits are in the way.
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    checkout.safe();
+    repo.checkout_tree(tree.as_object(), Some(&mut checkout))
+        .map_err(|e| if e.code() == ErrorCode::Conflict { "Local changes would be overwritten; commit them first".into() } else { msg(e) })?;
+    repo.commit(Some("HEAD"), sig, sig, &format!("Merge {upstream} into {branch}"), &tree, &[&our_commit, &their_commit])
+        .map_err(msg)?;
+    Ok(())
+}
+
 /// Pushes the current branch to its remote and sets the upstream the first time.
+/// Fetches first: when the remote has commits this branch lacks, it says so
+/// (pull first) instead of letting the server reject the push.
 pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
+    let before = fetch(dir, token)?;
+    if before.behind > 0 {
+        return Err(format!(
+            "{} has {} new commit(s) that are not here yet. Pull first, then push",
+            before.upstream.as_deref().unwrap_or("The remote"),
+            before.behind
+        ));
+    }
     {
         let repo = open(dir)?;
         let head = repo.head().map_err(msg)?;

@@ -234,7 +234,7 @@
   function onWindowMove(e: MouseEvent) {
     if (paneDrag.active) {
       if (paneDrag.active.from === dragFrom) {
-        paneDrag.move(e.clientX, e.clientY);
+        paneDrag.move(e.clientX, e.clientY, e.shiftKey);
       }
       return;
     }
@@ -256,8 +256,8 @@
     pressed = null;
     const dragged = rowsOf(selection);
     if (dragged.length) {
-      paneDrag.active = { from: dragFrom, rows: dragged, x: e.clientX, y: e.clientY };
-      paneDrag.move(e.clientX, e.clientY);
+      paneDrag.active = { from: dragFrom, rows: dragged, x: e.clientX, y: e.clientY, move: e.shiftKey };
+      paneDrag.move(e.clientX, e.clientY, e.shiftKey);
     }
   }
 
@@ -271,7 +271,12 @@
   const arrow = (key: SortKey) => (sort.key === key ? (sort.desc ? ' ↓' : ' ↑') : '');
 </script>
 
-<svelte:window onmousemove={onWindowMove} onmouseup={onWindowUp} />
+<svelte:window
+  onmousemove={onWindowMove}
+  onmouseup={onWindowUp}
+  onkeydown={(e) => e.key === 'Shift' && paneDrag.active && (paneDrag.active.move = true)}
+  onkeyup={(e) => e.key === 'Shift' && paneDrag.active && (paneDrag.active.move = false)}
+/>
 
 <div class="list">
   <div class="header muted">
