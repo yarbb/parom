@@ -2,7 +2,7 @@
   import { onMount, tick, untrack } from 'svelte';
   import { connection } from '../lib/connection.svelte';
   import { edits } from '../lib/edits.svelte';
-  import { localJoin } from '../lib/files';
+  import { localJoin, splitAddress } from '../lib/files';
   import { t } from '../lib/i18n';
   import { credentialKey, recentLabel } from '../lib/recent';
   import { prefs } from '../lib/prefs.svelte';
@@ -21,6 +21,10 @@
   import SyncDialogs from './SyncDialogs.svelte';
   import { sync } from '../lib/sync/engine.svelte';
   import { repo } from '../lib/repo.svelte';
+  import { paneAt, paneDrag } from '../lib/panedrag.svelte';
+  import { listLocal } from '../lib/local';
+  import { isTauri } from '@tauri-apps/api/core';
+  import { getCurrentWebview } from '@tauri-apps/api/webview';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -173,7 +177,53 @@
     });
   });
 
+  /** Files or folders dropped from the system file manager onto the server pane. */
+  async function uploadPaths(paths: string[]) {
+    const items = [];
+    for (const p of paths) {
+      const name = p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
+      const dir = await listLocal(p).then(
+        () => true,
+        () => false,
+      );
+      items.push({ name, local: p, dir });
+    }
+    upload(items);
+  }
+
   onMount(() => {
+    // Rows dragged from one pane to the other transfer like the buttons do.
+    paneDrag.onDrop = (from, rows) => {
+      if (from === 'local' && connected) {
+        upload(rows.map((r) => ({ name: r.name, local: localJoin(localPath, r.name, localSeparator), dir: r.dir })));
+      } else if (from === 'server') {
+        download(rows.map((r) => ({ name: r.name, remotePath: connection.remotePath, dir: r.dir })));
+      }
+    };
+    // Files dragged in from the system: positions come in physical pixels.
+    let stopDrop = () => {};
+    if (isTauri()) {
+      void getCurrentWebview()
+        .onDragDropEvent((event) => {
+          const p = event.payload;
+          const dpr = window.devicePixelRatio || 1;
+          if (p.type === 'enter' || p.type === 'over') {
+            paneDrag.external = true;
+            paneDrag.over = paneAt(p.position.x / dpr, p.position.y / dpr);
+          } else if (p.type === 'drop') {
+            const side = paneAt(p.position.x / dpr, p.position.y / dpr);
+            paneDrag.external = false;
+            paneDrag.over = null;
+            if (side === 'server' && connected && visible) {
+              void uploadPaths(p.paths);
+            }
+          } else {
+            paneDrag.external = false;
+            paneDrag.over = null;
+          }
+        })
+        .then((un) => (stopDrop = un));
+    }
     connection.start();
     edits.start();
     connection.onTransferDone = (tr) => {
@@ -187,8 +237,28 @@
         void connection.list(connection.remotePath);
       }
     };
-    return () => (connection.onTransferDone = null);
+    return () => {
+      connection.onTransferDone = null;
+      paneDrag.onDrop = null;
+      stopDrop();
+    };
   });
+
+  // "host:port" or "user@host" pasted into the host field: the port and the
+  // user move to their own fields; the protocol prefix stays in the host.
+  function tidyHost() {
+    const a = splitAddress(host);
+    if (!a || (!a.port && !a.user)) {
+      return;
+    }
+    host = a.protocol ? `${a.protocol}://${a.host}` : a.host;
+    if (a.port) {
+      port = String(a.port);
+    }
+    if (a.user && !user.trim()) {
+      user = a.user;
+    }
+  }
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -228,7 +298,7 @@
 
 <div class="view" class:hidden={!visible}>
 <form class="connect" onsubmit={submit}>
-  <input class="field mono host" placeholder={t('files.connect.host')} aria-label={t('files.connect.host')} disabled={connected || busy} bind:value={host} />
+  <input class="field mono host" placeholder={t('files.connect.host')} aria-label={t('files.connect.host')} disabled={connected || busy} bind:value={host} onblur={tidyHost} onpaste={() => setTimeout(tidyHost)} />
   <input class="field mono user" placeholder={t('files.connect.user')} aria-label={t('files.connect.user')} disabled={connected || busy} bind:value={user} />
   <input
     class="field mono password"
@@ -276,6 +346,13 @@
 {/if}
 </div>
 
+{#if paneDrag.active}
+  {@const d = paneDrag.active}
+  <div class="drag-ghost mono" style:left="{d.x + 14}px" style:top="{d.y + 12}px">
+    {d.rows.length === 1 ? d.rows[0].name : t('files.drag_count', { count: d.rows.length })}
+  </div>
+{/if}
+
 <RequestDialog />
 <SyncDialogs />
 
@@ -307,6 +384,19 @@
 {/if}
 
 <style>
+  .drag-ghost {
+    position: fixed;
+    z-index: 20;
+    padding: 3px 8px;
+    border: 1px solid var(--line-control);
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text-strong);
+    font-size: 12px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
   .view {
     display: contents;
   }

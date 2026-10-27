@@ -6,6 +6,7 @@ import {
   formatTime,
   localJoin,
   parseHost,
+  splitAddress,
   parseRemoteTime,
   remoteJoin,
   remoteParent,
@@ -185,5 +186,18 @@ describe('i18n catalogs', () => {
     expect(currentLocale()).toBe('en');
     expect(t('tab.files')).toBe('Files');
     expect(t('no.such.key')).toBe('no.such.key');
+  });
+});
+describe('splitAddress', () => {
+  it('splits pasted addresses', () => {
+    expect(splitAddress('ftp://203.0.113.10:21')).toEqual({ protocol: 'ftp', host: '203.0.113.10', port: 21 });
+    expect(splitAddress('sftp://deploy@example.org:2222/srv/game')).toEqual({ protocol: 'sftp', user: 'deploy', host: 'example.org', port: 2222, path: '/srv/game' });
+    expect(splitAddress('203.0.113.10:2121')).toEqual({ host: '203.0.113.10', port: 2121 });
+    expect(splitAddress('ssh://example.org')).toEqual({ protocol: 'sftp', host: 'example.org' });
+  });
+
+  it('leaves plain host names alone', () => {
+    expect(splitAddress('example.org')).toBeNull();
+    expect(splitAddress('  ')).toBeNull();
   });
 });

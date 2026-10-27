@@ -31,6 +31,8 @@ export interface Site {
   repo: string;
   marker: 'ask' | 'on' | 'off';
   postSync: string;
+  /** Top-level repository folders (or files) sync looks at; empty: all managed paths. */
+  syncPaths?: string[];
 }
 
 interface SitesDoc {

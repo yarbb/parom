@@ -166,6 +166,40 @@ export function clickSelection(
 }
 
 /** Splits "sftp://host:port" style input into protocol, host and port. */
+/**
+ * Splits a pasted address such as "ftp://user@203.0.113.10:21/garrysmod" into
+ * its parts, for host fields that should tidy themselves up. Null when the
+ * input is a plain host name (nothing to split).
+ */
+export function splitAddress(input: string): { protocol?: string; user?: string; host: string; port?: number; path?: string } | null {
+  let rest = input.trim();
+  const out: { protocol?: string; user?: string; host: string; port?: number; path?: string } = { host: '' };
+  const scheme = /^([a-z][a-z0-9+-]*):\/\//i.exec(rest);
+  if (scheme) {
+    const s = scheme[1].toLowerCase();
+    out.protocol = s === 'ssh' || s === 'scp' ? 'sftp' : s;
+    rest = rest.slice(scheme[0].length);
+  }
+  const slash = rest.indexOf('/');
+  if (slash >= 0) {
+    out.path = rest.slice(slash) || undefined;
+    rest = rest.slice(0, slash);
+  }
+  const at = rest.lastIndexOf('@');
+  if (at > 0) {
+    out.user = decodeURIComponent(rest.slice(0, at));
+    rest = rest.slice(at + 1);
+  }
+  const hostPort = /^(.*):(\d+)$/.exec(rest);
+  if (hostPort && !rest.startsWith('[')) {
+    rest = hostPort[1];
+    out.port = Number(hostPort[2]);
+  }
+  out.host = rest;
+  const changed = out.protocol || out.user || out.port || (out.path && out.path !== '/');
+  return changed && out.host ? out : null;
+}
+
 export function parseHost(input: string, port: string): { protocol: string; host: string; port?: number } {
   let rest = input.trim();
   let protocol = 'sftp';

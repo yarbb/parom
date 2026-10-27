@@ -316,7 +316,7 @@ class SyncEngine {
         throw new Error('The local folder is a repository without commits.');
       }
       const root = site.remoteDir.trim() || connection.siteRoot;
-      const rules = parseRules(await git.readFile(dir, repo.head, '.totzilla-ignore'));
+      const rules = { ...parseRules(await git.readFile(dir, repo.head, '.totzilla-ignore')), within: site.syncPaths ?? [] };
       const { marker, mtime } = await this.#readMarker(root);
       const known = marker?.sha ? await git.hasCommit(dir, marker.sha) : false;
       const ancestor = known && marker?.sha ? await git.isAncestor(dir, marker.sha, repo.head) : false;
@@ -391,7 +391,8 @@ class SyncEngine {
   async #plan(c: Check): Promise<Plan> {
     const dir = c.site.localDir.trim();
     const head = c.repo.head!;
-    const headTree = await git.tree(dir, head);
+    // Only managed paths: folders left out in the Site Manager are not walked.
+    const headTree = (await git.tree(dir, head)).filter((f) => classify(f.path, c.rules) !== 'unmanaged');
     const markerSha = c.marker?.sha;
     const useDiff = (c.state === 'behind' || c.state === 'diverged') && markerSha;
     const changes = useDiff ? await git.diff(dir, markerSha, head) : null;

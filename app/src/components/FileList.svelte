@@ -12,6 +12,7 @@
   } from '../lib/files';
   import { t } from '../lib/i18n';
   import { prefs } from '../lib/prefs.svelte';
+  import { dragThreshold, paneDrag, type PaneSide } from '../lib/panedrag.svelte';
 
   interface Props {
     rows: FileRow[];
@@ -30,6 +31,8 @@
     onContextMenu?: (e: MouseEvent, rows: FileRow[]) => void;
     /** F2, Delete and F5 on the selection. */
     onCommand?: (command: 'rename' | 'delete' | 'refresh', rows: FileRow[]) => void;
+    /** Rows can be dragged to the other pane. */
+    dragFrom?: PaneSide;
   }
 
   let {
@@ -45,6 +48,7 @@
     label,
     onContextMenu,
     onCommand,
+    dragFrom,
   }: Props = $props();
 
   // Only the rows in view are in the DOM, so 100k entries stay cheap.
@@ -218,8 +222,56 @@
     e.preventDefault();
   }
 
+  // A press on a row becomes a drag once the mouse moves a few pixels.
+  let pressed: { x: number; y: number; i: number } | null = null;
+
+  function press(e: MouseEvent, i: number) {
+    if (dragFrom && e.button === 0 && i >= offset && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      pressed = { x: e.clientX, y: e.clientY, i };
+    }
+  }
+
+  function onWindowMove(e: MouseEvent) {
+    if (paneDrag.active) {
+      if (paneDrag.active.from === dragFrom) {
+        paneDrag.move(e.clientX, e.clientY);
+      }
+      return;
+    }
+    if (!pressed || !dragFrom) {
+      return;
+    }
+    if (!(e.buttons & 1)) {
+      pressed = null;
+      return;
+    }
+    if (Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < dragThreshold) {
+      return;
+    }
+    if (!selection.has(pressed.i)) {
+      selection = new Set([pressed.i]);
+      anchor = pressed.i;
+      focusIndex = pressed.i;
+    }
+    pressed = null;
+    const dragged = rowsOf(selection);
+    if (dragged.length) {
+      paneDrag.active = { from: dragFrom, rows: dragged, x: e.clientX, y: e.clientY };
+      paneDrag.move(e.clientX, e.clientY);
+    }
+  }
+
+  function onWindowUp() {
+    pressed = null;
+    if (paneDrag.active && paneDrag.active.from === dragFrom) {
+      paneDrag.end();
+    }
+  }
+
   const arrow = (key: SortKey) => (sort.key === key ? (sort.desc ? ' ↓' : ' ↑') : '');
 </script>
+
+<svelte:window onmousemove={onWindowMove} onmouseup={onWindowUp} />
 
 <div class="list">
   <div class="header muted">
@@ -251,6 +303,7 @@
           aria-selected={selection.has(i)}
           style:transform="translateY({i * rowHeight}px)"
           style:height="{rowHeight}px"
+          onmousedown={(e) => press(e, i)}
           onclick={(e) => click(e, i)}
           ondblclick={() => open(i)}
           oncontextmenu={(e) => (i < offset ? e.preventDefault() : contextMenu(e, i))}

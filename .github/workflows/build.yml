@@ -164,7 +164,9 @@ jobs:
         run: npm test
       - name: Build app and installer
         working-directory: app
-        run: npx tauri build --bundles nsis
+        shell: bash
+        # The commit is shown next to the version, so a build can be told apart.
+        run: VITE_BUILD="${GITHUB_SHA::7}" npx tauri build --bundles nsis
       - name: Install silently and self-test
         shell: pwsh
         run: |

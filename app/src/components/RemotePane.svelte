@@ -5,6 +5,7 @@
   import { t } from '../lib/i18n';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileList from './FileList.svelte';
+  import { paneDrag } from '../lib/panedrag.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
 
   interface Props {
@@ -29,7 +30,7 @@
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let op = $state<FileOp | null>(null);
 
-  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir', rows: FileRow[]) {
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[]) {
     if (!connected) {
       return;
     }
@@ -37,6 +38,8 @@
       void connection.list(connection.remotePath);
     } else if (cmd === 'mkdir') {
       op = { kind: 'mkdir', onSubmit: (name) => void connection.mkdirRemote(name) };
+    } else if (cmd === 'mkfile') {
+      op = { kind: 'mkfile', onSubmit: (name) => void connection.mkfileRemote(name) };
     } else if (cmd === 'rename' && rows.length === 1) {
       const from = rows[0].name;
       op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && void connection.renameRemote(from, to) };
@@ -69,6 +72,7 @@
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
         { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
+        { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         { label: t('fileop.copy_path'), action: () => copyPath(rows) },
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: () => command('refresh', rows) },
@@ -77,7 +81,11 @@
   }
 </script>
 
-<section class="pane">
+<section
+  class="pane"
+  data-pane="server"
+  class:drop-target={paneDrag.over === 'server' && (paneDrag.active ? paneDrag.active.from === 'local' : paneDrag.external) && connected}
+>
   <div class="section-label head">
     <span>{t('files.remote')}</span>
     <span class="buttons">
@@ -97,6 +105,7 @@
     onUp={() => parent && connection.list(parent)}
     onOpenDir={(row) => connection.list(remoteJoin(connection.remotePath, row.name))}
     onActivate={download}
+    dragFrom="server"
     bind:selected
     loading={connection.remoteLoading}
     error={connection.remoteError}

@@ -6,6 +6,8 @@
 export interface Rules {
   include: RegExp[];
   protect: RegExp[];
+  /** Top-level folders or files chosen for the site (Site Manager); empty: no limit. */
+  within?: string[];
 }
 
 export type FileClass = 'managed' | 'protected' | 'unmanaged';
@@ -64,6 +66,9 @@ export function parseRules(text: string): Rules {
 
 export function classify(path: string, rules: Rules): FileClass {
   if (alwaysSkipped.some((s) => (s.endsWith('/') ? path.startsWith(s) : path === s || path.endsWith(`/${s}`)))) {
+    return 'unmanaged';
+  }
+  if (rules.within?.length && !rules.within.some((w) => path === w || path.startsWith(`${w}/`))) {
     return 'unmanaged';
   }
   if (rules.protect.some((r) => r.test(path))) {

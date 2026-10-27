@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { isTauri } from '@tauri-apps/api/core';
+  import { invoke, isTauri } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import { localJoin, type FileRow } from '../lib/files';
   import { t } from '../lib/i18n';
@@ -9,6 +9,7 @@
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import FileOpDialog, { type FileOp } from './FileOpDialog.svelte';
   import FileList from './FileList.svelte';
+  import { paneDrag } from '../lib/panedrag.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -98,7 +99,10 @@
     }
   }
 
-  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir', rows: FileRow[]) {
+  /** The folder's rows (command() takes the selected rows as `rows`). */
+  const listed = () => rows;
+
+  function command(cmd: 'rename' | 'delete' | 'refresh' | 'mkdir' | 'mkfile', rows: FileRow[]) {
     if (atRoots) {
       return;
     }
@@ -107,6 +111,17 @@
       refresh();
     } else if (cmd === 'mkdir') {
       op = { kind: 'mkdir', onSubmit: (name) => fsOp(() => localMkdir(full(name))) };
+    } else if (cmd === 'mkfile') {
+      op = {
+        kind: 'mkfile',
+        onSubmit: (name) =>
+          fsOp(async () => {
+            if (listed().some((r) => r.name === name)) {
+              throw new Error(`${name} already exists`);
+            }
+            await invoke('write_small_file', { path: full(name), content: '' });
+          }),
+      };
     } else if (cmd === 'rename' && rows.length === 1) {
       const from = rows[0].name;
       op = { kind: 'rename', name: from, onSubmit: (to) => to !== from && fsOp(() => localRename(full(from), full(to))) };
@@ -135,6 +150,7 @@
         { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
         { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
+        { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: 'F5', action: refresh },
       ],
@@ -156,7 +172,7 @@
   });
 </script>
 
-<section class="pane">
+<section class="pane" data-pane="local" class:drop-target={paneDrag.over === 'local' && paneDrag.active?.from === 'server'}>
   <div class="section-label head">
     <span>{t('files.local')}</span>
     <span class="buttons">
@@ -176,6 +192,7 @@
     onUp={up}
     onOpenDir={(row) => load(atRoots ? row.name : localJoin(path, row.name, separator))}
     onActivate={upload}
+    dragFrom="local"
     bind:selected
     {loading}
     {error}
