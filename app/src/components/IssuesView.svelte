@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { APP_INSTALL_URL, github, openGitHub } from '../lib/github.svelte';
+  import { APP_INSTALL_URL, github, openGitHub, TOKEN_SETTINGS_URL } from '../lib/github.svelte';
   import { t } from '../lib/i18n';
   import {
     addComment,
@@ -210,8 +210,13 @@
       <div class="note">
         <p class="status-removed">{error}</p>
         {#if noAccess}
-          <p class="muted">{t('github.no_access', { repo: slug, owner: slug.split('/')[0] })}</p>
-          <button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.device.install_button')}</button>
+          {@const how = github.user?.kind ?? 'other'}
+          <p class="muted">{t(`github.no_access.${how}`, { repo: slug, owner: slug.split('/')[0] })}</p>
+          {#if how === 'app'}
+            <button class="control" onclick={() => openGitHub(APP_INSTALL_URL)}>{t('github.install_app')}</button>
+          {:else if TOKEN_SETTINGS_URL[how]}
+            <button class="control" onclick={() => openGitHub(TOKEN_SETTINGS_URL[how])}>{t('github.edit_token')}</button>
+          {/if}
         {/if}
       </div>
     {/if}
