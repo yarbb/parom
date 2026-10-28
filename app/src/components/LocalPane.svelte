@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PathInput from './PathInput.svelte';
   import { hint } from '../lib/keys';
   import EmptyState from './EmptyState.svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
@@ -39,6 +40,12 @@
   let error = $state('');
   let typed = $state('');
   let selected = $state<FileRow[]>([]);
+
+  /** Folder names for path suggestions; nothing for the drive list. */
+  async function localFolders(dir: string): Promise<string[] | null> {
+    const res = await listLocal(dir);
+    return res.rows.filter((r) => r.dir).map((r) => r.name);
+  }
 
   /** A path as shown and copied; the list itself keeps the system's form. */
   const shown = (p: string) => shownLocal(p, prefs.value.forwardSlashes);
@@ -260,9 +267,14 @@
       </button>
     </span>
   </div>
-  <form class="pathbar" onsubmit={(e) => (e.preventDefault(), typed && load(typed))}>
-    <input class="field mono" aria-label={t('files.local_path')} bind:value={typed} />
-  </form>
+  <PathInput
+    bind:value={typed}
+    label={t('files.local_path')}
+    separators={separator === '\\' ? '\\/' : '/'}
+    caseSensitive={separator !== '\\'}
+    folders={localFolders}
+    onSubmit={(p) => load(p)}
+  />
   <FileList
     label={t('files.local')}
     {rows}
