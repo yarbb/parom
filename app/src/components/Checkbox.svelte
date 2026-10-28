@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  // 18px checkbox from docs/design (.cb): a native input for keyboard and
+  // 18px checkbox from the design (.cb): a native input for keyboard and
   // screen readers, drawn as a box with a check mark.
   interface Props {
     checked: boolean;
