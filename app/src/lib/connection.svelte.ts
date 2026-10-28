@@ -3,6 +3,7 @@
 import { call, DaemonError, onEvent, onExit, type DaemonEvent } from './daemon';
 import { invoke } from '@tauri-apps/api/core';
 import { SvelteSet } from 'svelte/reactivity';
+import { queueStore } from './queuestore.svelte';
 import { localJoin, parseHost, parseRemoteTime, remoteJoin, type FileRow } from './files';
 import { localMkdir, localWalk } from './local';
 import { t } from './i18n';
@@ -526,8 +527,19 @@ class Connection {
     this.#busy.clear();
   }
 
-  async #run(tr: Transfer, params: Record<string, unknown>): Promise<Transfer> {
+  /** `persist`: a transfer the user started; kept in the queue store until it finishes. */
+  async #run(tr: Transfer, params: Record<string, unknown>, persist = false): Promise<Transfer> {
+    if (persist) {
+      queueStore.add(tr.id, {
+        server: this.serverKey ?? '',
+        label: this.site?.name || this.label,
+        download: tr.download,
+        name: tr.name,
+        params: { ...params },
+      });
+    }
     if (tr.state === 'canceled') {
+      queueStore.finish(tr.id, false);
       this.onTransferDone?.(tr);
       return tr;
     }
@@ -535,12 +547,14 @@ class Connection {
     const session = this.#pickSession();
     // Canceled while the extra sessions opened (TypeScript cannot see that).
     if ((tr.state as Transfer['state']) === 'canceled') {
+      queueStore.finish(tr.id, tr.state === 'failed');
       this.onTransferDone?.(tr);
       return tr;
     }
     if (session === null) {
       tr.state = 'failed';
       tr.error = t('status.disconnected');
+      queueStore.finish(tr.id, tr.state === 'failed');
       this.onTransferDone?.(tr);
       return tr;
     }
@@ -571,13 +585,14 @@ class Connection {
         this.#poolIdle = setTimeout(() => this.#closePool(), 20_000);
       }
     }
-    this.onTransferDone?.(tr);
+    queueStore.finish(tr.id, tr.state === 'failed');
+      this.onTransferDone?.(tr);
     return tr;
   }
 
   /** Queues an upload or download; the daemon runs a session's commands in order. */
-  transfer(download: boolean, name: string, params: Record<string, unknown>): Promise<Transfer> {
-    return this.#run(this.#addRow(download, name), params);
+  transfer(download: boolean, name: string, params: Record<string, unknown>, persist = false): Promise<Transfer> {
+    return this.#run(this.#addRow(download, name), params, persist);
   }
 
   /** Cancels one transfer, whether it is moving bytes or still waiting. */
@@ -660,7 +675,7 @@ class Connection {
       rows.map(({ rel, row }) => {
         const slash = rel.lastIndexOf('/');
         const dir = slash < 0 ? root : remoteJoin(root, rel.slice(0, slash));
-        return this.#run(row, { local: toLocal(rel), remote_path: dir, remote_name: rel.slice(slash + 1) });
+        return this.#run(row, { local: toLocal(rel), remote_path: dir, remote_name: rel.slice(slash + 1) }, true);
       }),
     );
     return rows.every(({ row }) => row.state === 'done' && !row.skipped);
@@ -714,7 +729,7 @@ class Connection {
       return false;
     }
     const rows = files.map((f) => ({ f, row: this.#addRow(true, f.rel) }));
-    await Promise.all(rows.map(({ f, row }) => this.#run(row, { remote_path: f.remote, remote_name: f.name, local: f.local })));
+    await Promise.all(rows.map(({ f, row }) => this.#run(row, { remote_path: f.remote, remote_name: f.name, local: f.local }, true)));
     return complete && rows.every(({ row }) => row.state === 'done' && !row.skipped);
   }
 
@@ -795,6 +810,7 @@ class Connection {
   }
 
   clearFinished(): void {
+    queueStore.clearFailed();
     this.transfers = this.transfers.filter((x) => x.state === 'running');
   }
 }

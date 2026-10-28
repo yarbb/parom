@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { queueStore } from './lib/queuestore.svelte';
   import { updates } from './lib/updates.svelte';
   import UpdateDialog from './components/UpdateDialog.svelte';
   import { startPresence } from './lib/discord.svelte';
@@ -59,6 +60,7 @@
   onMount(() => {
     const stopWatching = watchSystemTheme(loadTheme);
     void prefs.load().then(() => (hideAddress = prefs.value.hideAddress));
+    void queueStore.load();
     // App shortcuts (Ctrl+, Ctrl+S, Ctrl+1/2, Ctrl+L, Ctrl+R, Ctrl+D, zoom); see the menus.
     const onKey = (e: KeyboardEvent) => void shortcut(e);
     window.addEventListener('keydown', onKey);
