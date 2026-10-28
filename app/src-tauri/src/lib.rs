@@ -570,6 +570,13 @@ pub fn run() {
             repo_commit_files,
             repo_remote
         ])
-        .run(context)
-        .expect("error while running the application");
+        .build(context)
+        .expect("error while building the application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Ok(data) = app.path().app_local_data_dir() {
+                    instances::leave(&data);
+                }
+            }
+        });
 }
