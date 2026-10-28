@@ -36,6 +36,8 @@ export interface Prefs {
   discordPresence: boolean;
   /** Also the repository's name, for public GitHub repositories only. */
   discordShowRepo: boolean;
+  /** Look for a new version at start and once a day (installing always asks). */
+  checkUpdates: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -111,6 +113,7 @@ export const defaultPrefs: Prefs = {
   syncBrowse: false,
   discordPresence: false,
   discordShowRepo: false,
+  checkUpdates: true,
   language: 'en',
   foldersFirst: true,
   caseSensitive: false,

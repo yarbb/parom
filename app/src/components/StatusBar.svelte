@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
+  import { updates } from '../lib/updates.svelte';
 
   interface Props {
     state: string;
@@ -36,6 +37,12 @@
       <button class="log-button mono" class:open={queueOpen} onclick={onQueue}>{t('queue.button', { count: queued })}</button>
     {/if}
     {#if onLog}<button class="log-button mono" class:open={logOpen} onclick={onLog}>{logLabel}</button>{/if}
+    {#if updates.available}
+      <!-- A newer version: the button opens what is new and installs it. -->
+      <button class="log-button mono update" onclick={() => (updates.dialog = true)}>
+        <span class="update-text">{t('update.button', { version: updates.available.version })}<span class="blob"></span></span>
+      </button>
+    {/if}
     {version}
   </span>
 </footer>
@@ -87,5 +94,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .update {
+    color: var(--modified);
+  }
+
+  .update-text {
+    position: relative;
   }
 </style>

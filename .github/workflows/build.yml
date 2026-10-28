@@ -2,10 +2,15 @@
 # each tested against a local SFTP server (tests/sftp_test_server.py).
 # libfilezilla and fzssh come prebuilt from MSYS2 (UCRT64); MSYS2 also packages
 # FileZilla 3.71.1 against them, so the versions are known to work together.
+# A tag "vX.Y.Z" also publishes a GitHub release and the update feed
+# (job "release" at the end).
 name: Build
 on:
   workflow_dispatch:
   push:
+    branches: ['**']
+    # Path filters are not applied to tag pushes, so every version tag builds.
+    tags: ['v*']
     paths:
       - third_party/filezilla/**
       - spike/**
@@ -68,7 +73,8 @@ jobs:
             $(pkg-config --libs libfilezilla libfzssh-client)
       - name: Build paromd
         run: |
-          sh daemon/build.sh src-fz build-fz out/bin "0.1.0-dev+${GITHUB_SHA::7}"
+          VERSION=$(tr -d '\r' < app/package.json | sed -n 's/^  "version": "\(.*\)",$/\1/p')
+          sh daemon/build.sh src-fz build-fz out/bin "$VERSION+${GITHUB_SHA::7}"
           PATH="$PWD/out/bin:$PATH" paromd.exe --version
       - name: Test M0b spike (connect, list, upload)
         timeout-minutes: 5
@@ -166,6 +172,10 @@ jobs:
         working-directory: app
         shell: bash
         # The commit is shown next to the version, so a build can be told apart.
+        # The key signs the installer for the updater (a .sig next to it).
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: VITE_BUILD="${GITHUB_SHA::7}" npx tauri build --bundles nsis
       - name: Install silently and self-test
         shell: pwsh
@@ -186,4 +196,57 @@ jobs:
           name: windows-installer
           path: |
             app/src-tauri/target/release/bundle/nsis/*-setup.exe
+            app/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             app/src-tauri/Cargo.lock
+
+  # On a version tag: the GitHub release (pre-release while the version is
+  # below 1.0 or has a suffix) and the update feed the app reads. The feed is
+  # latest.json in the fixed release "updater", because GitHub's "latest
+  # release" link skips pre-releases.
+  release:
+    needs: app
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-installer
+          path: dist
+      - name: Publish the release
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          SETUP=$(find dist -name '*-setup.exe' | head -n1)
+          SIG="$SETUP.sig"
+          test -f "$SETUP" && test -f "$SIG"
+          NOTES="docs/releases/$VERSION.md"
+          test -f "$NOTES" || { echo "missing $NOTES"; exit 1; }
+          PRE=""
+          case "$VERSION" in 0.*|*-*) PRE="--prerelease" ;; esac
+          TITLE="Parom $VERSION"
+          [ -n "$PRE" ] && TITLE="$TITLE beta"
+          gh release create "$TAG" "$SETUP" --title "$TITLE" --notes-file "$NOTES" $PRE --verify-tag
+      - name: Update the feed for the app's updater
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          SETUP=$(find dist -name '*-setup.exe' | head -n1)
+          NAME=$(basename "$SETUP")
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$(cat "docs/releases/$VERSION.md")" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg sig "$(cat "$SETUP.sig")" \
+            --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$NAME" \
+            '{version: $version, notes: $notes, pub_date: $date,
+              platforms: {"windows-x86_64": {signature: $sig, url: $url}}}' > latest.json
+          cat latest.json
+          gh release view updater >/dev/null 2>&1 || gh release create updater --prerelease \
+            --title "Update feed" --notes "Read by the app to find new versions. Download Parom from the releases above."
+          gh release upload updater latest.json --clobber
