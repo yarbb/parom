@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hint } from '../lib/keys';
   import EmptyState from './EmptyState.svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import { onMount } from 'svelte';
@@ -198,10 +199,10 @@
           action: () => fsOp(() => openInEditor(localJoin(path, rows[0].name, separator), prefs.value.editorPath)),
         },
         { separator: true, label: '' },
-        { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
+        { label: t('fileop.rename.title'), hint: hint('rename'), disabled: rows.length !== 1, action: () => command('rename', rows) },
         e.shiftKey
-          ? { label: t('fileop.delete_now'), hint: 'Shift+Del', danger: true, disabled: !any, action: () => command('delete', rows, true) }
-          : { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+          ? { label: t('fileop.delete_now'), hint: hint('delete') && `Shift+${hint('delete')}`, danger: true, disabled: !any, action: () => command('delete', rows, true) }
+          : { label: t('fileop.trash'), hint: hint('delete'), disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         {
@@ -220,7 +221,7 @@
             ]
           : []),
         { separator: true, label: '' },
-        { label: t('files.refresh'), hint: 'F5', action: refresh },
+        { label: t('files.refresh'), hint: hint('refresh'), action: refresh },
       ],
     };
   }
