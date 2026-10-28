@@ -8,6 +8,8 @@ import { sites } from './sites.svelte';
 import { sync } from './sync/engine.svelte';
 import type { ThemeChoice } from './theme';
 import { ui } from './ui.svelte';
+import { commandFor, comboOf } from './keys';
+import { updates } from './updates.svelte';
 
 /** The project's page; issues go to its tracker. */
 export const PROJECT_URL = 'https://github.com/yarbb/parom';
@@ -68,32 +70,42 @@ export const openProject = (path = '') => openGitHub(`${PROJECT_URL}${path}`);
 /** Synchronized browsing needs a session of a site with a local folder. */
 export const canSyncBrowse = () => connection.state === 'connected' && !!connection.site?.localDir.trim();
 
-/** Global shortcuts (the file lists handle their own keys). Returns true if handled. */
+/** What each global shortcut does (ids from lib/keys.ts). */
+const actions: Record<string, () => void> = {
+  siteManager: () => (ui.siteManager = true),
+  preferences: () => (ui.preferences = true),
+  tabFiles: () => (ui.tab = 'files'),
+  tabGithub: () => (ui.tab = 'github'),
+  log: () => (ui.log = !ui.log),
+  syncBrowse: () => (ui.syncBrowse = !ui.syncBrowse),
+  reconnect: reconnectLast,
+  disconnect: () => void connection.disconnect(),
+  sync: () => canSync() && (sync.choosing = true),
+  checkUpdates: () => void updates.check(true),
+  zoomIn: () => zoom(10),
+  zoomOut: () => zoom(-10),
+  zoomReset: () => zoom(null),
+};
+
+/** Editing keys keep their meaning in text fields (undo, redo, clipboard). */
+const textKeys = new Set(['Ctrl+A', 'Ctrl+C', 'Ctrl+V', 'Ctrl+X', 'Ctrl+Z', 'Ctrl+Y', 'Ctrl+Shift+Z']);
+
+/** Global shortcuts (Preferences → Keyboard shortcuts). Returns true if handled. */
 export function shortcut(e: KeyboardEvent): boolean {
-  const mod = e.ctrlKey || e.metaKey;
-  if (!mod || e.altKey) {
+  if (ui.capturingKeys || e.defaultPrevented) {
     return false;
   }
-  const key = e.key.toLowerCase();
-  if (key === 'y' && e.target instanceof Element && e.target.closest('input, textarea')) {
-    // Redo in text fields.
+  const combo = comboOf(e);
+  if (!combo) {
     return false;
   }
-  const run: Record<string, () => void> = {
-    ',': () => (ui.preferences = true),
-    s: () => (ui.siteManager = true),
-    '1': () => (ui.tab = 'files'),
-    '2': () => (ui.tab = 'github'),
-    l: () => (ui.log = !ui.log),
-    y: () => (ui.syncBrowse = !ui.syncBrowse),
-    r: reconnectLast,
-    d: () => void connection.disconnect(),
-    '=': () => zoom(10),
-    '+': () => zoom(10),
-    '-': () => zoom(-10),
-    '0': () => zoom(null),
-  };
-  const action = run[key];
+  const inText = e.target instanceof Element && !!e.target.closest('input, textarea, [contenteditable]');
+  // In a text field only combinations with Ctrl or Alt, and never the editing ones.
+  if (inText && (textKeys.has(combo) || !/^(Ctrl|Alt)\+/.test(combo))) {
+    return false;
+  }
+  const command = commandFor(combo, 'global');
+  const action = command && actions[command.id];
   if (!action) {
     return false;
   }

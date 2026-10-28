@@ -38,6 +38,8 @@ export interface Prefs {
   discordShowRepo: boolean;
   /** Look for a new version at start and once a day (installing always asks). */
   checkUpdates: boolean;
+  /** Shortcut changes by command id (lib/keys.ts); "" removes a shortcut. */
+  keybindings: Record<string, string>;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -114,6 +116,7 @@ export const defaultPrefs: Prefs = {
   discordPresence: false,
   discordShowRepo: false,
   checkUpdates: true,
+  keybindings: {},
   language: 'system',
   foldersFirst: true,
   caseSensitive: false,

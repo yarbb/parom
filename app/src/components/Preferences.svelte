@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { comboOf, keyCommands, keyOf } from '../lib/keys';
   import { updates } from '../lib/updates.svelte';
   import { indicator } from '../lib/indicator';
   import { onMount } from 'svelte';
@@ -169,24 +170,74 @@
   }
 
   /** Every shortcut, for the Keyboard shortcuts page. */
-  const shortcuts: [string, string][] = [
-    ['Ctrl+S', 'menu.site_manager'],
-    ['Ctrl+,', 'menu.preferences'],
-    ['Ctrl+1 / Ctrl+2', 'prefs.keys.tabs'],
-    ['Ctrl+L', 'log.title'],
-    ['Ctrl+R', 'menu.reconnect'],
-    ['Ctrl+D', 'common.disconnect'],
-    ['Ctrl+= / Ctrl+- / Ctrl+0', 'prefs.keys.zoom'],
+  /** Keys that stay as they are (not in the command list). */
+  const fixedKeys: [string, string][] = [
     ['Enter', 'prefs.keys.enter'],
-    ['Backspace', 'prefs.keys.up'],
-    ['F2', 'fileop.rename.title'],
-    ['Delete', 'prefs.keys.delete'],
-    ['F5', 'files.refresh'],
     ['Ctrl+A', 'menu.select_all'],
     ['Shift / Ctrl + click', 'prefs.keys.select'],
-    ['Shift + drag', 'prefs.keys.move'],
-    ['Escape', 'prefs.keys.escape'],
+    ['Shift', 'prefs.keys.move'],
+    ['Esc', 'prefs.keys.escape'],
   ];
+
+  /** The command waiting for its new shortcut, and a note about one taken from another command. */
+  let capturing = $state<string | null>(null);
+  let keyNote = $state('');
+  const bindingOf = (id: string) => keyOf(id, draft.keybindings ?? {});
+
+  function setKey(id: string, combo: string) {
+    const bindings = { ...(draft.keybindings ?? {}) };
+    const own = keyCommands.find((c) => c.id === id);
+    keyNote = '';
+    if (combo) {
+      // One shortcut, one command: whichever had it in the same place loses it.
+      for (const other of keyCommands) {
+        if (other.id !== id && other.scope === own?.scope && keyOf(other.id, bindings) === combo) {
+          bindings[other.id] = '';
+          keyNote = t('prefs.keys.taken', { combo, name: t(other.label) });
+        }
+      }
+    }
+    if (own && combo === own.key) {
+      delete bindings[id];
+    } else {
+      bindings[id] = combo;
+    }
+    draft.keybindings = bindings;
+  }
+
+  function capture(id: string) {
+    capturing = capturing === id ? null : id;
+    ui.capturingKeys = capturing !== null;
+  }
+
+  function onCaptureKey(e: KeyboardEvent) {
+    if (!capturing) {
+      return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.key === 'Escape') {
+      capturing = null;
+      ui.capturingKeys = false;
+      return;
+    }
+    const combo = comboOf(e);
+    if (!combo) {
+      return; // a modifier alone: wait for the key
+    }
+    setKey(capturing, combo);
+    capturing = null;
+    ui.capturingKeys = false;
+  }
+
+  // Closing Preferences while waiting for keys turns the app's shortcuts back on.
+  onMount(() => () => (ui.capturingKeys = false));
+
+  function resetKeys() {
+    draft.keybindings = {};
+    keyNote = '';
+  }
+
 
   const num = (v: string, fallback: number) => {
     const n = Number(v);
@@ -401,13 +452,32 @@
         {:else if page === 'logging'}
           <div class="row"><span></span><Checkbox checked={true} disabled label={t('prefs.write_log')} /></div>
         {:else if page === 'shortcuts'}
+          {#each [['global', 'prefs.keys.global'], ['list', 'prefs.keys.list']] as [scope, title] (scope)}
+            <div class="section-label inline">{t(title)}</div>
+            {#each keyCommands.filter((c) => c.scope === scope) as c (c.id)}
+              <div class="row key-row">
+                <span>{t(c.label, { percent: 100 })}</span>
+                <button class="control key mono" class:capturing={capturing === c.id} onclick={() => capture(c.id)}>
+                  {capturing === c.id ? t('prefs.keys.press') : bindingOf(c.id) || t('prefs.keys.none')}
+                </button>
+                {#if bindingOf(c.id)}
+                  <button class="control small" title={t('prefs.keys.clear')} onclick={() => setKey(c.id, '')}>{t('prefs.keys.clear')}</button>
+                {/if}
+                {#if bindingOf(c.id) !== c.key}
+                  <button class="control small" onclick={() => setKey(c.id, c.key)}>{t('prefs.keys.default', { combo: c.key || t('prefs.keys.none') })}</button>
+                {/if}
+              </div>
+            {/each}
+          {/each}
+          {#if keyNote}<p class="status-modified small-note">{keyNote}</p>{/if}
+          <div class="row"><span></span><button class="control" onclick={resetKeys}>{t('prefs.keys.reset_all')}</button></div>
+          <div class="section-label inline">{t('prefs.keys.fixed')}</div>
           <dl class="keys">
-            {#each shortcuts as [keys, what] (keys)}
+            {#each fixedKeys as [keys, what] (keys)}
               <dt class="mono">{keys}</dt>
               <dd>{t(what)}</dd>
             {/each}
           </dl>
-          <p class="muted">{t('prefs.keys.later')}</p>
         {:else if page === 'updates'}
           <div class="row"><span>{t('prefs.current_version')}</span><span class="mono">v{version}</span></div>
           <div class="row">
@@ -445,7 +515,23 @@
   </Modal>
 {/if}
 
+<svelte:window onkeydowncapture={onCaptureKey} />
+
 <style>
+  .key-row .key {
+    min-width: 150px;
+    justify-content: center;
+  }
+
+  .key-row .key.capturing {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .small-note {
+    font-size: 11.5px;
+  }
+
   .backdrop {
     position: fixed;
     inset: 0;
