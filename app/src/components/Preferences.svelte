@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { updates } from '../lib/updates.svelte';
   import { indicator } from '../lib/indicator';
   import { onMount } from 'svelte';
   import { getVersion } from '@tauri-apps/api/app';
@@ -403,6 +404,13 @@
           <p class="muted">{t('prefs.keys.later')}</p>
         {:else if page === 'updates'}
           <div class="row"><span>{t('prefs.current_version')}</span><span class="mono">v{version}</span></div>
+          <div class="row">
+            <span>{t('prefs.latest_version')}</span>
+            <span class="mono">{updates.available ? `v${updates.available.version}` : updates.checkedAt ? t('prefs.up_to_date') : '—'}</span>
+            <span class="spacer"></span>
+            <button class="control" disabled={updates.checking} onclick={() => void updates.check(true)}>{t('menu.check_updates')}</button>
+          </div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.checkUpdates} label={t('prefs.check_updates')} /></div>
           <p class="muted">{t('prefs.updates_source')}</p>
         {/if}
         </div>

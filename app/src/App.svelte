@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { updates } from './lib/updates.svelte';
+  import UpdateDialog from './components/UpdateDialog.svelte';
   import { startPresence } from './lib/discord.svelte';
   import { onMount } from 'svelte';
   import { getName, getVersion } from '@tauri-apps/api/app';
@@ -84,9 +86,11 @@
       .catch(() => (engine = 'unavailable'));
 
     const stopPresence = startPresence();
+    const stopUpdates = updates.start();
 
     return () => {
       stopPresence();
+      stopUpdates();
       stopWatching();
       stopExit();
       window.removeEventListener('keydown', onKey);
@@ -128,6 +132,9 @@
 </div>
 {/if}
 
+{#if updates.dialog}
+  <UpdateDialog />
+{/if}
 {#if ui.siteManager}
   <SiteManager onClose={() => (ui.siteManager = false)} />
 {/if}

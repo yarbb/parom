@@ -14,6 +14,7 @@
   import { sync } from '../lib/sync/engine.svelte';
   import { ui } from '../lib/ui.svelte';
   import { fileOps } from '../lib/fileops.svelte';
+  import { updates } from '../lib/updates.svelte';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 
   // File / Edit / View / Server / Help in the title bar. Opening one and
@@ -123,6 +124,7 @@
       case 'help':
         return [
           { label: t('menu.about', { name: ui.appName }), action: () => (ui.about = true) },
+          { label: t('menu.check_updates'), disabled: updates.checking, action: () => void updates.check(true) },
           { separator: true, label: '' },
           { label: t('menu.project_page'), action: () => void openProject() },
           { label: t('menu.report_problem'), danger: true, action: () => void openProject('/issues/new') },
