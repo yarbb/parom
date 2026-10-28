@@ -32,6 +32,7 @@
   import { canSyncBrowse } from '../lib/commands.svelte';
   import { twins } from '../lib/twins.svelte';
   import { instances } from '../lib/instances.svelte';
+  import { queueStore, type SavedTransfer } from '../lib/queuestore.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -197,6 +198,23 @@
     }
   }
 
+  // Transfers left over from the last run (closed or crashed mid-transfer):
+  // once connected to their server again, ask whether to continue them.
+  let leftover = $state<SavedTransfer[] | null>(null);
+  $effect(() => {
+    const key = connection.serverKey;
+    if (key && leftover === null && queueStore.pending.some((p) => p.server === key)) {
+      leftover = untrack(() => queueStore.take(key));
+    }
+  });
+
+  function continueLeftover() {
+    for (const item of leftover ?? []) {
+      void connection.transfer(item.download, item.name, item.params, true);
+    }
+    leftover = null;
+  }
+
   // The first time both panes show folders with the same name, ask once
   // whether to tint them; any answer (closing the dialog too) is final, and
   // Preferences → File lists changes it later.
@@ -302,7 +320,7 @@
         f.dir
           ? connection.uploadFolder(f.local, localSeparator, f.name, target)
           : connection
-              .transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name })
+              .transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name }, true)
               .then((tr) => tr.state === 'done' && !tr.skipped),
       ),
     );
@@ -320,7 +338,7 @@
         f.dir
           ? connection.downloadFolder(f.remotePath, f.name, target, localSeparator)
           : connection
-              .transfer(true, f.name, { remote_path: f.remotePath, remote_name: f.name, local: localJoin(target, f.name, localSeparator) })
+              .transfer(true, f.name, { remote_path: f.remotePath, remote_name: f.name, local: localJoin(target, f.name, localSeparator) }, true)
               .then((tr) => tr.state === 'done' && !tr.skipped),
       ),
     );
@@ -439,7 +457,7 @@
       if (f.dir) {
         void connection.uploadFolder(f.local, localSeparator, f.name, target);
       } else {
-        void connection.transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name });
+        void connection.transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name }, true);
       }
     }
   }
@@ -450,11 +468,16 @@
       if (f.dir) {
         void connection.downloadFolder(f.remotePath, f.name, target, localSeparator);
       } else {
-        void connection.transfer(true, f.name, {
-          remote_path: f.remotePath,
-          remote_name: f.name,
-          local: localJoin(target, f.name, localSeparator),
-        });
+        void connection.transfer(
+          true,
+          f.name,
+          {
+            remote_path: f.remotePath,
+            remote_name: f.name,
+            local: localJoin(target, f.name, localSeparator),
+          },
+          true,
+        );
       }
     }
   }
@@ -544,6 +567,23 @@
   </Modal>
 {/if}
 
+{#if leftover && leftover.length}
+  {@const items = leftover}
+  {@const failed = items.filter((i) => i.failed).length}
+  <Modal title={t('resume.title')} onCancel={() => (leftover = null)}>
+    <p>{t('resume.body', { count: items.length, server: items[0].label })}</p>
+    {#if failed}<p class="muted">{t('resume.failed', { count: failed })}</p>{/if}
+    <ul class="resume-list mono">
+      {#each items.slice(0, 6) as i, n (n)}<li>{i.download ? '↓' : '↑'} {i.name}</li>{/each}
+      {#if items.length > 6}<li class="muted">{t('changes.and_more', { count: items.length - 6 })}</li>{/if}
+    </ul>
+    {#snippet actions()}
+      <button class="control" onclick={() => (leftover = null)}>{t('resume.drop')}</button>
+      <button class="control primary" onclick={continueLeftover}>{t('resume.continue')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
 {#if sharedWarning}
   <Modal title={t('shared.title')} onCancel={closeSharedWarning}>
     <p>{t('shared.body')}</p>
@@ -585,6 +625,14 @@
 {/if}
 
 <style>
+  .resume-list {
+    max-height: 140px;
+    overflow-y: auto;
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+  }
+
   .drag-ghost {
     position: fixed;
     z-index: 20;
