@@ -415,6 +415,16 @@
             {/each}
           {/if}
           <p class="muted">{t('prefs.repos_hint')}</p>
+          <label class="row"><span>{t('prefs.pull_mode')}</span>
+            <Select
+              bind:value={draft.pullMode}
+              options={[
+                { value: 'rebase', label: t('prefs.pull_mode.rebase') },
+                { value: 'merge', label: t('prefs.pull_mode.merge') },
+              ]}
+            />
+          </label>
+          <p class="muted">{t(draft.pullMode === 'merge' ? 'prefs.pull_mode.merge_hint' : 'prefs.pull_mode.rebase_hint')}</p>
         {:else if page === 'marker_history'}
           <div class="row"><span></span><Checkbox bind:checked={draft.syncScanEdits} label={t('prefs.scan_edits')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncLock} label={t('prefs.lock_server')} /></div>

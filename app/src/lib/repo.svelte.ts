@@ -305,7 +305,13 @@ class Repo {
     this.busy = op;
     try {
       const author = github.author;
-      this.info = await invoke<BranchInfo>('repo_remote', { dir: this.dir, op, name: author?.name ?? null, email: author?.email ?? null });
+      this.info = await invoke<BranchInfo>('repo_remote', {
+        dir: this.dir,
+        op,
+        name: author?.name ?? null,
+        email: author?.email ?? null,
+        rebase: prefs.value.pullMode !== 'merge',
+      });
       this.fetchedAt = Date.now();
       this.error = '';
       if (op === 'pull') {

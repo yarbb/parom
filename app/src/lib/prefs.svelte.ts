@@ -40,6 +40,8 @@ export interface Prefs {
   checkUpdates: boolean;
   /** Shortcut changes by command id (lib/keys.ts); "" removes a shortcut. */
   keybindings: Record<string, string>;
+  /** Pull when both sides have new commits: replay mine on top (rebase) or a merge commit. */
+  pullMode: 'rebase' | 'merge';
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -117,6 +119,7 @@ export const defaultPrefs: Prefs = {
   discordShowRepo: false,
   checkUpdates: true,
   keybindings: {},
+  pullMode: 'rebase',
   language: 'system',
   foldersFirst: true,
   caseSensitive: false,
