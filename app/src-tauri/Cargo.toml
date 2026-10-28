@@ -35,6 +35,10 @@ tokio = { version = "1", features = ["sync"] }
 # Live changes in the GitHub tab (watches the open repository's folder).
 notify = "8"
 
+# Saved passwords on Linux go to the Secret Service (GNOME Keyring, KWallet).
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
 # Windows 11 snap layouts for the custom maximize button (sends Win+Z).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }

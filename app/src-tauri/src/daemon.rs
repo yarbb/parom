@@ -40,8 +40,10 @@ fn bridge_error(message: impl Into<String>) -> Value {
     json!({ "code": BRIDGE_ERROR, "message": message.into() })
 }
 
-/// The daemon ships next to the app executable in `daemon/`.
-/// `PAROM_DAEMON` overrides the path for development.
+/// The daemon ships in a `daemon/` folder of the app's resources: next to the
+/// executable on Windows, in `<prefix>/lib/<product>/` on Linux (AppImage,
+/// deb), where Tauri puts resources. `PAROM_DAEMON` overrides the path for
+/// development.
 pub fn daemon_path() -> io::Result<PathBuf> {
     if let Some(path) = std::env::var_os("PAROM_DAEMON") {
         return Ok(path.into());
@@ -51,7 +53,22 @@ pub fn daemon_path() -> io::Result<PathBuf> {
         .parent()
         .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "executable has no parent directory"))?;
     let name = if cfg!(windows) { "paromd.exe" } else { "paromd" };
-    Ok(dir.join("daemon").join(name))
+    let beside = dir.join("daemon").join(name);
+    if beside.exists() {
+        return Ok(beside);
+    }
+    // <prefix>/bin/parom -> <prefix>/lib/<product>/daemon/paromd
+    if let Some(lib) = dir.parent().map(|p| p.join("lib")) {
+        if let Ok(entries) = std::fs::read_dir(&lib) {
+            for entry in entries.flatten() {
+                let candidate = entry.path().join("daemon").join(name);
+                if candidate.exists() {
+                    return Ok(candidate);
+                }
+            }
+        }
+    }
+    Ok(beside)
 }
 
 impl Daemon {

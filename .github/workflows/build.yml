@@ -175,12 +175,123 @@ jobs:
             app/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             app/src-tauri/Cargo.lock
 
+  # Linux (experimental): libfilezilla and fzssh built from source (the
+  # tarballs Arch Linux mirrors, checked against Arch's sums), the engine and
+  # paromd, then the AppImage. Built on Ubuntu 24.04, so it runs on distros
+  # with glibc 2.39 or newer.
+  linux:
+    runs-on: ubuntu-24.04
+    env:
+      FZ: /opt/fz
+      LIBFILEZILLA: '0.58.0'
+      LIBFILEZILLA_SHA512: 8bcfe47e4c704e0fd4ed66da47e834b031ed4f6dd66a7e4f7991a7e87f3c88f38b822d58de83c0f4f84118b87c9a8ff1ac00913a40fb692718c49ad8063bd83a
+      FZSSH: '1.5.0'
+      FZSSH_SHA256: 2289e1e7c3fc11d3720b69ee6bee40490c0b3d5bca21d7d0615dfca1d833786d
+    steps:
+      - uses: actions/checkout@v7
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config ninja-build meson patchelf file xz-utils \
+            nettle-dev libgnutls28-dev libgmp-dev libargon2-dev libsqlite3-dev nlohmann-json3-dev libboost-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev libssl-dev \
+            python3-paramiko
+      - name: libfilezilla and fzssh
+        run: |
+          set -eu
+          curl -fsSLo lfz.tar.xz "https://sources.archlinux.org/other/libfilezilla/libfilezilla-$LIBFILEZILLA.tar.xz"
+          echo "$LIBFILEZILLA_SHA512  lfz.tar.xz" | sha512sum -c
+          curl -fsSLo fzssh.tar.xz "https://sources.archlinux.org/other/packages/fzssh/fzssh-$FZSSH.tar.xz"
+          echo "$FZSSH_SHA256  fzssh.tar.xz" | sha256sum -c
+          mkdir lfz fzssh
+          tar xf lfz.tar.xz -C lfz --strip-components=1
+          tar xf fzssh.tar.xz -C fzssh --strip-components=1
+          (cd lfz && ./configure --prefix="$FZ" --disable-static && make -j"$(nproc)" && sudo make install)
+          export PKG_CONFIG_PATH="$FZ/lib/pkgconfig"
+          meson setup fzssh-build fzssh --prefix="$FZ" --libdir=lib --buildtype=release
+          ninja -C fzssh-build
+          sudo ninja -C fzssh-build install
+      - name: Engine and paromd
+        run: |
+          set -eu
+          export PKG_CONFIG_PATH="$FZ/lib/pkgconfig" LD_LIBRARY_PATH="$FZ/lib"
+          echo "3df9b9b3e5b2c37dc6d9ecb883554aba140a02ec47c3d6b52333bf1733af4da4  third_party/filezilla/FileZilla_3.71.1_src.tar.xz" | sha256sum -c
+          mkdir src-fz build-fz
+          tar xf third_party/filezilla/FileZilla_3.71.1_src.tar.xz -C src-fz --strip-components=1
+          (cd build-fz && ../src-fz/configure --prefix="$FZ" \
+            --enable-gui=no --disable-locales --disable-shellext --disable-storj \
+            --disable-manualupdatecheck --disable-autoupdatecheck --with-pugixml=builtin)
+          make -j"$(nproc)" -C build-fz/src
+          VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' app/package.json)
+          sh daemon/build.sh src-fz build-fz out "$VERSION+${GITHUB_SHA::7}"
+          LD_LIBRARY_PATH="$FZ/lib:$PWD/build-fz/src/engine/.libs" out/paromd --version
+      - name: Bundle paromd with its libraries
+        run: |
+          set -eu
+          mkdir -p app/src-tauri/daemon
+          cp out/paromd app/src-tauri/daemon/
+          # Everything it loads except the C runtime itself; found through $ORIGIN.
+          LD_LIBRARY_PATH="$FZ/lib:$PWD/build-fz/src/engine/.libs" ldd out/paromd \
+            | awk '$3 ~ /^\// {print $3}' \
+            | grep -vE '/(libc|libm|libdl|libpthread|librt|ld-linux[^/]*)\.so' \
+            | while read -r lib; do cp -L "$lib" app/src-tauri/daemon/; done
+          for f in app/src-tauri/daemon/*; do patchelf --set-rpath '$ORIGIN' "$f"; done
+          strip --strip-unneeded app/src-tauri/daemon/* || true
+          ls -la app/src-tauri/daemon
+          app/src-tauri/daemon/paromd --version
+      - name: Test paromd JSON-RPC
+        timeout-minutes: 5
+        run: |
+          mkdir sftproot-daemon
+          python3 tests/sftp_test_server.py --root sftproot-daemon --port 3374 --password test &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          sleep 5
+          python3 daemon/tests/test_rpc.py "$PWD/app/src-tauri/daemon/paromd" \
+            --port 3374 --password test --root sftproot-daemon
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+      - name: Build the AppImage
+        working-directory: app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          npm ci
+          VITE_BUILD="${GITHUB_SHA::7}" npx tauri build --bundles appimage
+      - name: Self-test the AppImage
+        run: |
+          set -eu
+          img=$(ls app/src-tauri/target/release/bundle/appimage/*.AppImage | head -n1)
+          echo "AppImage: $img ($(du -h "$img" | cut -f1))"
+          chmod +x "$img"
+          (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$img" --appimage-extract >/dev/null)
+          bin=$(ls "$RUNNER_TEMP"/squashfs-root/usr/bin/* | head -n1)
+          "$bin" --self-test "$RUNNER_TEMP/self-test.json" || { cat "$RUNNER_TEMP/self-test.json"; exit 1; }
+          cat "$RUNNER_TEMP/self-test.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: linux-appimage
+          path: |
+            app/src-tauri/target/release/bundle/appimage/*.AppImage
+            app/src-tauri/target/release/bundle/appimage/*.AppImage.sig
+
   # On a version tag: the GitHub release (pre-release while the version is
   # below 1.0 or has a suffix) and the update feed the app reads. The feed is
   # latest.json in the fixed release "updater", because GitHub's "latest
   # release" link skips pre-releases.
   release:
-    needs: app
+    needs: [app, linux]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -194,6 +305,10 @@ jobs:
         with:
           name: windows-installer
           path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-appimage
+          path: dist-linux
       - name: Publish the release
         run: |
           TAG="${GITHUB_REF_NAME}"
@@ -207,21 +322,27 @@ jobs:
           case "$VERSION" in 0.*|*-*) PRE="--prerelease" ;; esac
           TITLE="Parom $VERSION"
           [ -n "$PRE" ] && TITLE="$TITLE beta"
-          gh release create "$TAG" "$SETUP" --title "$TITLE" --notes-file "$NOTES" $PRE --verify-tag
+          APPIMAGE=$(find dist-linux -name '*.AppImage' | head -n1)
+          gh release create "$TAG" "$SETUP" "$APPIMAGE" --title "$TITLE" --notes-file "$NOTES" $PRE --verify-tag
       - name: Update the feed for the app's updater
         run: |
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
           SETUP=$(find dist -name '*-setup.exe' | head -n1)
           NAME=$(basename "$SETUP")
+          APPIMAGE=$(find dist-linux -name '*.AppImage' | head -n1)
+          LNAME=$(basename "$APPIMAGE")
           jq -n \
             --arg version "$VERSION" \
             --arg notes "$(cat "docs/releases/$VERSION.md")" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg sig "$(cat "$SETUP.sig")" \
             --arg url "https://github.com/$GH_REPO/releases/download/$TAG/$NAME" \
+            --arg lsig "$(cat "$APPIMAGE.sig")" \
+            --arg lurl "https://github.com/$GH_REPO/releases/download/$TAG/$LNAME" \
             '{version: $version, notes: $notes, pub_date: $date,
-              platforms: {"windows-x86_64": {signature: $sig, url: $url}}}' > latest.json
+              platforms: {"windows-x86_64": {signature: $sig, url: $url},
+                          "linux-x86_64": {signature: $lsig, url: $lurl}}}' > latest.json
           cat latest.json
           gh release view updater >/dev/null 2>&1 || gh release create updater --prerelease \
             --title "Update feed" --notes "Read by the app to find new versions. Download Parom from the releases above."
