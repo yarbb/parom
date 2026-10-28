@@ -1,4 +1,5 @@
 mod daemon;
+mod discord;
 mod edit;
 mod git;
 mod github;
@@ -374,6 +375,12 @@ fn repo_watch(state: tauri::State<'_, watch::RepoWatch>, dir: String) -> Result<
     state.watch(&dir)
 }
 
+/// What Discord shows (None clears it); the UI only sends this when the user turned presence on.
+#[tauri::command]
+fn discord_presence(state: tauri::State<'_, discord::Presence>, activity: Option<Value>) {
+    state.set(activity);
+}
+
 #[tauri::command]
 fn snap_layouts() {
     snap::show();
@@ -470,6 +477,10 @@ pub fn run() {
             });
             app.manage(repo_watch);
 
+            let presence = discord::Presence::default();
+            presence.start();
+            app.manage(presence);
+
             let events = app.handle().clone();
             let exits = app.handle().clone();
             match Daemon::spawn(
@@ -509,6 +520,7 @@ pub fn run() {
             repo_discard,
             repo_watch,
             snap_layouts,
+            discord_presence,
             local_list,
             local_walk,
             local_mkdir,

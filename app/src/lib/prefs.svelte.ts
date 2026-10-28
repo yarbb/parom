@@ -32,6 +32,10 @@ export interface Prefs {
   snapLayouts: boolean;
   /** Synchronized browsing (Ctrl+Y), kept between sessions. */
   syncBrowse: boolean;
+  /** Discord Rich Presence: what the app is doing, never addresses (off by default). */
+  discordPresence: boolean;
+  /** Also the repository's name, for public GitHub repositories only. */
+  discordShowRepo: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -105,6 +109,8 @@ export const defaultPrefs: Prefs = {
   warnSharedServer: true,
   snapLayouts: true,
   syncBrowse: false,
+  discordPresence: false,
+  discordShowRepo: false,
   language: 'en',
   foldersFirst: true,
   caseSensitive: false,
