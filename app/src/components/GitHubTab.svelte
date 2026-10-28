@@ -196,7 +196,7 @@
 <div class="body">
   <nav class="sidebar" style:width="{colWidth('ghSidebar', 200)}px">
     <button class="nav" class:active={page === 'changes'} onclick={() => (page = 'changes')}>
-      <span>{t('github.changes')}</span>{#if repo.changes.length}<span class="count mono">{repo.changes.length}</span>{/if}
+      <span>{t('github.changes')}</span>{#if repo.changes.length}<span class="count mono status-modified">{repo.changes.length}</span>{/if}
     </button>
     <button class="nav" class:active={page === 'history'} onclick={() => (page = 'history')}>
       <span>{t('github.history')}</span>

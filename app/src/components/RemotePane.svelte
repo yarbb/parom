@@ -1,4 +1,9 @@
 <script lang="ts">
+  import EmptyState from './EmptyState.svelte';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
+  import Server from '@lucide/svelte/icons/server';
+  import { sites } from '../lib/sites.svelte';
+  import { reconnectLast } from '../lib/commands.svelte';
   import { connection } from '../lib/connection.svelte';
   import { edits } from '../lib/edits.svelte';
   import { remoteJoin, remoteParent, selectionSummary, type FileRow } from '../lib/files';
@@ -17,6 +22,8 @@
   import { ui } from '../lib/ui.svelte';
   import { canSyncBrowse } from '../lib/commands.svelte';
   import { twinColor, twins } from '../lib/twins.svelte';
+  import { fileOps } from '../lib/fileops.svelte';
+  import { onMount } from 'svelte';
 
   interface Props {
     onDownload: (items: { name: string; remotePath: string; dir: boolean }[]) => void;
@@ -127,6 +134,21 @@
     void navigator.clipboard?.writeText(paths.map((p) => `${scheme}://${auth}${p}`).join('\n'));
   }
 
+  /** First run (no sites, no recent servers), not connected, or an empty folder. */
+  const firstRun = $derived(sites.list.length === 0 && connection.recent.length === 0);
+
+  onMount(() =>
+    fileOps.register('server', {
+      ready: () => connected,
+      selected: () => selected,
+      command,
+      transfer: download,
+      canTransfer: () => connected,
+      edit: (row) => void edits.edit(connection.remotePath, row.name),
+      copyPath,
+    }),
+  );
+
   function openMenu(e: MouseEvent, rows: FileRow[]) {
     if (!connected) {
       return;
@@ -166,9 +188,32 @@
   }
 </script>
 
+{#snippet empty()}
+  {#if connected}
+    <EmptyState icon={FolderOpen} title={t('files.empty')} />
+  {:else if connection.state === 'connecting'}
+    <EmptyState icon={Server} title={t('status.connecting')} />
+  {:else if firstRun}
+    <EmptyState icon={Server} title={t('empty.first.title')} text={t('empty.first.text')}>
+      {#snippet actions()}
+        <button class="control primary" onclick={() => ((ui.siteManagerNew = true), (ui.siteManager = true))}>{t('empty.first.create')}</button>
+      {/snippet}
+    </EmptyState>
+  {:else}
+    <EmptyState icon={Server} title={t('empty.offline.title')} text={t('files.not_connected_hint')}>
+      {#snippet actions()}
+        <button class="control" onclick={() => (ui.siteManager = true)}>{t('sites.title')}</button>
+        <button class="control primary" onclick={reconnectLast}>{t('menu.reconnect')}</button>
+      {/snippet}
+    </EmptyState>
+  {/if}
+{/snippet}
+
 <section
   class="pane"
   data-pane="server"
+  onpointerdowncapture={() => (fileOps.active = 'server')}
+  onfocusin={() => (fileOps.active = 'server')}
   class:drop-target={paneDrag.over === 'server' && (paneDrag.active ? paneDrag.active.from === 'local' : paneDrag.external) && connected}
 >
   <div class="section-label head">
@@ -211,6 +256,7 @@
     loading={connection.remoteLoading}
     error={connection.remoteError}
     emptyText={connected ? t('files.empty') : t('files.not_connected_hint')}
+    {empty}
     onContextMenu={openMenu}
     onCommand={command}
   />

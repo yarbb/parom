@@ -134,6 +134,12 @@ class Connection {
   #reopen: Reopen | null = null;
   /** session.open arguments of the current session, for extra transfer sessions. */
   #openArgs: Record<string, unknown> | null = null;
+
+  /** "host:port" of the open session, the same in every window; null when not connected. */
+  get serverKey(): string | null {
+    const host = this.#openArgs?.host;
+    return this.state === 'connected' && typeof host === 'string' ? `${host.toLowerCase()}:${this.#openArgs?.port ?? ''}` : null;
+  }
   /** Extra sessions to the same server for simultaneous transfers, opened per batch. */
   #pool: number[] = [];
   #poolReady: Promise<void> | null = null;

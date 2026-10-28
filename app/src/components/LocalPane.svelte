@@ -1,4 +1,6 @@
 <script lang="ts">
+  import EmptyState from './EmptyState.svelte';
+  import FolderOpen from '@lucide/svelte/icons/folder-open';
   import { onMount } from 'svelte';
   import { invoke, isTauri } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
@@ -15,6 +17,7 @@
   import { dragOut } from '../lib/dragout';
   import { shownLocal } from '../lib/browsing';
   import { twinColor, twins } from '../lib/twins.svelte';
+  import { fileOps } from '../lib/fileops.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -163,6 +166,22 @@
     }
   }
 
+  function copyPath(rows: FileRow[]) {
+    void navigator.clipboard?.writeText((rows.length ? rows.map((r) => localJoin(path, r.name, separator)) : [path]).map(shown).join('\n'));
+  }
+
+  onMount(() =>
+    fileOps.register('local', {
+      ready: () => !atRoots && !!path,
+      selected: () => selected,
+      command,
+      transfer: upload,
+      canTransfer: () => canUpload,
+      edit: (row) => void fsOp(() => openInEditor(localJoin(path, row.name, separator), prefs.value.editorPath)),
+      copyPath,
+    }),
+  );
+
   function openMenu(e: MouseEvent, rows: FileRow[]) {
     if (atRoots) {
       return;
@@ -196,7 +215,7 @@
         ...(e.shiftKey
           ? [
               { separator: true, label: '' },
-              { label: t('fileop.copy_as_path'), action: () => void navigator.clipboard?.writeText((any ? rows.map((r) => localJoin(path, r.name, separator)) : [path]).map(shown).join('\n')) },
+              { label: t('fileop.copy_as_path'), action: () => copyPath(rows) },
               { label: t('github.repo.open'), action: () => void openInEditor(any && rows.length === 1 && rows[0].dir ? localJoin(path, rows[0].name, separator) : path, '') },
             ]
           : []),
@@ -221,7 +240,16 @@
   });
 </script>
 
-<section class="pane" data-pane="local" class:drop-target={paneDrag.over === 'local' && paneDrag.active?.from === 'server'}>
+{#snippet empty()}
+  <EmptyState icon={FolderOpen} title={t('files.empty')} />
+{/snippet}
+
+<section
+  class="pane"
+  data-pane="local"
+  onpointerdowncapture={() => (fileOps.active = 'local')}
+  onfocusin={() => (fileOps.active = 'local')}
+  class:drop-target={paneDrag.over === 'local' && paneDrag.active?.from === 'server'}>
   <div class="section-label head">
     <span>{t('files.local')}<span class="picked">{selectionSummary(selected, (count) => t('files.selected', { count }), prefs.value.sizeUnits === 'decimal')}</span></span>
     <span class="buttons">
@@ -240,6 +268,7 @@
     canGoUp={!atRoots && (parent !== null || roots.length > 1)}
     onUp={up}
     onOpenDir={(row) => load(atRoots ? row.name : localJoin(path, row.name, separator))}
+    {empty}
     onActivate={upload}
     folder={path}
     labelOf={folderLabel}

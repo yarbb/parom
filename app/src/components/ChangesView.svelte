@@ -1,4 +1,7 @@
 <script lang="ts">
+  import EmptyState from './EmptyState.svelte';
+  import CircleCheck from '@lucide/svelte/icons/circle-check';
+  import FileDiffIcon from '@lucide/svelte/icons/file-diff';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from '../lib/i18n';
   import { fileDiff, repo, type FileChange, type FileDiff } from '../lib/repo.svelte';
@@ -117,7 +120,13 @@
   {#if selected}
     {#key selected}<DiffView path={selected} {diff} {loading} error={diffError} />{/key}
   {:else}
-    <div class="placeholder muted">{t('github.no_changes_body')}</div>
+    <div class="placeholder">
+      {#if repo.changes.length}
+        <EmptyState icon={FileDiffIcon} title={t('empty.pick_file')} />
+      {:else}
+        <EmptyState icon={CircleCheck} title={t('github.no_changes')} text={t('github.no_changes_body')} />
+      {/if}
+    </div>
   {/if}
 </div>
 

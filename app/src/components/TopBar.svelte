@@ -1,6 +1,7 @@
 <script lang="ts">
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
+  import { repo } from '../lib/repo.svelte';
   import type { Tab } from '../lib/types';
   import Eye from '@lucide/svelte/icons/eye';
   import EyeOff from '@lucide/svelte/icons/eye-off';
@@ -43,7 +44,7 @@
       {t('tab.files')}
     </button>
     <button role="tab" class="tab" class:active={tab === 'github'} aria-selected={tab === 'github'} onclick={() => onTab('github')}>
-      {t('tab.github')}
+      <span class="tab-text">{t('tab.github')}{#if repo.changes.length}<span class="blob" title={t('github.changes')}></span>{/if}</span>
     </button>
   </div>
   <span class="spacer" data-tauri-drag-region></span>
@@ -143,6 +144,11 @@
     font: inherit;
     font-size: 12.5px;
     cursor: pointer;
+  }
+
+  /* Uncommitted changes: a notification dot on the corner of "GitHub". */
+  .tab-text {
+    position: relative;
   }
 
   .tab.active {

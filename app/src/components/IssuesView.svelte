@@ -1,4 +1,8 @@
 <script lang="ts">
+  import EmptyState from './EmptyState.svelte';
+  import CircleDot from '@lucide/svelte/icons/circle-dot';
+  import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
+  import IssueLabel from './IssueLabel.svelte';
   import { untrack } from 'svelte';
   import { APP_INSTALL_URL, github, openGitHub, TOKEN_SETTINGS_URL } from '../lib/github.svelte';
   import { t } from '../lib/i18n';
@@ -243,9 +247,9 @@
           <span class="line1">
             <span class="mono muted">#{i.number}</span>
             <span class="title">{i.title}</span>
-            {#each i.labels.slice(0, 2) as l (l.name)}<span class="label">{l.name}</span>{/each}
+            {#each i.labels.slice(0, 2) as l (l.name)}<IssueLabel name={l.name} color={l.color} />{/each}
             {#if i.labels.length > 2}
-              <span class="label more" title={i.labels.slice(2).map((l) => l.name).join(', ')}>+{i.labels.length - 2}</span>
+              <IssueLabel name="+{i.labels.length - 2}" title={i.labels.slice(2).map((l) => l.name).join(', ')} />
             {/if}
           </span>
           <span class="line2 muted">
@@ -294,7 +298,7 @@
         <h2>{i.title} <span class="muted">#{i.number}</span></h2>
         <p class="muted">
           {pull?.merged ? t('github.merged') : t(`github.state.${i.state}`)}
-          {#if i.labels.length}· {i.labels.map((l) => l.name).join(', ')}{/if}
+          {#each i.labels as l (l.name)} <IssueLabel name={l.name} color={l.color} />{/each}
           {#if i.assignees.length}· {t('github.assigned', { users: i.assignees.map((a) => a.login).join(', ') })}{/if}
         </p>
         {#if pull}
@@ -367,7 +371,11 @@
       </div>
       {/key}
     {:else if !error && !loading && github.user}
-      <p class="muted note">{t(kind === 'issues' ? 'github.no_issues' : 'github.no_pulls')}</p>
+      {#if items.length}
+        <EmptyState icon={kind === 'issues' ? CircleDot : GitPullRequest} title={t('empty.pick_issue')} />
+      {:else}
+        <EmptyState icon={kind === 'issues' ? CircleDot : GitPullRequest} title={t(kind === 'issues' ? 'github.no_issues' : 'github.no_pulls')} />
+      {/if}
     {/if}
   </div>
 </div>
@@ -479,18 +487,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .label.more {
-    color: var(--muted);
-  }
-
-  .label {
-    flex: none;
-    padding: 1px 6px;
-    border: 1px solid var(--line-control);
-    border-radius: 3px;
-    font-size: 10.5px;
   }
 
   .line2 {

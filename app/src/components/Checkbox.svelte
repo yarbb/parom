@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   // 18px checkbox from docs/design (.cb): a native input for keyboard and
   // screen readers, drawn as a box with a check mark.
   interface Props {
@@ -6,9 +7,11 @@
     label: string;
     disabled?: boolean;
     title?: string;
+    /** Shown instead of `label` (still part of the clickable label). */
+    children?: Snippet;
   }
 
-  let { checked = $bindable(), label, disabled = false, title }: Props = $props();
+  let { checked = $bindable(), label, disabled = false, title, children }: Props = $props();
 </script>
 
 <label class="checkbox" class:disabled {title}>
@@ -20,7 +23,7 @@
       </svg>
     {/if}
   </span>
-  <span>{label}</span>
+  {#if children}{@render children()}{:else}<span>{label}</span>{/if}
 </label>
 
 <style>

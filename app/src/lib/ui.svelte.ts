@@ -6,6 +6,8 @@ class Ui {
   /** The product name (productName in tauri.conf.json), once known. */
   appName = $state('');
   siteManager = $state(false);
+  /** Open the Site Manager with a new site (first run). */
+  siteManagerNew = $state(false);
   preferences = $state(false);
   /** Page Preferences open on (set before opening them). */
   preferencesPage = $state<string | null>(null);

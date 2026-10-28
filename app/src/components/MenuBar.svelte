@@ -13,6 +13,7 @@
   import { prefs } from '../lib/prefs.svelte';
   import { sync } from '../lib/sync/engine.svelte';
   import { ui } from '../lib/ui.svelte';
+  import { fileOps } from '../lib/fileops.svelte';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
 
   // File / Edit / View / Server / Help in the title bar. Opening one and
@@ -46,6 +47,31 @@
 
   const check = (on: boolean, label: string) => `${on ? '✓' : '  '} ${label}`;
 
+  /** File operations on the pane used last; grey while there is nothing to act on. */
+  function fileItems(): MenuItem[] {
+    const side = fileOps.active;
+    const pane = ui.tab === 'files' ? fileOps.pane : undefined;
+    const ready = !!pane?.ready();
+    const rows = ready ? pane!.selected() : [];
+    const any = rows.length > 0;
+    const run = (f: (p: NonNullable<typeof pane>) => void) => () => pane && f(pane);
+    return [
+      {
+        label: side === 'local' ? `${t('files.upload')} →` : `← ${t('files.download')}`,
+        disabled: !any || !pane?.canTransfer(),
+        action: run((p) => p.transfer(rows)),
+      },
+      { label: t('edit.edit'), disabled: rows.length !== 1 || rows[0].dir, action: run((p) => p.edit(rows[0])) },
+      { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: run((p) => p.command('rename', rows)) },
+      { label: side === 'local' ? t('fileop.trash') : t('fileop.delete.title'), hint: 'Del', disabled: !any, action: run((p) => p.command('delete', rows)) },
+      { label: t('fileop.copy_path'), disabled: !any, action: run((p) => p.copyPath(rows)) },
+      { separator: true, label: '' },
+      { label: t('fileop.mkdir.title'), disabled: !ready, action: run((p) => p.command('mkdir', rows)) },
+      { label: t('fileop.mkfile.title'), disabled: !ready, action: run((p) => p.command('mkfile', rows)) },
+      { label: t('files.refresh'), hint: 'F5', disabled: !ready, action: run((p) => p.command('refresh', rows)) },
+    ];
+  }
+
   function items(id: MenuId): MenuItem[] {
     const connected = connection.state === 'connected';
     switch (id) {
@@ -53,6 +79,8 @@
         return [
           { label: t('menu.site_manager'), hint: 'Ctrl+S', action: () => (ui.siteManager = true) },
           { label: t('menu.preferences'), hint: 'Ctrl+,', action: () => (ui.preferences = true) },
+          { separator: true, label: '' },
+          ...fileItems(),
           { separator: true, label: '' },
           { label: t('menu.exit'), hint: 'Alt+F4', action: () => void closeWindow() },
         ];

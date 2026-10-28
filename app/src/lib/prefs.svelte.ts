@@ -26,6 +26,8 @@ export interface Prefs {
   markTwins: boolean;
   /** The first matching folders asked whether to tint them (and to turn on synchronized browsing). */
   twinsAsked: boolean;
+  /** Warn when another app window is connected to the same server. */
+  warnSharedServer: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -96,6 +98,7 @@ export const defaultPrefs: Prefs = {
   forwardSlashes: false,
   markTwins: false,
   twinsAsked: false,
+  warnSharedServer: true,
   language: 'en',
   foldersFirst: true,
   caseSensitive: false,
