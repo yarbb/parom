@@ -42,7 +42,15 @@
     "licenseFile": "../../LICENSE",
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/nsis-header.bmp",
+        "sidebarImage": "installer/nsis-sidebar.bmp",
+        "languages": [
+          "English",
+          "Russian"
+        ],
+        "displayLanguageSelector": false
       }
     },
     "createUpdaterArtifacts": true

@@ -1,4 +1,4 @@
-# Windows build: FileZilla engine (no GUI), the M0b spike and paromd,
+# Windows build: FileZilla engine (no GUI) and paromd,
 # each tested against a local SFTP server (tests/sftp_test_server.py).
 # libfilezilla and fzssh come prebuilt from MSYS2 (UCRT64); MSYS2 also packages
 # FileZilla 3.71.1 against them, so the versions are known to work together.
@@ -13,7 +13,6 @@ on:
     tags: ['v*']
     paths:
       - third_party/filezilla/**
-      - spike/**
       - daemon/**
       - tests/**
       - app/**
@@ -64,34 +63,11 @@ jobs:
           cp src-fz/src/include/*.h out/include/ 2>/dev/null || true
           ls -laR out
           test -n "$(ls out/bin/*.dll 2>/dev/null)"
-      - name: Build M0b spike
-        run: |
-          g++ -std=c++17 -O2 -Wall -Isrc-fz/src/include \
-            $(pkg-config --cflags libfilezilla libfzssh-client) \
-            spike/m0b/main.cpp -o out/bin/fzspike.exe \
-            -Lbuild-fz/src/engine/.libs -lfzclient-private \
-            $(pkg-config --libs libfilezilla libfzssh-client)
       - name: Build paromd
         run: |
           VERSION=$(tr -d '\r' < app/package.json | sed -n 's/^  "version": "\(.*\)",$/\1/p')
           sh daemon/build.sh src-fz build-fz out/bin "$VERSION+${GITHUB_SHA::7}"
           PATH="$PWD/out/bin:$PATH" paromd.exe --version
-      - name: Test M0b spike (connect, list, upload)
-        timeout-minutes: 5
-        env:
-          PAROM_PASSWORD: test
-        run: |
-          export PATH="$PWD/out/bin:$PATH"
-          mkdir sftproot && echo "already on the server" > sftproot/existing.txt
-          python tests/sftp_test_server.py --root sftproot --port 3373 --password "$PAROM_PASSWORD" &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-          sleep 5
-          echo "uploaded by the M0b spike at $(date -u)" > upload.txt
-          fzspike.exe --host 127.0.0.1 --port 3373 --user test --trust-hostkey \
-            --upload "$(cygpath -w "$PWD/upload.txt")" --timeout 20
-          cmp upload.txt sftproot/upload.txt
-          echo "server copy matches"
       - name: Test paromd JSON-RPC
         timeout-minutes: 5
         run: |
