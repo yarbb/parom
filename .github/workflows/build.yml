@@ -187,6 +187,9 @@ jobs:
       LIBFILEZILLA_SHA512: 8bcfe47e4c704e0fd4ed66da47e834b031ed4f6dd66a7e4f7991a7e87f3c88f38b822d58de83c0f4f84118b87c9a8ff1ac00913a40fb692718c49ad8063bd83a
       FZSSH: '1.5.0'
       FZSSH_SHA256: 2289e1e7c3fc11d3720b69ee6bee40490c0b3d5bca21d7d0615dfca1d833786d
+      # fzssh needs nettle 3.10; Ubuntu 24.04 has 3.9 (same library version, so the system gnutls takes it).
+      NETTLE: '3.10.2'
+      NETTLE_SHA256: fe9ff51cb1f2abb5e65a6b8c10a92da0ab5ab6eaf26e7fc2b675c45f1fb519b5
     steps:
       - uses: actions/checkout@v7
       - name: Packages
@@ -197,9 +200,15 @@ jobs:
             nettle-dev libgnutls28-dev libgmp-dev libargon2-dev libsqlite3-dev nlohmann-json3-dev libboost-dev \
             libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libdbus-1-dev libssl-dev \
             python3-paramiko
-      - name: libfilezilla and fzssh
+      - name: nettle, libfilezilla and fzssh
         run: |
           set -eu
+          export PKG_CONFIG_PATH="$FZ/lib/pkgconfig"
+          curl -fsSLo nettle.tar.gz "https://ftp.gnu.org/gnu/nettle/nettle-$NETTLE.tar.gz"
+          echo "$NETTLE_SHA256  nettle.tar.gz" | sha256sum -c
+          mkdir nettle && tar xf nettle.tar.gz -C nettle --strip-components=1
+          (cd nettle && ./configure --prefix="$FZ" --libdir="$FZ/lib" --disable-static --disable-documentation \
+            && make -j"$(nproc)" && sudo make install)
           curl -fsSLo lfz.tar.xz "https://sources.archlinux.org/other/libfilezilla/libfilezilla-$LIBFILEZILLA.tar.xz"
           echo "$LIBFILEZILLA_SHA512  lfz.tar.xz" | sha512sum -c
           curl -fsSLo fzssh.tar.xz "https://sources.archlinux.org/other/packages/fzssh/fzssh-$FZSSH.tar.xz"
