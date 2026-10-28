@@ -404,12 +404,13 @@ async fn repo_remote(
     op: String,
     name: Option<String>,
     email: Option<String>,
+    rebase: Option<bool>,
 ) -> Result<gitrepo::BranchInfo, String> {
     blocking(move || {
         let token = github_token(&app).ok().flatten();
         match op.as_str() {
             "fetch" => gitrepo::fetch(&dir, token.as_deref()),
-            "pull" => gitrepo::pull(&dir, token.as_deref(), name.as_deref(), email.as_deref()),
+            "pull" => gitrepo::pull(&dir, token.as_deref(), name.as_deref(), email.as_deref(), rebase.unwrap_or(true)),
             "push" => gitrepo::push(&dir, token.as_deref()),
             _ => Err(format!("unknown operation: {op}")),
         }

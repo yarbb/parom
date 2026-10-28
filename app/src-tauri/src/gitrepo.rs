@@ -443,10 +443,11 @@ pub fn fetch(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
 }
 
 /// Brings the current branch up to date with its upstream: a fast-forward,
-/// or a merge commit when both sides have new commits and they touch
-/// different lines. Refuses on merge conflicts or when local uncommitted
-/// changes would be overwritten.
-pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&str>) -> Result<BranchInfo, String> {
+/// or, when both sides have new commits, the local (unpushed) commits replayed
+/// on top of the upstream (`rebase`, no merge commit) or a merge commit.
+/// Refuses on conflicts or when local uncommitted changes would be
+/// overwritten, leaving everything as it was.
+pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&str>, rebase: bool) -> Result<BranchInfo, String> {
     fetch(dir, token)?;
     let repo = open(dir)?;
     let head = repo.head().map_err(msg)?;
@@ -460,7 +461,12 @@ pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&s
     }
     if ahead > 0 {
         let sig = signature(&repo, name, email)?;
-        merge(&repo, &branch, local, target, up.trim_start_matches("refs/remotes/"), &sig)?;
+        let upstream = up.trim_start_matches("refs/remotes/");
+        if rebase {
+            rebase_onto(&repo, &branch, target, upstream, &sig)?;
+        } else {
+            merge(&repo, &branch, local, target, upstream, &sig)?;
+        }
         return branch_info(dir);
     }
     let object = repo.find_object(target, None).map_err(msg)?;
@@ -472,6 +478,61 @@ pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&s
     reference.set_target(target, "pull: fast-forward").map_err(msg)?;
     drop(reference);
     branch_info(dir)
+}
+
+/// Replays the branch's own commits on top of `onto` in memory; only when
+/// every commit applies is the result checked out and the branch moved, so a
+/// conflict leaves everything as it was. Authors are kept; the one pulling
+/// becomes the committer, as with `git pull --rebase`.
+fn rebase_onto(repo: &Repository, branch: &str, onto: Oid, upstream: &str, sig: &Signature<'_>) -> Result<(), String> {
+    let head = repo.head().map_err(msg)?;
+    let ours = repo.reference_to_annotated_commit(&head).map_err(msg)?;
+    let theirs = repo.find_annotated_commit(onto).map_err(msg)?;
+    let mut opts = git2::RebaseOptions::new();
+    opts.inmemory(true);
+    let mut rebase = repo.rebase(Some(&ours), Some(&theirs), None, Some(&mut opts)).map_err(msg)?;
+    let mut last = onto;
+    while let Some(op) = rebase.next() {
+        let op = op.map_err(msg)?;
+        let index = rebase.inmemory_index().map_err(msg)?;
+        if index.has_conflicts() {
+            let files: Vec<String> = index
+                .conflicts()
+                .map_err(msg)?
+                .filter_map(Result::ok)
+                .filter_map(|c| c.our.or(c.their).map(|e| String::from_utf8_lossy(&e.path).into_owned()))
+                .take(8)
+                .collect();
+            let _ = rebase.abort();
+            return Err(format!(
+                "{branch} and {upstream} both changed the same lines in {}. Merge them in git or GitHub Desktop, then come back",
+                files.join(", ")
+            ));
+        }
+        let original = repo.find_commit(op.id()).map_err(msg)?;
+        let author = original.author();
+        let committed = rebase.commit(Some(&author), sig, None);
+        match committed {
+            Ok(id) => last = id,
+            // Already on the upstream (e.g. the same change pushed from elsewhere): nothing to replay.
+            Err(e) if e.code() == ErrorCode::Applied => {}
+            Err(e) => {
+                let _ = rebase.abort();
+                return Err(msg(e));
+            }
+        }
+    }
+    rebase.finish(None).map_err(msg)?;
+    // The working tree first: a safe checkout stops before changing anything
+    // if uncommitted local edits are in the way.
+    let commit = repo.find_commit(last).map_err(msg)?;
+    let mut checkout = git2::build::CheckoutBuilder::new();
+    checkout.safe();
+    repo.checkout_tree(commit.as_object(), Some(&mut checkout))
+        .map_err(|e| if e.code() == ErrorCode::Conflict { "Local changes would be overwritten; commit them first".into() } else { msg(e) })?;
+    let mut reference = repo.find_reference(&format!("refs/heads/{branch}")).map_err(msg)?;
+    reference.set_target(last, &format!("pull: rebase onto {upstream}")).map_err(msg)?;
+    Ok(())
 }
 
 /// Merges `theirs` into the current branch without touching anything when
