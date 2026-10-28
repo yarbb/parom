@@ -270,7 +270,7 @@
             {:else if !info?.github}
               <p class="muted note">{t('github.not_on_github')}</p>
             {:else}
-              {#key info.github}<IssuesView {kind} slug={info.github} />{/key}
+              {#key info.github}<IssuesView {kind} slug={info.github} active={page === kind && ui.tab === 'github'} />{/key}
             {/if}
           </div>
         {/if}
