@@ -1,4 +1,5 @@
-/* One token set, two themes. Values follow docs/design (Fd = dark, Main = light). */
+/* One token set, two themes. Values follow docs/design (Fd = dark, Main = light).
+   Light: text colours keep 4.5:1 (WCAG AA) even on selected rows (#efefef). */
 :root {
   --font-ui: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono Variable', Consolas, 'Cascadia Code', ui-monospace, monospace;
@@ -30,7 +31,7 @@
   --panel: #fafafa;
   --line: #e2e2e2;
   --line-row: #ececec;
-  --line-control: #d0d0d0;
+  --line-control: #c2c2c2;
   --text: #111;
   --text-strong: #000;
   --muted: #666;
@@ -38,9 +39,9 @@
   --primary-fg: #fff;
   --selected-bg: #efefef;
   --selected-mark: #111;
-  --modified: #b45309;
-  --new: #15803d;
-  --removed: #dc2626;
+  --modified: #a64b07;
+  --new: #13733a;
+  --removed: #c81e1e;
 }
 
 /* Accent (Preferences → Interface): selection marks, focus, tabs, primary
@@ -56,7 +57,7 @@
 }
 
 :root[data-theme='light'][data-accent='blue'] {
-  --accent: #2563eb;
+  --accent: #1d5fd8;
   --accent-fg: #ffffff;
 }
 
@@ -66,7 +67,7 @@
 }
 
 :root[data-theme='light'][data-accent='green'] {
-  --accent: #15803d;
+  --accent: #13733a;
   --accent-fg: #ffffff;
 }
 
@@ -86,7 +87,7 @@
 }
 
 :root[data-theme='light'][data-accent='orange'] {
-  --accent: #c2410c;
+  --accent: #b23a0b;
   --accent-fg: #ffffff;
 }
 
@@ -96,7 +97,7 @@
 }
 
 :root[data-theme='light'][data-accent='pink'] {
-  --accent: #db2777;
+  --accent: #b9246a;
   --accent-fg: #ffffff;
 }
 
@@ -190,6 +191,18 @@ body {
   color: var(--muted);
 }
 
+/* "Something changed": a notification dot on the corner of a label (its parent is positioned). */
+.blob {
+  position: absolute;
+  top: -2px;
+  right: -7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--modified);
+  animation: pop-in var(--motion) ease-out;
+}
+
 .status-modified {
   color: var(--modified);
 }
@@ -217,6 +230,8 @@ button.control {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  /* One line always: the height is fixed (a flex row then cannot squeeze it below its text). */
+  white-space: nowrap;
 }
 
 button.control:hover:not(:disabled) {

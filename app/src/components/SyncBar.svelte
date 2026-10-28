@@ -40,8 +40,9 @@
         <span class="mono item"><span class="muted">{t('sync.local')}</span> {short(c.repo.head)}</span>
         <span class="item" class:status-modified={warn} class:status-new={c.state === 'up-to-date' && !warn}>{stateText}</span>
         {#if c.dirtyManaged.length}
-          <span class="status-modified item cut" title={c.dirtyManaged.join('\n')}>
-            {t('sync.uncommitted', { count: c.dirtyManaged.length })}: {c.dirtyManaged.join(', ')}
+          <!-- Short here; the files and what it means are in the tooltip, and a dot marks the GitHub tab. -->
+          <span class="status-modified item" title={`${t('sync.uncommitted_hint')}\n${c.dirtyManaged.join('\n')}`}>
+            {t('sync.uncommitted', { count: c.dirtyManaged.length })}
           </span>
         {/if}
       {/if}

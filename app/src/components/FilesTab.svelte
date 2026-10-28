@@ -31,6 +31,7 @@
   import { joinRelative, normalizePath, relativeTo } from '../lib/browsing';
   import { canSyncBrowse } from '../lib/commands.svelte';
   import { twins } from '../lib/twins.svelte';
+  import { instances } from '../lib/instances.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -167,6 +168,34 @@
       void untrack(() => edits.stopAll());
     }
   });
+
+  // Another window on the same server: say once per connection what that costs.
+  let sharedWarning = $state(false);
+  let sharedDontShow = $state(false);
+  let sharedWarned: string | null = null;
+  onMount(() => instances.start());
+  $effect(() => {
+    const key = connection.serverKey;
+    if (!key) {
+      sharedWarned = null;
+    }
+    untrack(() => key && void instances.beat());
+  });
+  $effect(() => {
+    const key = connection.serverKey;
+    if (instances.shared && key && sharedWarned !== key && prefs.value.warnSharedServer) {
+      sharedWarned = key;
+      sharedDontShow = false;
+      sharedWarning = true;
+    }
+  });
+
+  function closeSharedWarning() {
+    sharedWarning = false;
+    if (sharedDontShow) {
+      void prefs.set('warnSharedServer', false);
+    }
+  }
 
   // The first time both panes show folders with the same name, ask once
   // whether to tint them; any answer (closing the dialog too) is final, and
@@ -511,6 +540,18 @@
     {#snippet actions()}
       <button class="control" onclick={() => edits.answer(false, editDontAsk)}>{t('edit.saved.not_now')}</button>
       <button class="control primary" onclick={() => edits.answer(true, editDontAsk)}>{t('edit.saved.upload')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
+{#if sharedWarning}
+  <Modal title={t('shared.title')} onCancel={closeSharedWarning}>
+    <p>{t('shared.body')}</p>
+    <p class="muted">{t('shared.tip')}</p>
+    <Checkbox bind:checked={sharedDontShow} label={t('shared.dont_show')} />
+    {#snippet actions()}
+      <button class="control" onclick={() => (closeSharedWarning(), connection.disconnect())}>{t('common.disconnect')}</button>
+      <button class="control primary" onclick={closeSharedWarning}>{t('shared.keep')}</button>
     {/snippet}
   </Modal>
 {/if}

@@ -3,6 +3,7 @@ mod edit;
 mod git;
 mod github;
 mod gitrepo;
+mod instances;
 mod local;
 mod migrate;
 mod secrets;
@@ -155,6 +156,13 @@ fn app_paths(app: tauri::AppHandle) -> Result<AppPaths, String> {
     let data = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
     let s = |p: std::path::PathBuf| p.display().to_string();
     Ok(AppPaths { backups: s(data.join("backups")), history: s(data.join("history")), data: s(data) })
+}
+
+/// Keeps this window's entry fresh; returns the servers other windows are connected to.
+#[tauri::command]
+fn instance_beat(app: tauri::AppHandle, server: Option<String>) -> Result<Vec<String>, String> {
+    let data = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    instances::beat(&data, server)
 }
 
 #[tauri::command]
@@ -461,6 +469,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             daemon_call,
+            instance_beat,
             local_list,
             local_walk,
             local_mkdir,

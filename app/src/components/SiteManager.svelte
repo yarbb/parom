@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ui } from '../lib/ui.svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { isTauri } from '@tauri-apps/api/core';
   import { connection } from '../lib/connection.svelte';
@@ -43,6 +44,11 @@
     selectedId = s.id;
     selectedFolder = null;
     tab = 'general';
+  }
+
+  if (ui.siteManagerNew) {
+    ui.siteManagerNew = false;
+    addSite();
   }
 
   function addFolder() {

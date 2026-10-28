@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import { untrack } from 'svelte';
   import {
     clickSelection,
@@ -30,6 +31,8 @@
     loading?: boolean;
     error?: string;
     emptyText?: string;
+    /** Richer placeholder than `emptyText` (icon, buttons) when there are no rows. */
+    empty?: Snippet;
     label: string;
     /** Right click: the rows it applies to (empty for the blank area). */
     onContextMenu?: (e: MouseEvent, rows: FileRow[]) => void;
@@ -60,6 +63,7 @@
     loading = false,
     error = '',
     emptyText = '',
+    empty,
     label,
     onContextMenu,
     onCommand,
@@ -393,7 +397,9 @@
       {/each}
     </div>
     {/key}
-    {#if loading || error || (count === 0 && emptyText)}
+    {#if !loading && !error && count === 0 && empty}
+      <div class="overlay rich">{@render empty()}</div>
+    {:else if loading || error || (count === 0 && emptyText)}
       <div class="overlay" class:status-removed={!!error}>
         {loading ? t('files.loading') : error || emptyText}
       </div>
@@ -531,5 +537,10 @@
     text-align: center;
     color: var(--muted);
     pointer-events: none;
+  }
+
+  .overlay.rich {
+    top: 24px;
+    pointer-events: auto;
   }
 </style>

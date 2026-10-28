@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import IssueLabel from './IssueLabel.svelte';
   import { onMount } from 'svelte';
   import { t } from '../lib/i18n';
   import { createIssue, listLabels, renderMarkdown, type Item, type Label } from '../lib/issues.svelte';
@@ -78,7 +79,9 @@
       <div class="label-title">{t('github.new_issue.labels')}</div>
       <div class="labels">
         {#each labels as l (l.name)}
-          <Checkbox bind:checked={() => saved.labels.includes(l.name), (on) => toggle(l.name, on)} label={l.name} />
+          <Checkbox bind:checked={() => saved.labels.includes(l.name), (on) => toggle(l.name, on)} label={l.name}>
+            <IssueLabel name={l.name} color={l.color} />
+          </Checkbox>
         {/each}
       </div>
     {/if}
