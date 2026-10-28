@@ -4,6 +4,8 @@ mod git;
 mod github;
 mod gitrepo;
 mod instances;
+mod snap;
+mod watch;
 mod local;
 mod migrate;
 mod secrets;
@@ -350,6 +352,33 @@ async fn repo_commit(
     blocking(move || gitrepo::commit(&dir, &paths, &message, name.as_deref(), email.as_deref())).await
 }
 
+/// Restores tracked files from HEAD; new files go to the Recycle Bin.
+#[tauri::command]
+async fn repo_discard(dir: String, paths: Vec<String>) -> Result<(), String> {
+    blocking(move || {
+        let untracked = gitrepo::discard(&dir, &paths)?;
+        let full: Vec<String> =
+            untracked.iter().map(|p| std::path::Path::new(&dir).join(p).display().to_string()).collect();
+        if full.is_empty() {
+            Ok(())
+        } else {
+            local::trash(&full)
+        }
+    })
+    .await
+}
+
+/// Watches the open repository's folder; "repo-fs" follows file changes.
+#[tauri::command]
+fn repo_watch(state: tauri::State<'_, watch::RepoWatch>, dir: String) -> Result<(), String> {
+    state.watch(&dir)
+}
+
+#[tauri::command]
+fn snap_layouts() {
+    snap::show();
+}
+
 #[tauri::command]
 async fn repo_log(dir: String, limit: usize) -> Result<Vec<gitrepo::LogEntry>, String> {
     blocking(move || gitrepo::log(&dir, limit)).await
@@ -434,6 +463,13 @@ pub fn run() {
             });
             app.manage(edits);
 
+            let repo_watch = watch::RepoWatch::default();
+            let changed = app.handle().clone();
+            repo_watch.start(move || {
+                let _ = changed.emit("repo-fs", ());
+            });
+            app.manage(repo_watch);
+
             let events = app.handle().clone();
             let exits = app.handle().clone();
             match Daemon::spawn(
@@ -470,6 +506,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_call,
             instance_beat,
+            repo_discard,
+            repo_watch,
+            snap_layouts,
             local_list,
             local_walk,
             local_mkdir,

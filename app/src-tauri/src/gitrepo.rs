@@ -259,11 +259,50 @@ pub fn commit(dir: &str, paths: &[String], message: &str, name: Option<&str>, em
             index.remove_path(rel).map_err(|e| format!("{path}: {}", e.message()))?;
         }
     }
+    let tree_id = index.write_tree().map_err(msg)?;
+    // Ticked files whose changes are gone (a new file deleted again) leave
+    // nothing to commit: no empty commits.
+    let unchanged = match parent.as_ref() {
+        Some(p) => p.tree_id() == tree_id,
+        None => repo.find_tree(tree_id).map(|t| t.is_empty()).unwrap_or(false),
+    };
+    if unchanged {
+        return Err("Nothing to commit: the selected files have no changes any more".into());
+    }
     index.write().map_err(msg)?;
-    let tree = repo.find_tree(index.write_tree().map_err(msg)?).map_err(msg)?;
+    let tree = repo.find_tree(tree_id).map_err(msg)?;
     let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
     let oid = repo.commit(Some("HEAD"), &sig, &sig, message.trim(), &tree, &parents).map_err(msg)?;
     Ok(oid.to_string())
+}
+
+/// Discards the changes of `paths` ("Discard changes" in the GitHub tab):
+/// files known to HEAD get its version back; the others (new files) are
+/// returned, for the caller to move to the Recycle Bin.
+pub fn discard(dir: &str, paths: &[String]) -> Result<Vec<String>, String> {
+    let repo = open(dir)?;
+    let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+    let tree = head.as_ref().and_then(|c| c.tree().ok());
+    let (tracked, untracked): (Vec<&String>, Vec<&String>) =
+        paths.iter().partition(|p| tree.as_ref().is_some_and(|t| t.get_path(Path::new(p.as_str())).is_ok()));
+    if let (Some(commit), false) = (head.as_ref(), tracked.is_empty()) {
+        repo.reset_default(Some(commit.as_object()), tracked.iter().map(|p| p.as_str())).map_err(msg)?;
+        let mut co = git2::build::CheckoutBuilder::new();
+        co.force().disable_pathspec_match(true);
+        for p in &tracked {
+            co.path(p.as_str());
+        }
+        repo.checkout_head(Some(&mut co)).map_err(msg)?;
+    }
+    if !untracked.is_empty() {
+        // Staged new files leave the index too.
+        let mut index = repo.index().map_err(msg)?;
+        for p in &untracked {
+            let _ = index.remove_path(Path::new(p.as_str()));
+        }
+        index.write().map_err(msg)?;
+    }
+    Ok(untracked.into_iter().cloned().collect())
 }
 
 #[derive(Serialize)]

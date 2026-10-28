@@ -95,6 +95,8 @@
     border-radius: 4px;
     background: var(--panel);
     z-index: 5;
+    transform-origin: top right;
+    animation: pop-in var(--motion) ease-out;
   }
 
   .title {

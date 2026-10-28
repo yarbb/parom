@@ -242,6 +242,7 @@
             <Select bind:value={draft.hideStyle} options={[{ value: 'blur', label: t('prefs.hide_style.blur') }, { value: 'text', label: t('prefs.hide_style.text') }]} />
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.snapLayouts} label={t('prefs.snap_layouts')} /></div>
           <label class="row"><span>{t('prefs.accent')}</span>
             <Select bind:value={draft.accent} options={accents.map((a) => ({ value: a, label: t(`prefs.accent.${a}`) }))} />
             <span class="swatch" style:background={swatch[draft.accent]} aria-hidden="true"></span>

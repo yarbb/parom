@@ -242,6 +242,16 @@ button.control.primary:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 
+/* Throws work away (Discard changes): red text, red fill on hover. */
+button.control.danger {
+  border-color: color-mix(in srgb, var(--removed) 45%, var(--line-control));
+  color: var(--removed);
+}
+
+button.control.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--removed) 12%, var(--panel));
+}
+
 button.control:active:not(:disabled) {
   transform: translateY(1px);
 }

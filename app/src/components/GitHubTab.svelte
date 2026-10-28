@@ -319,12 +319,16 @@
     border-radius: 4px;
     background: var(--panel);
     z-index: 5;
+    transform-origin: top left;
+    animation: pop-in var(--motion) ease-out;
   }
 
+  /* The account menu opens upwards, from the account button. */
   .list.up {
     top: auto;
     bottom: 34px;
     min-width: 180px;
+    transform-origin: bottom left;
   }
 
   .pick {
