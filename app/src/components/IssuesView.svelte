@@ -223,7 +223,7 @@
 </script>
 
 <div class="issues">
-  <div class="list-pane" style:width="{colWidth('ghIssues', 380)}px">
+  <div class="list-pane" style:width="{colWidth('ghIssues', 400)}px">
     <div class="filters">
       <div class="search-row">
         <input class="field search" placeholder={t(kind === 'issues' ? 'github.search_issues' : 'github.search_pulls')} bind:value={query} />
@@ -271,7 +271,7 @@
   <Splitter
     axis="x"
     label={t('ui.resize')}
-    onMove={(d) => resizeCol('ghIssues', 380, d, 260, 760)}
+    onMove={(d) => resizeCol('ghIssues', 400, d, 260, 760)}
     onEnd={() => prefs.persist()}
     onReset={() => resetCol('ghIssues')}
   />
@@ -457,7 +457,7 @@
     flex-direction: column;
     gap: 3px;
     width: 100%;
-    padding: 8px 14px;
+    padding: 10px 14px;
     border: 0;
     border-bottom: 1px solid var(--line-row);
     background: none;
@@ -513,7 +513,7 @@
   }
 
   .head {
-    padding: 14px;
+    padding: 18px 22px 14px;
     border-bottom: 1px solid var(--line);
   }
 
@@ -534,7 +534,7 @@
   }
 
   .checks {
-    padding: 6px 14px;
+    padding: 6px 22px;
   }
 
   .check {

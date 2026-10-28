@@ -143,7 +143,7 @@
 </script>
 
 <div class="changes">
-  <div class="files" style:width="{colWidth('ghChanges', 320)}px">
+  <div class="files" style:width="{colWidth('ghChanges', 360)}px">
     <div class="section-label head">
       <Checkbox
         bind:checked={() => allChecked, (on) => toggleAll(on)}
@@ -181,7 +181,7 @@
   <Splitter
     axis="x"
     label={t('ui.resize')}
-    onMove={(d) => resizeCol('ghChanges', 320, d, 220, 700)}
+    onMove={(d) => resizeCol('ghChanges', 360, d, 220, 700)}
     onEnd={() => prefs.persist()}
     onReset={() => resetCol('ghChanges')}
   />

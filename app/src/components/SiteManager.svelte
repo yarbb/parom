@@ -395,8 +395,8 @@
   }
 
   .window {
-    width: 820px;
-    height: 540px;
+    width: 900px;
+    height: 600px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
     display: flex;
@@ -412,7 +412,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 16px;
+    padding: 12px 18px;
     flex: none;
   }
 
@@ -447,7 +447,7 @@
   }
 
   aside {
-    width: 240px;
+    width: 250px;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -547,7 +547,7 @@
   .form {
     flex: 1;
     overflow-y: auto;
-    padding: 14px 18px;
+    padding: 18px 24px;
   }
 
   label,

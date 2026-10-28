@@ -87,7 +87,7 @@
 </script>
 
 <div class="history">
-  <div class="commits" style:width="{colWidth('ghHistory', 340)}px">
+  <div class="commits" style:width="{colWidth('ghHistory', 420)}px">
     <div class="section-label">{t('github.commits', { branch: repo.info?.branch ?? 'HEAD', count: repo.log.length })}</div>
     <div class="list">
       {#each repo.log as c (c.sha)}
@@ -114,7 +114,7 @@
   <Splitter
     axis="x"
     label={t('ui.resize')}
-    onMove={(d) => resizeCol('ghHistory', 340, d, 240, 700)}
+    onMove={(d) => resizeCol('ghHistory', 420, d, 240, 700)}
     onEnd={() => prefs.persist()}
     onReset={() => resetCol('ghHistory')}
   />
@@ -269,7 +269,7 @@
   }
 
   .info {
-    padding: 14px;
+    padding: 18px 22px;
     border-bottom: 1px solid var(--line);
   }
 
