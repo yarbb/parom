@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Avatar from './Avatar.svelte';
+  import Person from './Person.svelte';
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import EmptyState from './EmptyState.svelte';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
@@ -294,6 +296,7 @@
             {/if}
           </span>
           <span class="line2 muted">
+            {#if i.user}<Avatar name={i.user.login} src={i.user.avatar_url ?? null} size={14} />{/if}
             {#if kind === 'pulls'}
               {i.merged_at ? t('github.merged') : ''}{i.draft ? t('github.draft') : ''}
               {t('github.wants_to_merge', { user: i.user?.login ?? '', base: i.base?.ref ?? '' })}
@@ -363,7 +366,10 @@
           </div>
         {/if}
         <div class="post">
-          <div class="who muted">{i.user?.login} · {relativeTime(ms(i.created_at))}</div>
+          <div class="who muted">
+            {#if i.user}<Person name={i.user.login} login={i.user.login} src={i.user.avatar_url ?? null} muted />{/if}
+            · {relativeTime(ms(i.created_at))}
+          </div>
           {#if i.body?.trim()}
             <Markdown html={(pull ?? i).body_html} text={i.body} />
           {:else}
@@ -372,7 +378,10 @@
         </div>
         {#each comments as c (c.id)}
           <div class="post">
-            <div class="who muted">{c.user?.login} · {relativeTime(ms(c.created_at))}</div>
+            <div class="who muted">
+              {#if c.user}<Person name={c.user.login} login={c.user.login} src={c.user.avatar_url ?? null} muted />{/if}
+              · {relativeTime(ms(c.created_at))}
+            </div>
             <Markdown html={c.body_html} text={c.body} />
           </div>
         {/each}
@@ -535,6 +544,9 @@
   }
 
   .line2 {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     font-size: 11px;
   }
 
@@ -599,6 +611,9 @@
   }
 
   .who {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-bottom: 6px;
     font-size: 11.5px;
   }

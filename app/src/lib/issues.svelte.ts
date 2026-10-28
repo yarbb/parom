@@ -15,7 +15,7 @@ export interface Item {
   body: string | null;
   /** Markdown rendered by GitHub (requested with `html`). */
   body_html?: string | null;
-  user: { login: string } | null;
+  user: { login: string; avatar_url?: string } | null;
   labels: Label[];
   assignees: { login: string }[];
   comments: number;
@@ -43,7 +43,7 @@ export interface PullDetail extends Item {
 
 export interface Comment {
   id: number;
-  user: { login: string } | null;
+  user: { login: string; avatar_url?: string } | null;
   body: string;
   body_html?: string | null;
   created_at: string;

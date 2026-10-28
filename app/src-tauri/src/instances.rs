@@ -23,6 +23,12 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
+/// Removes this process's entry (the app is closing), so a window opened
+/// right after does not take it for another one still running.
+pub fn leave(data: &Path) {
+    let _ = fs::remove_file(data.join("instances").join(format!("{}.json", std::process::id())));
+}
+
 /// Records this process's server (None when not connected) and returns the
 /// servers of the other running processes.
 pub fn beat(data: &Path, server: Option<String>) -> Result<Vec<String>, String> {
