@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { startPresence } from './lib/discord.svelte';
   import { onMount } from 'svelte';
   import { getName, getVersion } from '@tauri-apps/api/app';
   import { isTauri } from '@tauri-apps/api/core';
@@ -82,7 +83,10 @@
       })
       .catch(() => (engine = 'unavailable'));
 
+    const stopPresence = startPresence();
+
     return () => {
+      stopPresence();
       stopWatching();
       stopExit();
       window.removeEventListener('keydown', onKey);

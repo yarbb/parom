@@ -244,6 +244,8 @@
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.snapLayouts} label={t('prefs.snap_layouts')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.discordPresence} label={t('prefs.discord')} title={t('prefs.discord_hint')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.discordShowRepo} disabled={!draft.discordPresence} label={t('prefs.discord_repo')} /></div>
           <label class="row"><span>{t('prefs.accent')}</span>
             <Select bind:value={draft.accent} options={accents.map((a) => ({ value: a, label: t(`prefs.accent.${a}`) }))} />
             <span class="swatch" style:background={swatch[draft.accent]} aria-hidden="true"></span>
