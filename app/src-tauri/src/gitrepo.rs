@@ -510,7 +510,9 @@ fn rebase_onto(repo: &Repository, branch: &str, onto: Oid, upstream: &str, sig: 
             ));
         }
         let original = repo.find_commit(op.id()).map_err(msg)?;
-        match rebase.commit(Some(&original.author()), sig, None) {
+        let author = original.author();
+        let committed = rebase.commit(Some(&author), sig, None);
+        match committed {
             Ok(id) => last = id,
             // Already on the upstream (e.g. the same change pushed from elsewhere): nothing to replay.
             Err(e) if e.code() == ErrorCode::Applied => {}
