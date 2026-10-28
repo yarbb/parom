@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indicator } from '../lib/indicator';
   import { onMount } from 'svelte';
   import { getVersion } from '@tauri-apps/api/app';
   import { isTauri } from '@tauri-apps/api/core';
@@ -204,7 +205,7 @@
       <button class="close" aria-label={t('common.cancel')} onclick={requestClose}>✕</button>
     </header>
     <div class="body">
-      <nav>
+      <nav use:indicator={'y'}>
         {#each groups as g (g.title)}
           <div class="group">{t(g.title)}</div>
           {#each g.pages as p (p)}
@@ -519,6 +520,7 @@
   }
 
   nav {
+    position: relative;
     width: 220px;
     flex: none;
     overflow-y: auto;
@@ -559,7 +561,6 @@
 
   .page.active {
     background: var(--selected-bg);
-    box-shadow: inset 2px 0 0 var(--selected-mark);
     color: var(--text-strong);
   }
 

@@ -123,7 +123,7 @@
 
 {#if open}
   <div
-    class="options"
+    class="options menu-unroll"
     class:up={pos.up}
     role="listbox"
     tabindex="-1"
@@ -217,8 +217,6 @@
     border-radius: 6px;
     background: var(--panel);
     box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-    animation: pop-in var(--motion) ease-out;
-    transform-origin: top;
   }
 
   .options.up {

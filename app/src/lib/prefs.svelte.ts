@@ -30,6 +30,8 @@ export interface Prefs {
   warnSharedServer: boolean;
   /** Windows 11: snap layouts when the mouse rests on the maximize button. */
   snapLayouts: boolean;
+  /** Synchronized browsing (Ctrl+Y), kept between sessions. */
+  syncBrowse: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -102,6 +104,7 @@ export const defaultPrefs: Prefs = {
   twinsAsked: false,
   warnSharedServer: true,
   snapLayouts: true,
+  syncBrowse: false,
   language: 'en',
   foldersFirst: true,
   caseSensitive: false,

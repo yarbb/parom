@@ -49,7 +49,7 @@
     ><span class:secret={hideAddress && blur && connection.state !== 'disconnected'}>{current}</span> ▾</button
   >
   {#if open}
-    <div class="list" role="menu">
+    <div class="list menu-unroll" role="menu">
       <button class="pick" role="menuitem" onclick={() => ((open = false), (ui.siteManager = true))}>{t('sites.title')}...</button>
       {#if sites.list.length}
         <div class="title">{t('sites.sites')}</div>
@@ -95,8 +95,6 @@
     border-radius: 4px;
     background: var(--panel);
     z-index: 5;
-    transform-origin: top right;
-    animation: pop-in var(--motion) ease-out;
   }
 
   .title {

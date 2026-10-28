@@ -55,7 +55,7 @@
 
 <svelte:window onmousedown={(e) => !menu.contains(e.target as Node) && onClose()} onblur={onClose} />
 
-<div class="menu" role="menu" tabindex="-1" bind:this={menu} style:left="{left}px" style:top="{top}px" {onkeydown}>
+<div class="menu menu-unroll" role="menu" tabindex="-1" bind:this={menu} style:left="{left}px" style:top="{top}px" {onkeydown}>
   {#each items as item, i (i)}
     {#if item.separator}
       <div class="separator" role="separator"></div>
@@ -70,8 +70,6 @@
 
 <style>
   .menu {
-    animation: pop-in var(--motion) ease-out;
-    transform-origin: top left;
     position: fixed;
     min-width: 200px;
     padding: 4px 0;

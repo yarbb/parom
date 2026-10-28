@@ -154,7 +154,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    animation: fade-in var(--motion) ease-out;
+    animation: from-right calc(var(--motion) * 1.6) cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .tab-view.hidden {
