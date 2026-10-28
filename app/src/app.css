@@ -137,6 +137,145 @@
   }
 }
 
+/* The marker under the active tab crawls to the next one
+   (lib/indicator.ts): the leading edge moves at once, the trailing one
+   follows a moment later. Transition order: left, right, top, bottom. */
+.indicator {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--accent);
+  transition-property: left, right, top, bottom, opacity;
+  transition-duration: calc(var(--motion) * 1.9);
+  transition-timing-function: cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+.indicator-x {
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+}
+
+.indicator-y {
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+}
+
+.indicator-x[data-dir='fwd'] {
+  transition-delay: calc(var(--motion) * 0.7), 0s, 0s, 0s, 0s;
+}
+
+.indicator-x[data-dir='back'] {
+  transition-delay: 0s, calc(var(--motion) * 0.7), 0s, 0s, 0s;
+}
+
+.indicator-y[data-dir='fwd'] {
+  transition-delay: 0s, 0s, calc(var(--motion) * 0.7), 0s, 0s;
+}
+
+.indicator-y[data-dir='back'] {
+  transition-delay: 0s, 0s, 0s, calc(var(--motion) * 0.7), 0s;
+}
+
+/* Menus unroll from their button like a blind, and their items drop in
+   one after another. `.up` menus unroll upwards. */
+.menu-unroll {
+  animation: unroll calc(var(--motion) * 1.7) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.menu-unroll.up {
+  animation-name: unroll-up;
+}
+
+.menu-unroll > * {
+  animation: item-in calc(var(--motion) * 1.7) cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.menu-unroll > :nth-child(2) {
+  animation-delay: calc(var(--motion) * 0.16);
+}
+
+.menu-unroll > :nth-child(3) {
+  animation-delay: calc(var(--motion) * 0.32);
+}
+
+.menu-unroll > :nth-child(4) {
+  animation-delay: calc(var(--motion) * 0.48);
+}
+
+.menu-unroll > :nth-child(5) {
+  animation-delay: calc(var(--motion) * 0.64);
+}
+
+.menu-unroll > :nth-child(6) {
+  animation-delay: calc(var(--motion) * 0.8);
+}
+
+.menu-unroll > :nth-child(7) {
+  animation-delay: calc(var(--motion) * 0.96);
+}
+
+.menu-unroll > :nth-child(8) {
+  animation-delay: calc(var(--motion) * 1.12);
+}
+
+.menu-unroll > :nth-child(9) {
+  animation-delay: calc(var(--motion) * 1.28);
+}
+
+.menu-unroll > :nth-child(10) {
+  animation-delay: calc(var(--motion) * 1.44);
+}
+
+.menu-unroll > :nth-child(11) {
+  animation-delay: calc(var(--motion) * 1.6);
+}
+
+.menu-unroll > :nth-child(12) {
+  animation-delay: calc(var(--motion) * 1.76);
+}
+
+@keyframes unroll {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 -20px 0);
+  }
+}
+
+@keyframes unroll-up {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(-20px 0 0 0);
+  }
+}
+
+@keyframes item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+}
+
+/* A whole tab slides in from the side of its tab in the top bar. */
+@keyframes from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+
+@keyframes from-right {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

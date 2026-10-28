@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indicator } from '../lib/indicator';
   import { onMount } from 'svelte';
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { isTauri } from '@tauri-apps/api/core';
@@ -154,7 +155,7 @@
       {repo.dir ? (info?.github ?? repoName(repo.dir)) : t('github.choose_repo')} ▾
     </button>
     {#if menuOpen}
-      <div class="list" role="menu">
+      <div class="list menu-unroll" role="menu">
         {#each repo.choices as c (c.dir)}
           <button
             class="pick"
@@ -194,7 +195,7 @@
 {/if}
 
 <div class="body">
-  <nav class="sidebar" style:width="{colWidth('ghSidebar', 200)}px">
+  <nav class="sidebar" use:indicator={'y'} style:width="{colWidth('ghSidebar', 200)}px">
     <button class="nav" class:active={page === 'changes'} onclick={() => (page = 'changes')}>
       <span>{t('github.changes')}</span>{#if repo.changes.length}<span class="count mono status-modified">{repo.changes.length}</span>{/if}
     </button>
@@ -221,7 +222,7 @@
           <span class="mono">@{github.user.login}</span>
         </button>
         {#if accountOpen}
-          <div class="list up" role="menu">
+          <div class="list up menu-unroll" role="menu">
             <button class="pick" role="menuitem" onclick={() => ((accountOpen = false), openGitHub(`https://github.com/${github.user?.login}`))}>
               {t('github.open_profile')}
             </button>
@@ -319,8 +320,6 @@
     border-radius: 4px;
     background: var(--panel);
     z-index: 5;
-    transform-origin: top left;
-    animation: pop-in var(--motion) ease-out;
   }
 
   /* The account menu opens upwards, from the account button. */
@@ -328,7 +327,6 @@
     top: auto;
     bottom: 34px;
     min-width: 180px;
-    transform-origin: bottom left;
   }
 
   .pick {
@@ -382,6 +380,7 @@
   }
 
   .sidebar {
+    position: relative;
     flex: none;
     display: flex;
     flex-direction: column;
@@ -404,7 +403,6 @@
 
   .nav.active {
     background: var(--selected-bg);
-    box-shadow: inset 2px 0 0 var(--selected-mark);
     color: var(--text-strong);
   }
 

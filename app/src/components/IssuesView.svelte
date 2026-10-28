@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import EmptyState from './EmptyState.svelte';
   import CircleDot from '@lucide/svelte/icons/circle-dot';
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
@@ -198,6 +199,41 @@
       void counts.load(slug);
     });
 
+  let rowMenu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const copy = (text: string) => void navigator.clipboard?.writeText(text);
+
+  /** Right click on an issue or pull request in the list. */
+  function openRowMenu(e: MouseEvent, i: Item) {
+    e.preventDefault();
+    const open = i.state === 'open';
+    rowMenu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: t('issues.menu.open'), action: () => (selected = i.number) },
+        { label: t('github.view_on_github'), action: () => openGitHub(i.html_url) },
+        { separator: true, label: '' },
+        { label: t('issues.menu.copy_link'), action: () => copy(i.html_url) },
+        { label: t('issues.menu.copy_number', { number: i.number }), action: () => copy(`#${i.number}`) },
+        { label: t('issues.menu.copy_title'), action: () => copy(i.title) },
+        // Commits with "Fixes #N" close the issue once a sync deploys them.
+        ...(kind === 'issues' ? [{ label: t('issues.menu.copy_fixes', { number: i.number }), action: () => copy(`Fixes #${i.number}`) }] : []),
+        { separator: true, label: '' },
+        {
+          label: open ? t(kind === 'issues' ? 'github.close_issue' : 'github.close_pr') : t('github.reopen'),
+          danger: open,
+          disabled: busy || !!i.merged_at,
+          action: () =>
+            act(async () => {
+              await setState(slug, kind, i.number, open ? 'closed' : 'open');
+              await load();
+              void counts.load(slug);
+            }),
+        },
+      ],
+    };
+  }
+
   const merge = (n: number) =>
     act(async () => {
       confirmMerge = false;
@@ -243,7 +279,12 @@
     {#key filter}
     <div class="list">
       {#each shown as i (i.number)}
-        <button class="row" class:selected={i.number === selected} onclick={() => (selected = i.number)}>
+        <button
+          class="row"
+          class:selected={i.number === selected}
+          onclick={() => (selected = i.number)}
+          oncontextmenu={(e) => openRowMenu(e, i)}
+        >
           <span class="line1">
             <span class="mono muted">#{i.number}</span>
             <span class="title">{i.title}</span>
@@ -393,6 +434,10 @@
       <button class="control primary" onclick={() => merge(i.number)}>{t('github.merge_pr')}</button>
     {/snippet}
   </Modal>
+{/if}
+
+{#if rowMenu}
+  <ContextMenu x={rowMenu.x} y={rowMenu.y} items={rowMenu.items} onClose={() => (rowMenu = null)} />
 {/if}
 
 <style>

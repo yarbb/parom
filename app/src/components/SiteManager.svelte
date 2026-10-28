@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indicator } from '../lib/indicator';
   import { ui } from '../lib/ui.svelte';
   import { open } from '@tauri-apps/plugin-dialog';
   import { isTauri } from '@tauri-apps/api/core';
@@ -266,7 +267,7 @@
 
       <section class="editor">
         {#if site}
-          <div class="tabs" role="tablist">
+          <div class="tabs" role="tablist" use:indicator={'x'}>
             {#each [['general', 'sites.tab.general'], ['advanced', 'sites.tab.advanced'], ['transfer', 'sites.tab.transfer'], ['sync', 'sites.tab.sync']] as [id, key] (id)}
               <button role="tab" class="tab" class:active={tab === id} aria-selected={tab === id} onclick={() => (tab = id as typeof tab)}>{t(key)}</button>
             {/each}
@@ -405,6 +406,8 @@
     border-radius: 6px;
     background: var(--panel);
     outline: none;
+    animation: pop-in var(--motion) ease-out;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.45);
   }
 
   header,
@@ -522,6 +525,7 @@
   }
 
   .tabs {
+    position: relative;
     display: flex;
     border-bottom: 1px solid var(--line);
     padding: 0 8px;
@@ -541,7 +545,6 @@
 
   .tab.active {
     color: var(--text-strong);
-    box-shadow: inset 0 -2px 0 var(--selected-mark);
   }
 
   .form {

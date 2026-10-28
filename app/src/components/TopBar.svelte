@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indicator } from '../lib/indicator';
   import { connection } from '../lib/connection.svelte';
   import { t } from '../lib/i18n';
   import { repo } from '../lib/repo.svelte';
@@ -39,7 +40,7 @@
     ><span class="prompt" data-tauri-drag-region>_</span>{#each [...name] as ch, i (i)}<span class="ch" style:--i={i} data-tauri-drag-region>{ch}</span>{/each}</b
   >
   <MenuBar bind:hideAddress />
-  <div class="tabs" role="tablist">
+  <div class="tabs" role="tablist" use:indicator={'x'}>
     <button role="tab" class="tab" class:active={tab === 'files'} aria-selected={tab === 'files'} onclick={() => onTab('files')}>
       {t('tab.files')}
     </button>
@@ -131,6 +132,7 @@
   }
 
   .tabs {
+    position: relative;
     display: flex;
     height: 100%;
   }
@@ -153,7 +155,6 @@
 
   .tab.active {
     color: var(--text-strong);
-    box-shadow: inset 0 -2px 0 var(--selected-mark);
   }
 
   .spacer {
