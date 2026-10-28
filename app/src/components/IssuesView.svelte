@@ -14,6 +14,8 @@
     checkRuns,
     counts,
     countItems,
+    repoPeople,
+    type Mention,
     detailCache,
     keepUnchanged,
     listCache,
@@ -39,7 +41,7 @@
 
   // Boards Ix and Pr: list (search, open / closed) and the selected item with
   // its comments, a comment box, close / reopen and (pull requests) merge.
-  let { kind, slug }: { kind: Kind; slug: string } = $props();
+  let { kind, slug, active = true }: { kind: Kind; slug: string; active?: boolean } = $props();
 
   let filter = $state<'open' | 'closed'>('open');
   let items = $state<Item[]>([]);
@@ -109,6 +111,45 @@
       .then((n) => (closedCount = n))
       .catch(() => (closedCount = null));
   });
+
+  // Issues made or changed elsewhere (github.com, a teammate) show up by
+  // themselves: the list and the open issue reload when the page is shown
+  // again, when the window comes back, and every 90 s while it is shown.
+  let shownBefore = false;
+  $effect(() => {
+    if (!active) {
+      return;
+    }
+    if (shownBefore) {
+      untrack(refreshQuietly);
+    }
+    shownBefore = true;
+    const again = () => document.visibilityState === 'visible' && refreshQuietly();
+    window.addEventListener('focus', again);
+    const timer = setInterval(again, 90_000);
+    return () => {
+      window.removeEventListener('focus', again);
+      clearInterval(timer);
+    };
+  });
+
+  function refreshQuietly() {
+    if (busy) {
+      return;
+    }
+    void load();
+    void counts.load(slug);
+    if (selected !== null) {
+      void loadDetail(selected);
+    }
+  }
+
+  /** @-mentions: the people of this thread first, then the repository's. */
+  async function threadPeople(): Promise<Mention[]> {
+    const here = [item?.user, ...comments.map((c) => c.user)].filter((u): u is NonNullable<typeof u> => !!u);
+    const all = [...here.map((u) => ({ login: u.login, avatar_url: u.avatar_url })), ...(await repoPeople(slug))];
+    return all.filter((p, i) => all.findIndex((q) => q.login === p.login) === i);
+  }
 
   const detailKey = (n: number) => `${slug}:${kind}:${n}`;
 
@@ -387,7 +428,7 @@
         {/each}
       </div>
       <div class="reply">
-        <MarkdownEditor bind:value={draft} rows={3} placeholder={t('github.leave_comment')} />
+        <MarkdownEditor bind:value={draft} rows={3} placeholder={t('github.leave_comment')} people={threadPeople} />
         <div class="buttons">
           <button class="control" onclick={() => openGitHub(i.html_url)}>{t('github.view_on_github')}</button>
           <span class="grow"></span>

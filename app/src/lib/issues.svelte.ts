@@ -147,3 +147,26 @@ class Counts {
 }
 
 export const counts = new Counts();
+
+/** Someone who can be @-mentioned. */
+export interface Mention {
+  login: string;
+  avatar_url?: string;
+}
+
+const peopleCache = new Map<string, Promise<Mention[]>>();
+
+/** People who can be assigned in a repository (its collaborators), once per session. */
+export function repoPeople(slug: string): Promise<Mention[]> {
+  let found = peopleCache.get(slug);
+  if (!found) {
+    found = api<Mention[]>('GET', `${repoPath(slug)}/assignees?per_page=100`)
+      .then((list) => list.map((u) => ({ login: u.login, avatar_url: u.avatar_url })))
+      .catch(() => {
+        peopleCache.delete(slug);
+        return [];
+      });
+    peopleCache.set(slug, found);
+  }
+  return found;
+}
