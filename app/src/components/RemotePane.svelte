@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PathInput from './PathInput.svelte';
   import { hint } from '../lib/keys';
   import EmptyState from './EmptyState.svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
@@ -237,9 +238,18 @@
       </button>
     </span>
   </div>
-  <form class="pathbar" onsubmit={(e) => (e.preventDefault(), connected && typed && connection.list(typed.trim()))}>
-    <input class="field mono" aria-label={t('files.remote_path')} disabled={!connected} bind:value={typed} />
-  </form>
+  <!-- Suggestions come from listings already made in this session, else
+       one listing of the typed folder after a pause (no request per key). -->
+  <PathInput
+    bind:value={typed}
+    label={t('files.remote_path')}
+    disabled={!connected}
+    separators="/"
+    caseSensitive={true}
+    delay={400}
+    folders={(dir) => connection.peekDirs(dir)}
+    onSubmit={(p) => connected && connection.list(p)}
+  />
   <FileList
     label={t('files.remote')}
     rows={connection.remoteRows}
