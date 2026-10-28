@@ -28,6 +28,8 @@ export interface Prefs {
   twinsAsked: boolean;
   /** Warn when another app window is connected to the same server. */
   warnSharedServer: boolean;
+  /** Windows 11: snap layouts when the mouse rests on the maximize button. */
+  snapLayouts: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -99,6 +101,7 @@ export const defaultPrefs: Prefs = {
   markTwins: false,
   twinsAsked: false,
   warnSharedServer: true,
+  snapLayouts: true,
   language: 'en',
   foldersFirst: true,
   caseSensitive: false,

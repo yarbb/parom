@@ -217,7 +217,7 @@
     <div class="account" bind:this={accountRoot}>
       {#if github.user}
         <button class="who" onclick={() => (accountOpen = !accountOpen)}>
-          <img src={github.user.avatar_url} alt="" width="20" height="20" />
+          <img src={github.user.avatar_url} alt="" width="24" height="24" />
           <span class="mono">@{github.user.login}</span>
         </button>
         {#if accountOpen}
@@ -319,12 +319,16 @@
     border-radius: 4px;
     background: var(--panel);
     z-index: 5;
+    transform-origin: top left;
+    animation: pop-in var(--motion) ease-out;
   }
 
+  /* The account menu opens upwards, from the account button. */
   .list.up {
     top: auto;
     bottom: 34px;
     min-width: 180px;
+    transform-origin: bottom left;
   }
 
   .pick {
@@ -430,7 +434,7 @@
   }
 
   .account {
-    padding: 8px 12px 0;
+    padding: 8px 12px 4px;
     border-top: 1px solid var(--line);
   }
 

@@ -1,5 +1,6 @@
 // The local repository shown in the GitHub tab (src-tauri/src/gitrepo.rs).
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { github } from './github.svelte';
 import { prefs } from './prefs.svelte';
 import { sites } from './sites.svelte';
@@ -75,6 +76,8 @@ class Repo {
   busy = $state('');
   /** Bumped when a commit or pull changed HEAD or the files on disk. */
   changed = $state(0);
+  /** Bumped whenever files in the repository changed on disk (live changes). */
+  touched = $state(0);
   /** When the remote was last fetched in this session (ms). */
   fetchedAt = $state<number | null>(null);
 
@@ -154,11 +157,80 @@ class Repo {
     );
   }
 
+  /** Folder the Rust side watches for live changes. */
+  #watched = '';
+  #listening = false;
+  #liveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Live changes, as in GitHub Desktop: files edited, added or deleted in
+   * the repository show in Changes right away (the folder is watched).
+   */
+  async #watch(dir: string): Promise<void> {
+    if (!isTauri() || dir === this.#watched) {
+      return;
+    }
+    this.#watched = dir;
+    await invoke('repo_watch', { dir }).catch(() => undefined);
+    if (!this.#listening) {
+      this.#listening = true;
+      await listen('repo-fs', () => {
+        if (this.#liveTimer) {
+          clearTimeout(this.#liveTimer);
+        }
+        this.#liveTimer = setTimeout(() => void this.refreshChanges(), 150);
+      });
+    }
+  }
+
+  /** Status and branch only (cheap): after file changes on disk. */
+  async refreshChanges(): Promise<void> {
+    const dir = this.dir;
+    if (!dir || this.busy) {
+      return;
+    }
+    try {
+      const [info, changes] = await Promise.all([
+        invoke<BranchInfo>('repo_info', { dir }),
+        invoke<FileChange[]>('repo_changes', { dir }),
+      ]);
+      if (dir !== this.dir) {
+        return;
+      }
+      this.touched++;
+      // Same list: keep the old array, so views do not reload their diffs.
+      if (JSON.stringify(changes) !== JSON.stringify(this.changes)) {
+        this.changes = changes;
+      }
+      if (JSON.stringify(info) !== JSON.stringify(this.info)) {
+        this.info = info;
+      }
+    } catch {
+      // The next full refresh shows the error.
+    }
+  }
+
+  /** Throws away the changes of `paths`: HEAD's version back, new files to the Recycle Bin. */
+  async discard(paths: string[]): Promise<boolean> {
+    try {
+      await invoke('repo_discard', { dir: this.dir, paths });
+      this.error = '';
+      this.changed++;
+      await this.refreshChanges();
+      return true;
+    } catch (e) {
+      this.error = String(e);
+      return false;
+    }
+  }
+
   async refresh(): Promise<void> {
     const dir = this.dir;
     if (!dir) {
+      void this.#watch('');
       return;
     }
+    void this.#watch(dir);
     try {
       const [info, changes, log] = await Promise.all([
         invoke<BranchInfo>('repo_info', { dir }),

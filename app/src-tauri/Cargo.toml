@@ -29,6 +29,12 @@ git2 = { version = "0.21", default-features = false, features = ["https"] }
 # GitHub REST API (rustls, so no system TLS library is needed).
 ureq = { version = "2.12", features = ["json"] }
 tokio = { version = "1", features = ["sync"] }
+# Live changes in the GitHub tab (watches the open repository's folder).
+notify = "8"
+
+# Windows 11 snap layouts for the custom maximize button (sends Win+Z).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_UI_Input_KeyboardAndMouse"] }
 
 [profile.release]
 codegen-units = 1

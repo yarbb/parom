@@ -8,6 +8,10 @@
   import Checkbox from './Checkbox.svelte';
   import DiffView from './DiffView.svelte';
   import Splitter from './Splitter.svelte';
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+  import Modal from './Modal.svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { openInEditor } from '../lib/local';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
 
   // Board Bd: uncommitted files with checkboxes, commit box, diff.
@@ -34,15 +38,20 @@
     }
   });
 
-  // Reload the diff when the selection or the files change.
+  // Reload the diff when the selection or the files change; a file edited
+  // on disk reloads quietly (no "Loading" in between).
+  let shownPath = '';
   $effect(() => {
     const path = selected;
     void repo.changes;
+    void repo.touched;
     if (!path) {
       diff = null;
+      shownPath = '';
       return;
     }
-    loading = true;
+    loading = path !== shownPath;
+    shownPath = path;
     fileDiff(repo.dir, path)
       .then((d) => {
         if (path === selected) {
@@ -69,6 +78,59 @@
     }
   }
 
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** Files waiting for "Discard changes" to be confirmed. */
+  let discarding = $state<string[] | null>(null);
+
+  const full = (rel: string) => `${repo.dir.replace(/[\\/]+$/, '')}/${rel}`;
+  const folderOf = (rel: string) => full(rel).replace(/\/[^/]*$/, '');
+  const extension = (rel: string) => /\.[^./]+$/.exec(rel)?.[0] ?? '';
+
+  async function ignore(pattern: string) {
+    await invoke('append_line', { path: full('.gitignore'), line: pattern }).catch((e) => (repo.error = String(e)));
+    void repo.refreshChanges();
+  }
+
+  /** Right click on a changed file, as in GitHub Desktop. */
+  function openMenu(e: MouseEvent, c: FileChange) {
+    e.preventDefault();
+    selected = c.path;
+    const ext = extension(c.path);
+    menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: t('changes.discard'), danger: true, action: () => (discarding = [c.path]) },
+        {
+          label: t('changes.discard_all'),
+          danger: true,
+          disabled: repo.changes.length < 2,
+          action: () => (discarding = repo.changes.map((x) => x.path)),
+        },
+        { separator: true, label: '' },
+        { label: t('changes.ignore_file'), disabled: c.path === '.gitignore', action: () => void ignore(`/${c.path}`) },
+        ...(ext ? [{ label: t('changes.ignore_ext', { ext }), action: () => void ignore(`*${ext}`) }] : []),
+        { separator: true, label: '' },
+        { label: t('changes.copy_path'), action: () => void navigator.clipboard?.writeText(full(c.path)) },
+        { label: t('changes.copy_relative'), action: () => void navigator.clipboard?.writeText(c.path) },
+        { label: t('github.repo.open'), action: () => void openInEditor(folderOf(c.path), '') },
+        {
+          label: t('changes.open_default'),
+          disabled: c.status === 'deleted',
+          action: () => void openInEditor(full(c.path), prefs.value.editorPath),
+        },
+      ],
+    };
+  }
+
+  async function confirmDiscard() {
+    const paths = discarding ?? [];
+    discarding = null;
+    if (await repo.discard(paths)) {
+      paths.forEach((p) => excluded.delete(p));
+    }
+  }
+
   async function commit(e: SubmitEvent) {
     e.preventDefault();
     const message = description.trim() ? `${summary.trim()}\n\n${description.trim()}` : summary.trim();
@@ -81,7 +143,7 @@
 </script>
 
 <div class="changes">
-  <div class="files" style:width="{colWidth('ghChanges', 320)}px">
+  <div class="files" style:width="{colWidth('ghChanges', 360)}px">
     <div class="section-label head">
       <Checkbox
         bind:checked={() => allChecked, (on) => toggleAll(on)}
@@ -91,7 +153,13 @@
     </div>
     <div class="list">
       {#each repo.changes as c (c.path)}
-        <div class="row" class:selected={c.path === selected} role="presentation" onclick={() => (selected = c.path)}>
+        <div
+          class="row"
+          class:selected={c.path === selected}
+          role="presentation"
+          onclick={() => (selected = c.path)}
+          oncontextmenu={(e) => openMenu(e, c)}
+        >
           <span class="tick" role="presentation" onclick={(e) => e.stopPropagation()}>
             <Checkbox bind:checked={() => !excluded.has(c.path), (on) => toggle(c.path, on)} label="" title={c.path} />
           </span>
@@ -113,7 +181,7 @@
   <Splitter
     axis="x"
     label={t('ui.resize')}
-    onMove={(d) => resizeCol('ghChanges', 320, d, 220, 700)}
+    onMove={(d) => resizeCol('ghChanges', 360, d, 220, 700)}
     onEnd={() => prefs.persist()}
     onReset={() => resetCol('ghChanges')}
   />
@@ -130,7 +198,34 @@
   {/if}
 </div>
 
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}
+
+{#if discarding}
+  {@const files = discarding}
+  <Modal title={t('changes.discard_title', { count: files.length })} onCancel={() => (discarding = null)}>
+    <p>{t('changes.discard_body')}</p>
+    <ul class="discard-list mono">
+      {#each files.slice(0, 8) as f (f)}<li>{f}</li>{/each}
+      {#if files.length > 8}<li class="muted">{t('changes.and_more', { count: files.length - 8 })}</li>{/if}
+    </ul>
+    {#snippet actions()}
+      <button class="control" onclick={() => (discarding = null)}>{t('common.cancel')}</button>
+      <button class="control danger" onclick={confirmDiscard}>{t('changes.discard_confirm')}</button>
+    {/snippet}
+  </Modal>
+{/if}
+
 <style>
+  .discard-list {
+    max-height: 160px;
+    overflow-y: auto;
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+  }
+
   .changes {
     flex: 1;
     min-height: 0;

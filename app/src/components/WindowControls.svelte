@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { isTauri } from '@tauri-apps/api/core';
+  import { invoke, isTauri } from '@tauri-apps/api/core';
+  import { prefs } from '../lib/prefs.svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import Copy from '@lucide/svelte/icons/copy';
   import Minus from '@lucide/svelte/icons/minus';
@@ -25,6 +26,30 @@
   });
 
   const win = () => getCurrentWindow();
+
+  // Windows 11 snap layouts: Windows cannot see our own maximize button, so
+  // resting the mouse on it asks for the layouts as Win+Z does.
+  const windows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+  let snapTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function hoverMaximize() {
+    if (!windows || !prefs.value.snapLayouts) {
+      return;
+    }
+    snapTimer = setTimeout(() => {
+      snapTimer = null;
+      if (document.hasFocus()) {
+        void invoke('snap_layouts').catch(() => undefined);
+      }
+    }, 550);
+  }
+
+  function leaveMaximize() {
+    if (snapTimer) {
+      clearTimeout(snapTimer);
+      snapTimer = null;
+    }
+  }
 </script>
 
 {#if isTauri()}
@@ -35,8 +60,10 @@
     <button
       class="win"
       aria-label={maximized ? t('window.restore') : t('window.maximize')}
-      title={maximized ? t('window.restore') : t('window.maximize')}
-      onclick={() => win().toggleMaximize()}
+      title={windows && prefs.value.snapLayouts ? undefined : maximized ? t('window.restore') : t('window.maximize')}
+      onmouseenter={hoverMaximize}
+      onmouseleave={leaveMaximize}
+      onclick={() => (leaveMaximize(), win().toggleMaximize())}
     >
       {#if maximized}<Copy size={13} strokeWidth={1.4} />{:else}<Square size={12} strokeWidth={1.4} />{/if}
     </button>

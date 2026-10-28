@@ -242,6 +242,7 @@
             <Select bind:value={draft.hideStyle} options={[{ value: 'blur', label: t('prefs.hide_style.blur') }, { value: 'text', label: t('prefs.hide_style.text') }]} />
           </label>
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.snapLayouts} label={t('prefs.snap_layouts')} /></div>
           <label class="row"><span>{t('prefs.accent')}</span>
             <Select bind:value={draft.accent} options={accents.map((a) => ({ value: a, label: t(`prefs.accent.${a}`) }))} />
             <span class="swatch" style:background={swatch[draft.accent]} aria-hidden="true"></span>
@@ -455,8 +456,8 @@
   }
 
   .window {
-    width: 820px;
-    height: 560px;
+    width: 880px;
+    height: 600px;
     max-width: calc(100vw - 32px);
     max-height: calc(100vh - 32px);
     display: flex;
@@ -474,11 +475,13 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 16px;
+    padding: 12px 20px;
     flex: none;
   }
 
   header {
+    padding-top: 13px;
+    padding-bottom: 13px;
     border-bottom: 1px solid var(--line);
   }
 
@@ -516,7 +519,7 @@
   }
 
   nav {
-    width: 200px;
+    width: 220px;
     flex: none;
     overflow-y: auto;
     padding: 6px 0;
@@ -534,7 +537,7 @@
   .page {
     display: block;
     width: 100%;
-    padding: 7px 16px;
+    padding: 7px 16px 7px 28px;
     border: 0;
     background: none;
     color: var(--text);
@@ -564,7 +567,7 @@
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    padding: 16px 20px;
+    padding: 20px 28px;
   }
 
   .note {
@@ -575,12 +578,12 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    min-height: 40px;
+    min-height: 42px;
     border-bottom: 1px solid var(--line-row);
   }
 
   .row > span:first-child {
-    width: 200px;
+    width: 220px;
     flex: none;
     color: var(--muted);
   }
