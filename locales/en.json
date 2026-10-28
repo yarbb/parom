@@ -401,6 +401,7 @@
   "prefs.accent.orange": "Orange",
   "prefs.accent.pink": "Pink",
   "prefs.accent.teal": "Teal",
+  "prefs.language.system": "System ({name})",
   "prefs.translations": "Translations",
   "prefs.built_in": "built-in",
   "prefs.check_translations": "Check GitHub for translations",

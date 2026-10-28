@@ -60,6 +60,7 @@ One token set, two themes.
 - JSON files in `locales/`; `en.json` is the source of truth; missing keys fall back to English.
 - ICU MessageFormat with plural rules (Russian needs one/few/many/other).
 - The app can download community translations from GitHub (public, no login).
+- Russian (`locales/ru.json`, formal "вы", full one/few/many/other plurals) ships with the app; `lib/i18n.test.ts` checks plurals and that it covers every English key. The language preference defaults to "system" (the system language when a translation exists, else English; `resolveLocale`).
 
 ## Sync marker
 One small file on the server, `/.parom` (~300 bytes; `/.totzilla` from before the rename is still read). Fields: format version, repo, last deployed commit SHA, tree fingerprint (hash over managed files: path+size+hash), who (GitHub login or machine), when (UTC), lock `{by, since, ttl}` or none.

@@ -114,7 +114,7 @@ export const defaultPrefs: Prefs = {
   discordPresence: false,
   discordShowRepo: false,
   checkUpdates: true,
-  language: 'en',
+  language: 'system',
   foldersFirst: true,
   caseSensitive: false,
   dateFormat: 'short',

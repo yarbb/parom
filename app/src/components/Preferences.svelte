@@ -6,7 +6,7 @@
   import { isTauri } from '@tauri-apps/api/core';
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { call } from '../lib/daemon';
-  import { availableLocales, currentLocale, t } from '../lib/i18n';
+  import { availableLocales, currentLocale, resolveLocale, t } from '../lib/i18n';
   import { prefs, type Prefs } from '../lib/prefs.svelte';
   import Checkbox from './Checkbox.svelte';
   import Select from './Select.svelte';
@@ -126,7 +126,7 @@
   });
 
   async function apply(): Promise<boolean> {
-    const languageChanged = draft.language !== currentLocale();
+    const languageChanged = resolveLocale(draft.language) !== currentLocale();
     try {
       await prefs.save($state.snapshot(draft) as Prefs);
       error = '';
@@ -253,7 +253,13 @@
           </label>
         {:else if page === 'language'}
           <label class="row"><span>{t('prefs.language')}</span>
-            <Select bind:value={draft.language} options={locales.map((l) => ({ value: l.code, label: l.name }))} />
+            <Select
+              bind:value={draft.language}
+              options={[
+                { value: 'system', label: t('prefs.language.system', { name: locales.find((l) => l.code === resolveLocale('system'))?.name ?? 'English' }) },
+                ...locales.map((l) => ({ value: l.code, label: l.name })),
+              ]}
+            />
           </label>
           <div class="section-label inline">{t('prefs.translations')}</div>
           {#each locales as l (l.code)}
