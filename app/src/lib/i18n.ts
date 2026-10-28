@@ -39,8 +39,30 @@ export function availableLocales(): LocaleInfo[] {
     .sort((a, b) => (a.code === 'en' ? -1 : b.code === 'en' ? 1 : a.name.localeCompare(b.name)));
 }
 
-/** Switches the language for messages formatted from now on. */
-export function setLocale(code: string): void {
+/**
+ * The language a choice means: "system" is the system's language when there
+ * is a translation for it (e.g. "ru-RU" → "ru"), English otherwise.
+ */
+export function resolveLocale(choice: string): string {
+  if (choice !== 'system') {
+    return catalogs.has(choice) ? choice : 'en';
+  }
+  const wanted = typeof navigator === 'undefined' ? [] : [...(navigator.languages ?? []), navigator.language];
+  for (const tag of wanted.filter(Boolean).map((l) => l.toLowerCase())) {
+    if (catalogs.has(tag)) {
+      return tag;
+    }
+    const base = tag.split('-')[0];
+    if (catalogs.has(base)) {
+      return base;
+    }
+  }
+  return 'en';
+}
+
+/** Switches the language for messages formatted from now on ("system" follows the system). */
+export function setLocale(choice: string): void {
+  const code = resolveLocale(choice);
   const found = catalogs.get(code);
   locale = found ? code : 'en';
   messages = found ? { ...english, ...found } : english;
