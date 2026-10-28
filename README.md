@@ -26,6 +26,29 @@ Built on the FileZilla engine, for people who deploy game servers and small site
 
 *Parom* is Russian for "ferry": it carries your files from the repository to the server and back.
 
+<p align="center">
+  <img src="docs/screenshots/files.png" alt="Files: the computer and the server side by side, transfers in progress" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/issues.png" alt="Issues of the linked repository with their labels, an opened issue and its comments" width="100%">
+</p>
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/github.png" alt="Changes: files to commit and their diff"></td>
+    <td width="33%"><img src="docs/screenshots/history.png" alt="History: commits with their authors and files"></td>
+    <td width="33%"><img src="docs/screenshots/sites.png" alt="Site Manager"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Changes</sub></td>
+    <td align="center"><sub>History</sub></td>
+    <td align="center"><sub>Site Manager</sub></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Screenshots use made-up servers, folders and accounts.</sub></p>
+
 ## Download
 
 Get the installer from [**Releases**](https://github.com/yarbb/parom/releases). It installs for your user only (no administrator rights), and Parom updates itself when you agree to it.
