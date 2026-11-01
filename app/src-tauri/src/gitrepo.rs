@@ -1026,7 +1026,7 @@ mod tests {
         let (root, dir) = diverged("dirty");
         commit_file(Path::new(&dir), "b.txt", "b\n", "b");
         fs::write(Path::new(&dir).join("b.txt"), "edited\n").unwrap();
-        let e = pull(&dir, None, Some("Test"), Some("test@example.com"), true).unwrap_err();
+        let e = pull(&dir, None, Some("Test"), Some("test@example.com"), true).err().expect("refused");
         assert!(e.contains("b.txt"), "{e}");
         assert!(conflicts(&dir).unwrap().is_none());
         assert_eq!(read(&dir, "b.txt"), "edited\n");
