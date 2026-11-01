@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Avatar from './Avatar.svelte';
+  import type { Mention } from '../lib/issues.svelte';
   import { tick } from 'svelte';
   import Bold from '@lucide/svelte/icons/bold';
   import Code from '@lucide/svelte/icons/code';
@@ -20,9 +22,68 @@
     placeholder?: string;
     rows?: number;
     label?: string;
+    /** People for @-mentions (asked for the first time "@" is typed). */
+    people?: () => Promise<Mention[]>;
   }
 
-  let { value = $bindable(), placeholder = '', rows = 4, label = '' }: Props = $props();
+  let { value = $bindable(), placeholder = '', rows = 4, label = '', people }: Props = $props();
+
+  // @-mentions: "@" and a few letters show matching people; ↑ / ↓ pick,
+  // Enter or Tab puts "@login " in, Esc closes the list.
+  let mention = $state<{ start: number; query: string } | null>(null);
+  let known = $state<Mention[] | null>(null);
+  let mentionIndex = $state(0);
+  let mentionUp = $state(false);
+  const mentionMatches = $derived.by(() => {
+    if (!mention || !known) {
+      return [];
+    }
+    const q = mention.query.toLowerCase();
+    const starts = known.filter((p) => p.login.toLowerCase().startsWith(q));
+    const contains = known.filter((p) => !p.login.toLowerCase().startsWith(q) && p.login.toLowerCase().includes(q));
+    return [...starts, ...contains].slice(0, 6);
+  });
+
+  function findMention() {
+    if (!people || !area) {
+      mention = null;
+      return;
+    }
+    const caret = area.selectionStart;
+    if (caret !== area.selectionEnd) {
+      mention = null;
+      return;
+    }
+    const m = /(^|[\s(])@([A-Za-z0-9-]{0,39})$/.exec(value.slice(0, caret));
+    if (!m) {
+      mention = null;
+      return;
+    }
+    if (!mention) {
+      mentionIndex = 0;
+      const box = area.getBoundingClientRect();
+      mentionUp = window.innerHeight - box.bottom < 220;
+    }
+    mention = { start: caret - m[2].length - 1, query: m[2] };
+    if (known === null) {
+      known = [];
+      void people().then((list) => (known = list));
+    }
+  }
+
+  async function takeMention(login: string) {
+    if (!mention) {
+      return;
+    }
+    const caret = area.selectionStart;
+    const start = mention.start;
+    mention = null;
+    value = `${value.slice(0, start)}@${login} ${value.slice(caret)}`;
+    await tick();
+    area.focus();
+    const at = start + login.length + 2;
+    area.setSelectionRange(at, at);
+  }
   let area: HTMLTextAreaElement;
 
   /** Replaces the selection, keeping the inner text selected. */
@@ -80,6 +141,25 @@
   ];
 
   function onkeydown(e: KeyboardEvent) {
+    if (mention && mentionMatches.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const step = e.key === 'ArrowDown' ? 1 : -1;
+        mentionIndex = (mentionIndex + step + mentionMatches.length) % mentionMatches.length;
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        void takeMention(mentionMatches[mentionIndex].login);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        mention = null;
+        return;
+      }
+    }
     if (!(e.ctrlKey || e.metaKey) || e.altKey) {
       return;
     }
@@ -107,11 +187,41 @@
       </button>
     {/each}
   </div>
-  <textarea class="field" bind:this={area} bind:value {placeholder} {rows} aria-label={label || placeholder} {onkeydown}></textarea>
+  <textarea
+    class="field"
+    bind:this={area}
+    bind:value
+    {placeholder}
+    {rows}
+    aria-label={label || placeholder}
+    {onkeydown}
+    oninput={findMention}
+    onclick={findMention}
+    onkeyup={(e) => (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') && findMention()}
+    onblur={() => (mention = null)}
+  ></textarea>
+  {#if mention && mentionMatches.length}
+    <div class="mentions menu-unroll" class:up={mentionUp} role="listbox" aria-label="@">
+      {#each mentionMatches as p, i (p.login)}
+        <button
+          type="button"
+          role="option"
+          aria-selected={i === mentionIndex}
+          class:on={i === mentionIndex}
+          tabindex="-1"
+          onmousedown={(e) => e.preventDefault()}
+          onclick={() => void takeMention(p.login)}
+        >
+          <Avatar name={p.login} src={p.avatar_url ?? null} size={18} /><span class="mono">@{p.login}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
   .editor {
+    position: relative;
     display: flex;
     flex-direction: column;
     border: 1px solid var(--line-control);
@@ -163,5 +273,46 @@
     line-height: 1.5;
     resize: vertical;
     outline: none;
+  }
+
+  .mentions {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 8px;
+    z-index: 30;
+    min-width: 220px;
+    padding: 4px;
+    border: 1px solid var(--line-control);
+    border-radius: 6px;
+    background: var(--panel);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  }
+
+  .mentions.up {
+    top: auto;
+    bottom: calc(100% + 4px);
+  }
+
+  .mentions button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 28px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .mentions button.on,
+  .mentions button:hover {
+    background: var(--selected-bg);
+    color: var(--text-strong);
   }
 </style>

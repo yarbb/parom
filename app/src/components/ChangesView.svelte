@@ -87,7 +87,7 @@
   const extension = (rel: string) => /\.[^./]+$/.exec(rel)?.[0] ?? '';
 
   async function ignore(pattern: string) {
-    await invoke('append_line', { path: full('.gitignore'), line: pattern }).catch((e) => (repo.error = String(e)));
+    await invoke('append_line', { path: full('.gitignore'), line: pattern }).catch((e) => repo.fail(e));
     void repo.refreshChanges();
   }
 
@@ -164,7 +164,15 @@
             <Checkbox bind:checked={() => !excluded.has(c.path), (on) => toggle(c.path, on)} label="" title={c.path} />
           </span>
           <span class="mono letter {tone[c.status]}">{letter[c.status]}</span>
-          <span class="mono path" title={c.path}>{c.path}</span>
+          {#if prefs.value.changesFullPaths}
+            <span class="mono path" title={c.path}>{c.path}</span>
+          {:else}
+            <!-- The name first, its folder after it (GitHub Desktop cuts long paths in the middle instead). -->
+            <span class="path" title={c.path}>
+              <span class="mono name">{c.path.split('/').pop()}</span>
+              {#if c.path.includes('/')}<span class="mono folder">{c.path.slice(0, c.path.lastIndexOf('/'))}</span>{/if}
+            </span>
+          {/if}
         </div>
       {:else}
         <p class="muted empty">{t('github.no_changes')}</p>
@@ -173,7 +181,8 @@
     <form class="commit" onsubmit={commit}>
       <input class="field" placeholder={t('github.summary')} aria-label={t('github.summary')} bind:value={summary} />
       <textarea class="field" rows="3" placeholder={t('github.description')} aria-label={t('github.description')} bind:value={description}></textarea>
-      <button class="control primary" type="submit" disabled={!summary.trim() || !included.length || !!repo.busy}>
+      {#if repo.conflicts}<p class="muted small-note">{t('conflicts.no_commit')}</p>{/if}
+      <button class="control primary" type="submit" disabled={!summary.trim() || !included.length || !!repo.busy || !!repo.conflicts}>
         {t('github.commit_to', { branch: repo.info?.branch ?? 'HEAD' })}
       </button>
     </form>
@@ -280,6 +289,12 @@
     white-space: nowrap;
   }
 
+  .folder {
+    margin-left: 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
   .empty {
     padding: 12px 14px;
     margin: 0;
@@ -291,6 +306,11 @@
     gap: 8px;
     padding: 12px 14px;
     border-top: 1px solid var(--line);
+  }
+
+  .small-note {
+    margin: 0;
+    font-size: 11.5px;
   }
 
   textarea.field {

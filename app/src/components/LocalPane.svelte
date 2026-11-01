@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PathInput from './PathInput.svelte';
+  import { hint } from '../lib/keys';
   import EmptyState from './EmptyState.svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import { onMount } from 'svelte';
@@ -38,6 +40,12 @@
   let error = $state('');
   let typed = $state('');
   let selected = $state<FileRow[]>([]);
+
+  /** Folder names for path suggestions; nothing for the drive list. */
+  async function localFolders(dir: string): Promise<string[] | null> {
+    const res = await listLocal(dir);
+    return res.rows.filter((r) => r.dir).map((r) => r.name);
+  }
 
   /** A path as shown and copied; the list itself keeps the system's form. */
   const shown = (p: string) => shownLocal(p, prefs.value.forwardSlashes);
@@ -198,10 +206,10 @@
           action: () => fsOp(() => openInEditor(localJoin(path, rows[0].name, separator), prefs.value.editorPath)),
         },
         { separator: true, label: '' },
-        { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
+        { label: t('fileop.rename.title'), hint: hint('rename'), disabled: rows.length !== 1, action: () => command('rename', rows) },
         e.shiftKey
-          ? { label: t('fileop.delete_now'), hint: 'Shift+Del', danger: true, disabled: !any, action: () => command('delete', rows, true) }
-          : { label: t('fileop.trash'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+          ? { label: t('fileop.delete_now'), hint: hint('delete') && `Shift+${hint('delete')}`, danger: true, disabled: !any, action: () => command('delete', rows, true) }
+          : { label: t('fileop.trash'), hint: hint('delete'), disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         {
@@ -220,7 +228,7 @@
             ]
           : []),
         { separator: true, label: '' },
-        { label: t('files.refresh'), hint: 'F5', action: refresh },
+        { label: t('files.refresh'), hint: hint('refresh'), action: refresh },
       ],
     };
   }
@@ -259,9 +267,14 @@
       </button>
     </span>
   </div>
-  <form class="pathbar" onsubmit={(e) => (e.preventDefault(), typed && load(typed))}>
-    <input class="field mono" aria-label={t('files.local_path')} bind:value={typed} />
-  </form>
+  <PathInput
+    bind:value={typed}
+    label={t('files.local_path')}
+    separators={separator === '\\' ? '\\/' : '/'}
+    caseSensitive={separator !== '\\'}
+    folders={localFolders}
+    onSubmit={(p) => load(p)}
+  />
   <FileList
     label={t('files.local')}
     {rows}

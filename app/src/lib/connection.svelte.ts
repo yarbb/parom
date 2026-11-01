@@ -433,6 +433,32 @@ class Connection {
     }
   }
 
+  /**
+   * Folder names inside a server folder, for path suggestions: from the
+   * listings this session already has, else one listing of that folder (kept
+   * like any other, so it is not asked for again). The pane stays as it is.
+   */
+  async peekDirs(path: string): Promise<string[] | null> {
+    const dir = path.length > 1 ? path.replace(/\/+$/, '') : path;
+    const cached = this.#listings.get(dir);
+    if (cached) {
+      return cached.filter((r) => r.dir).map((r) => r.name);
+    }
+    const session = this.session;
+    if (session === null) {
+      return null;
+    }
+    try {
+      const res = await call<{ path: string; entries: RemoteEntry[] }>('remote.list', { session, path: dir });
+      const rows = res.entries.map((e) => ({ name: e.name, size: e.size, dir: e.dir, link: e.link, time: parseRemoteTime(e.time) }));
+      this.#listings.set(res.path, rows);
+      this.listed.add(res.path);
+      return rows.filter((r) => r.dir).map((r) => r.name);
+    } catch {
+      return null;
+    }
+  }
+
   /** Answers a "file exists" question, optionally for every other one in this queue too. */
   async answerExists(req: EngineRequest, action: string, applyToAll: boolean): Promise<void> {
     if (applyToAll) {

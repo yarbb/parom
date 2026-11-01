@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hint } from '../lib/keys';
   import { connection } from '../lib/connection.svelte';
   import {
     canSync,
@@ -63,13 +64,13 @@
         action: run((p) => p.transfer(rows)),
       },
       { label: t('edit.edit'), disabled: rows.length !== 1 || rows[0].dir, action: run((p) => p.edit(rows[0])) },
-      { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: run((p) => p.command('rename', rows)) },
-      { label: side === 'local' ? t('fileop.trash') : t('fileop.delete.title'), hint: 'Del', disabled: !any, action: run((p) => p.command('delete', rows)) },
+      { label: t('fileop.rename.title'), hint: hint('rename'), disabled: rows.length !== 1, action: run((p) => p.command('rename', rows)) },
+      { label: side === 'local' ? t('fileop.trash') : t('fileop.delete.title'), hint: hint('delete'), disabled: !any, action: run((p) => p.command('delete', rows)) },
       { label: t('fileop.copy_path'), disabled: !any, action: run((p) => p.copyPath(rows)) },
       { separator: true, label: '' },
       { label: t('fileop.mkdir.title'), disabled: !ready, action: run((p) => p.command('mkdir', rows)) },
       { label: t('fileop.mkfile.title'), disabled: !ready, action: run((p) => p.command('mkfile', rows)) },
-      { label: t('files.refresh'), hint: 'F5', disabled: !ready, action: run((p) => p.command('refresh', rows)) },
+      { label: t('files.refresh'), hint: hint('refresh'), disabled: !ready, action: run((p) => p.command('refresh', rows)) },
     ];
   }
 
@@ -78,8 +79,8 @@
     switch (id) {
       case 'file':
         return [
-          { label: t('menu.site_manager'), hint: 'Ctrl+S', action: () => (ui.siteManager = true) },
-          { label: t('menu.preferences'), hint: 'Ctrl+,', action: () => (ui.preferences = true) },
+          { label: t('menu.site_manager'), hint: hint('siteManager'), action: () => (ui.siteManager = true) },
+          { label: t('menu.preferences'), hint: hint('preferences'), action: () => (ui.preferences = true) },
           { separator: true, label: '' },
           ...fileItems(),
           { separator: true, label: '' },
@@ -95,36 +96,36 @@
         ];
       case 'view':
         return [
-          { label: check(ui.tab === 'files', t('tab.files')), hint: 'Ctrl+1', action: () => (ui.tab = 'files') },
-          { label: check(ui.tab === 'github', t('tab.github')), hint: 'Ctrl+2', action: () => (ui.tab = 'github') },
+          { label: check(ui.tab === 'files', t('tab.files')), hint: hint('tabFiles'), action: () => (ui.tab = 'files') },
+          { label: check(ui.tab === 'github', t('tab.github')), hint: hint('tabGithub'), action: () => (ui.tab = 'github') },
           { separator: true, label: '' },
-          { label: check(ui.log, t('log.title')), hint: 'Ctrl+L', action: () => (ui.log = !ui.log) },
-          { label: check(ui.syncBrowse, t('files.sync_browse')), hint: 'Ctrl+Y', action: () => (ui.syncBrowse = !ui.syncBrowse) },
+          { label: check(ui.log, t('log.title')), hint: hint('log'), action: () => (ui.log = !ui.log) },
+          { label: check(ui.syncBrowse, t('files.sync_browse')), hint: hint('syncBrowse'), action: () => (ui.syncBrowse = !ui.syncBrowse) },
           { label: check(hideAddress, t('files.hide_address')), action: () => (hideAddress = !hideAddress) },
           { separator: true, label: '' },
           { label: check(prefs.value.theme === 'dark', t('prefs.theme.dark')), action: () => setTheme('dark') },
           { label: check(prefs.value.theme === 'light', t('prefs.theme.light')), action: () => setTheme('light') },
           { label: check(prefs.value.theme === 'system', t('prefs.theme.system')), action: () => setTheme('system') },
           { separator: true, label: '' },
-          { label: t('menu.zoom_in'), hint: 'Ctrl+=', action: () => zoom(10) },
-          { label: t('menu.zoom_out'), hint: 'Ctrl+-', action: () => zoom(-10) },
-          { label: t('menu.zoom_reset', { percent: prefs.value.fontScale }), hint: 'Ctrl+0', action: () => zoom(null) },
+          { label: t('menu.zoom_in'), hint: hint('zoomIn'), action: () => zoom(10) },
+          { label: t('menu.zoom_out'), hint: hint('zoomOut'), action: () => zoom(-10) },
+          { label: t('menu.zoom_reset', { percent: prefs.value.fontScale }), hint: hint('zoomReset'), action: () => zoom(null) },
         ];
       case 'server':
         return [
-          { label: t('menu.reconnect'), hint: 'Ctrl+R', disabled: connection.state !== 'disconnected', action: reconnectLast },
-          { label: t('common.disconnect'), hint: 'Ctrl+D', disabled: !connected, action: () => void connection.disconnect() },
+          { label: t('menu.reconnect'), hint: hint('reconnect'), disabled: connection.state !== 'disconnected', action: reconnectLast },
+          { label: t('common.disconnect'), hint: hint('disconnect'), disabled: !connected, action: () => void connection.disconnect() },
           { separator: true, label: '' },
-          { label: t('sync.sync_with_server'), disabled: !canSync(), action: () => (sync.choosing = true) },
+          { label: t('sync.sync_with_server'), hint: hint('sync'), disabled: !canSync(), action: () => (sync.choosing = true) },
           { label: t('sync.check'), disabled: !sync.active || sync.checking, action: () => void sync.refresh() },
           { label: t('sync.scan_edits'), disabled: !sync.active || sync.checking, action: () => void sync.refresh({ scanEdits: true }) },
           { separator: true, label: '' },
-          { label: t('menu.site_manager'), hint: 'Ctrl+S', action: () => (ui.siteManager = true) },
+          { label: t('menu.site_manager'), hint: hint('siteManager'), action: () => (ui.siteManager = true) },
         ];
       case 'help':
         return [
           { label: t('menu.about', { name: ui.appName }), action: () => (ui.about = true) },
-          { label: t('menu.check_updates'), disabled: updates.checking, action: () => void updates.check(true) },
+          { label: t('menu.check_updates'), hint: hint('checkUpdates'), disabled: updates.checking, action: () => void updates.check(true) },
           { separator: true, label: '' },
           { label: t('menu.project_page'), action: () => void openProject() },
           { label: t('menu.report_problem'), danger: true, action: () => void openProject('/issues/new') },

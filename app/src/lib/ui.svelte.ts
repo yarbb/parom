@@ -7,6 +7,8 @@ class Ui {
   /** The product name (productName in tauri.conf.json), once known. */
   appName = $state('');
   siteManager = $state(false);
+  /** Preferences is waiting for a new shortcut: app shortcuts are off meanwhile. */
+  capturingKeys = $state(false);
   /** Open the Site Manager with a new site (first run). */
   siteManagerNew = $state(false);
   preferences = $state(false);

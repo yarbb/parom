@@ -7,7 +7,7 @@
   import IssueLabel from './IssueLabel.svelte';
   import { onMount } from 'svelte';
   import { t } from '../lib/i18n';
-  import { createIssue, listLabels, renderMarkdown, type Item, type Label } from '../lib/issues.svelte';
+  import { createIssue, listLabels, renderMarkdown, type Item, type Label, repoPeople } from '../lib/issues.svelte';
   import Checkbox from './Checkbox.svelte';
   import Markdown from './Markdown.svelte';
   import MarkdownEditor from './MarkdownEditor.svelte';
@@ -69,7 +69,7 @@
   <form id="new-issue" onsubmit={submit}>
     <input class="field wide-field" placeholder={t('github.new_issue.name')} aria-label={t('github.new_issue.name')} bind:value={saved.title} />
     {#if preview === null}
-      <MarkdownEditor bind:value={saved.body} rows={9} placeholder={t('github.new_issue.body')} />
+      <MarkdownEditor bind:value={saved.body} rows={9} placeholder={t('github.new_issue.body')} people={() => repoPeople(slug)} />
     {:else}
       <div class="preview">
         {#if preview}<Markdown html={preview} text={saved.body} />{:else}<span class="muted">{t('github.no_description')}</span>{/if}

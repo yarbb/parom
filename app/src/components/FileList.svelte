@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { commandFor, comboOf, keyOf } from '../lib/keys';
   import type { Snippet } from 'svelte';
   import { untrack } from 'svelte';
   import {
@@ -221,7 +222,33 @@
     reveal(i);
   }
 
+  /** Shortcuts of the lists (Preferences → Keyboard shortcuts); Shift with Delete's key deletes without asking. */
+  function listShortcut(e: KeyboardEvent): boolean {
+    const combo = comboOf(e);
+    if (!combo) {
+      return false;
+    }
+    const quick = keyOf('delete') !== '' && combo === `Shift+${keyOf('delete')}`;
+    const id = quick ? 'delete' : commandFor(combo, 'list')?.id;
+    if (id === 'parent' && canGoUp) {
+      onUp();
+    } else if (id === 'rename' && selected.length === 1) {
+      onCommand?.('rename', selected);
+    } else if (id === 'delete' && selected.length) {
+      onCommand?.('delete', selected, quick);
+    } else if (id === 'refresh') {
+      onCommand?.('refresh', selected);
+    } else if (!id) {
+      return false;
+    }
+    return true;
+  }
+
   function onkeydown(e: KeyboardEvent) {
+    if (listShortcut(e)) {
+      e.preventDefault();
+      return;
+    }
     const page = Math.max(1, Math.floor(height / rowHeight) - 1);
     switch (e.key) {
       case 'ArrowDown':
@@ -241,24 +268,6 @@
         break;
       case 'End':
         move(count - 1, e.shiftKey);
-        break;
-      case 'Backspace':
-        if (canGoUp) {
-          onUp();
-        }
-        break;
-      case 'F2':
-        if (selected.length === 1) {
-          onCommand?.('rename', selected);
-        }
-        break;
-      case 'Delete':
-        if (selected.length) {
-          onCommand?.('delete', selected, e.shiftKey);
-        }
-        break;
-      case 'F5':
-        onCommand?.('refresh', selected);
         break;
       case 'Enter': {
         const files = selected.filter((r) => !r.dir);

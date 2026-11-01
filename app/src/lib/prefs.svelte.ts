@@ -38,6 +38,12 @@ export interface Prefs {
   discordShowRepo: boolean;
   /** Look for a new version at start and once a day (installing always asks). */
   checkUpdates: boolean;
+  /** Shortcut changes by command id (lib/keys.ts); "" removes a shortcut. */
+  keybindings: Record<string, string>;
+  /** Pull when both sides have new commits: replay mine on top (rebase) or a merge commit. */
+  pullMode: 'rebase' | 'merge';
+  /** Changes lists show whole paths instead of the file name first. */
+  changesFullPaths: boolean;
   language: string;
   foldersFirst: boolean;
   caseSensitive: boolean;
@@ -114,6 +120,9 @@ export const defaultPrefs: Prefs = {
   discordPresence: false,
   discordShowRepo: false,
   checkUpdates: true,
+  keybindings: {},
+  pullMode: 'rebase',
+  changesFullPaths: false,
   language: 'system',
   foldersFirst: true,
   caseSensitive: false,

@@ -53,6 +53,26 @@ export interface CommitFile {
   deletions: number;
 }
 
+export interface ConflictFile {
+  path: string;
+  /** Conflict blocks still in the file; 0 = resolved. */
+  markers: number;
+  mine_deleted: boolean;
+  theirs_deleted: boolean;
+}
+
+/** A merge or rebase stopped at conflicting lines, waiting for the user. */
+export interface Conflicts {
+  op: 'merge' | 'rebase';
+  branch: string | null;
+  upstream: string | null;
+  files: ConflictFile[];
+  /** Rebase: the commit being replayed and its place among all of them. */
+  commit: string | null;
+  step: number;
+  steps: number;
+}
+
 export interface RepoChoice {
   dir: string;
   /** Site name for linked repositories. */
@@ -71,13 +91,21 @@ class Repo {
   info = $state<BranchInfo | null>(null);
   changes = $state<FileChange[]>([]);
   log = $state<LogEntry[]>([]);
+  /** The last failure; kept until closed or the next action succeeds (refreshes do not clear it). */
   error = $state('');
-  /** "fetch" / "pull" / "push" / "commit" while running. */
+  /** The error's own window is open (long errors open it by themselves). */
+  errorOpen = $state(false);
+  #errorFromRefresh = false;
+  /** "fetch" / "pull" / "push" / "commit" / "continue" / "abort" while running. */
   busy = $state('');
   /** Bumped when a commit or pull changed HEAD or the files on disk. */
   changed = $state(0);
   /** Bumped whenever files in the repository changed on disk (live changes). */
   touched = $state(0);
+  /** A merge or rebase waiting for conflicts to be resolved (also one started in git). */
+  conflicts = $state<Conflicts | null>(null);
+  /** The conflicts window is open; a pull that stops at conflicts opens it. */
+  conflictsOpen = $state(false);
   /** When the remote was last fetched in this session (ms). */
   fetchedAt = $state<number | null>(null);
 
@@ -112,6 +140,8 @@ class Repo {
       this.info = null;
       this.changes = [];
       this.log = [];
+      this.conflicts = null;
+      this.conflictsOpen = false;
       this.fetchedAt = null;
       await prefs.set('githubRepo', dir);
     }
@@ -190,14 +220,19 @@ class Repo {
       return;
     }
     try {
-      const [info, changes] = await Promise.all([
+      const [info, changes, conflicts] = await Promise.all([
         invoke<BranchInfo>('repo_info', { dir }),
         invoke<FileChange[]>('repo_changes', { dir }),
+        invoke<Conflicts | null>('repo_conflicts', { dir }),
       ]);
       if (dir !== this.dir) {
         return;
       }
       this.touched++;
+      // Files edited in an editor count as resolved as soon as their markers are gone.
+      if (JSON.stringify(conflicts) !== JSON.stringify(this.conflicts)) {
+        this.#setConflicts(conflicts);
+      }
       // Same list: keep the old array, so views do not reload their diffs.
       if (JSON.stringify(changes) !== JSON.stringify(this.changes)) {
         this.changes = changes;
@@ -210,16 +245,28 @@ class Repo {
     }
   }
 
+  /** Shows an action's failure: a short one in the toolbar, a long one in its own window. */
+  fail(e: unknown): void {
+    this.error = String(e).replace(/^Error: /, '');
+    this.#errorFromRefresh = false;
+    this.errorOpen = this.error.length > 90 || this.error.includes('\n');
+  }
+
+  dismissError(): void {
+    this.error = '';
+    this.errorOpen = false;
+  }
+
   /** Throws away the changes of `paths`: HEAD's version back, new files to the Recycle Bin. */
   async discard(paths: string[]): Promise<boolean> {
     try {
       await invoke('repo_discard', { dir: this.dir, paths });
-      this.error = '';
+      this.dismissError();
       this.changed++;
       await this.refreshChanges();
       return true;
     } catch (e) {
-      this.error = String(e);
+      this.fail(e);
       return false;
     }
   }
@@ -232,20 +279,77 @@ class Repo {
     }
     void this.#watch(dir);
     try {
-      const [info, changes, log] = await Promise.all([
+      const [info, changes, log, conflicts] = await Promise.all([
         invoke<BranchInfo>('repo_info', { dir }),
         invoke<FileChange[]>('repo_changes', { dir }),
         invoke<LogEntry[]>('repo_log', { dir, limit: 300 }),
+        invoke<Conflicts | null>('repo_conflicts', { dir }),
       ]);
       if (dir === this.dir) {
         this.info = info;
         this.changes = changes;
         this.log = log;
-        this.error = '';
+        this.#setConflicts(conflicts);
+        if (this.#errorFromRefresh) {
+          this.dismissError();
+        }
       }
     } catch (e) {
-      this.error = String(e);
+      if (!this.error || this.#errorFromRefresh) {
+        this.error = String(e);
+        this.#errorFromRefresh = true;
+      }
     }
+  }
+
+  #setConflicts(c: Conflicts | null): void {
+    this.conflicts = c;
+    if (!c) {
+      this.conflictsOpen = false;
+    }
+  }
+
+  /** Takes one side's whole version of a conflicted file. */
+  async resolve(path: string, side: 'mine' | 'theirs'): Promise<void> {
+    try {
+      await invoke('repo_resolve', { dir: this.dir, path, side });
+      await this.refreshChanges();
+    } catch (e) {
+      this.fail(e);
+    }
+  }
+
+  /** Commits the resolved merge, or the rebase step and the ones after it. */
+  async continueConflicts(): Promise<void> {
+    this.busy = 'continue';
+    try {
+      const author = github.author;
+      await invoke('repo_conflict_continue', { dir: this.dir, name: author?.name ?? null, email: author?.email ?? null });
+      this.dismissError();
+      this.changed++;
+    } catch (e) {
+      this.fail(e);
+    } finally {
+      this.busy = '';
+    }
+    await this.refresh();
+    // A rebase may stop again at its next commit: the window stays then.
+    this.conflictsOpen = !!this.conflicts;
+  }
+
+  /** Back to how things were before the pull. */
+  async abortConflicts(): Promise<void> {
+    this.busy = 'abort';
+    try {
+      await invoke('repo_conflict_abort', { dir: this.dir });
+      this.dismissError();
+      this.changed++;
+    } catch (e) {
+      this.fail(e);
+    } finally {
+      this.busy = '';
+    }
+    await this.refresh();
   }
 
   async commit(paths: string[], message: string): Promise<boolean> {
@@ -253,12 +357,12 @@ class Repo {
     try {
       const author = github.author;
       await invoke<string>('repo_commit', { dir: this.dir, paths, message, name: author?.name ?? null, email: author?.email ?? null });
-      this.error = '';
+      this.dismissError();
       this.changed++;
       await this.refresh();
       return true;
     } catch (e) {
-      this.error = String(e);
+      this.fail(e);
       return false;
     } finally {
       this.busy = '';
@@ -305,18 +409,26 @@ class Repo {
     this.busy = op;
     try {
       const author = github.author;
-      this.info = await invoke<BranchInfo>('repo_remote', { dir: this.dir, op, name: author?.name ?? null, email: author?.email ?? null });
+      this.info = await invoke<BranchInfo>('repo_remote', {
+        dir: this.dir,
+        op,
+        name: author?.name ?? null,
+        email: author?.email ?? null,
+        rebase: prefs.value.pullMode !== 'merge',
+      });
       this.fetchedAt = Date.now();
-      this.error = '';
+      this.dismissError();
       if (op === 'pull') {
         this.changed++;
       }
       await this.refresh();
+      if (op === 'pull' && this.conflicts) {
+        this.conflictsOpen = true;
+      }
     } catch (e) {
-      this.error = String(e);
+      this.fail(e);
       // A failed push fetched first: the button can now offer the pull.
       await this.refresh();
-      this.error = String(e);
     } finally {
       this.busy = '';
     }

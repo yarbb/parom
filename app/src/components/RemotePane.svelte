@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PathInput from './PathInput.svelte';
+  import { hint } from '../lib/keys';
   import EmptyState from './EmptyState.svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
   import Server from '@lucide/svelte/icons/server';
@@ -165,10 +167,10 @@
           action: () => edits.edit(connection.remotePath, rows[0].name),
         },
         { separator: true, label: '' },
-        { label: t('fileop.rename.title'), hint: 'F2', disabled: rows.length !== 1, action: () => command('rename', rows) },
+        { label: t('fileop.rename.title'), hint: hint('rename'), disabled: rows.length !== 1, action: () => command('rename', rows) },
         e.shiftKey
-          ? { label: t('fileop.delete_now'), hint: 'Shift+Del', danger: true, disabled: !any, action: () => command('delete', rows, true) }
-          : { label: t('fileop.delete.title'), hint: 'Del', disabled: !any, action: () => command('delete', rows) },
+          ? { label: t('fileop.delete_now'), hint: hint('delete') && `Shift+${hint('delete')}`, danger: true, disabled: !any, action: () => command('delete', rows, true) }
+          : { label: t('fileop.delete.title'), hint: hint('delete'), disabled: !any, action: () => command('delete', rows) },
         { label: t('fileop.mkdir.title'), action: () => command('mkdir', rows) },
         { label: t('fileop.mkfile.title'), action: () => command('mkfile', rows) },
         {
@@ -182,7 +184,7 @@
         { label: t('fileop.copy_path'), action: () => copyPath(rows) },
         ...(e.shiftKey ? [{ label: t('fileop.copy_url'), action: () => copyUrl(rows) }] : []),
         { separator: true, label: '' },
-        { label: t('files.refresh'), hint: 'F5', action: () => command('refresh', rows) },
+        { label: t('files.refresh'), hint: hint('refresh'), action: () => command('refresh', rows) },
       ],
     };
   }
@@ -236,9 +238,18 @@
       </button>
     </span>
   </div>
-  <form class="pathbar" onsubmit={(e) => (e.preventDefault(), connected && typed && connection.list(typed.trim()))}>
-    <input class="field mono" aria-label={t('files.remote_path')} disabled={!connected} bind:value={typed} />
-  </form>
+  <!-- Suggestions come from listings already made in this session, else
+       one listing of the typed folder after a pause (no request per key). -->
+  <PathInput
+    bind:value={typed}
+    label={t('files.remote_path')}
+    disabled={!connected}
+    separators="/"
+    caseSensitive={true}
+    delay={400}
+    folders={(dir) => connection.peekDirs(dir)}
+    onSubmit={(p) => connected && connection.list(p)}
+  />
   <FileList
     label={t('files.remote')}
     rows={connection.remoteRows}
