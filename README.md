@@ -56,7 +56,9 @@ Get the installer from [**Releases**](https://github.com/yarbb/parom/releases). 
 > [!NOTE]
 > The installer is not code-signed yet, so Windows SmartScreen may say "Windows protected your PC". Click **More info**, then **Run anyway**. Updates are signed with the project's own key, and Parom refuses any update that is not.
 
-Windows 10 and 11 for now; a Linux AppImage is on the way.
+**Windows 10 and 11**: `Parom_X.Y.Z_x64-setup.exe`.
+
+**Linux** (x86-64, experimental): `Parom_X.Y.Z_amd64.AppImage`. Make it executable and run it (`chmod +x Parom_*.AppImage`). Saved passwords go to the Secret Service (GNOME Keyring, KWallet). The AppImage updates itself the same way.
 
 ## Features
 
@@ -86,7 +88,7 @@ Windows 10 and 11 for now; a Linux AppImage is on the way.
 Parom talks to your servers, to GitHub (only when you sign in) and to this repository's releases (to look for updates). Nothing else, no telemetry. Discord Rich Presence is off unless you turn it on, and it never shows server addresses or site names.
 
 ## Building
-GitHub Actions builds everything on `windows-latest`: the FileZilla engine and the `paromd` daemon with MSYS2, then the Tauri app and its installer, with tests against local SFTP, FTP and FTPS servers. No local C++ toolchain is needed.
+GitHub Actions builds everything: on `windows-latest` the FileZilla engine and the `paromd` daemon with MSYS2, then the Tauri app and its installer, with tests against local SFTP, FTP and FTPS servers; on Ubuntu 24.04 the engine's libraries from source, the daemon (same SFTP tests) and the AppImage. No local C++ toolchain is needed.
 
 ```
 daemon/        paromd: C++ wrapper around the FileZilla engine, JSON-RPC over stdio
