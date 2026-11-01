@@ -22,6 +22,8 @@
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import { counts } from '../lib/issues.svelte';
   import SignedOut from './SignedOut.svelte';
+  import ErrorDialog from './ErrorDialog.svelte';
+  import ConflictsDialog from './ConflictsDialog.svelte';
   import SyncBar from './SyncBar.svelte';
   import Splitter from './Splitter.svelte';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
@@ -173,7 +175,11 @@
     {/if}
   </div>
   {#if info?.branch}<span class="mono branch" title={info.upstream ?? ''}>⎇ {info.branch}</span>{/if}
-  {#if repo.dir && info?.remote_url}
+  {#if repo.conflicts}
+    <button class="control conflicts" onclick={() => (repo.conflictsOpen = true)}>
+      {t('conflicts.button', { count: repo.conflicts.files.filter((f) => f.markers > 0).length })}
+    </button>
+  {:else if repo.dir && info?.remote_url}
     <button
       class="control"
       disabled={!!repo.busy}
@@ -183,12 +189,24 @@
       ⟳ {remoteAction.label}
     </button>
   {/if}
-  {#if repo.error || addError}
-    <span class="error status-removed" title={repo.error || addError}>{repo.error || addError}</span>
+  {#if repo.error}
+    <!-- One line here; the whole text in its own window (click), until closed. -->
+    <button class="error status-removed" title={t('error.details')} onclick={() => (repo.errorOpen = true)}>{repo.error}</button>
+    <button class="dismiss" title={t('common.close')} aria-label={t('common.close')} onclick={() => repo.dismissError()}>×</button>
+  {:else if addError}
+    <span class="error status-removed" title={addError}>{addError}</span>
   {/if}
 </div>
 
 {#if showSyncBar}<SyncBar />{/if}
+
+{#if repo.conflictsOpen && repo.conflicts}
+  <ConflictsDialog onClose={() => (repo.conflictsOpen = false)} />
+{/if}
+
+{#if repo.errorOpen && repo.error}
+  <ErrorDialog title={t('error.title')} message={repo.error} onClose={() => (repo.errorOpen = false)} />
+{/if}
 
 {#if context}
   <ContextMenu x={context.x} y={context.y} items={context.items} onClose={() => (context = null)} />
@@ -302,6 +320,40 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 12px;
+  }
+
+  button.conflicts {
+    border-color: color-mix(in srgb, var(--modified) 60%, var(--line-control));
+    color: var(--modified);
+  }
+
+  button.error {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  button.error:hover {
+    text-decoration: underline;
+  }
+
+  .dismiss {
+    flex: none;
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .dismiss:hover {
+    color: var(--text-strong);
   }
 
   .menu,

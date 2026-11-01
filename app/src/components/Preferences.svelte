@@ -425,6 +425,7 @@
             />
           </label>
           <p class="muted">{t(draft.pullMode === 'merge' ? 'prefs.pull_mode.merge_hint' : 'prefs.pull_mode.rebase_hint')}</p>
+          <div class="row"><span></span><Checkbox bind:checked={draft.changesFullPaths} label={t('prefs.changes_full_paths')} /></div>
         {:else if page === 'marker_history'}
           <div class="row"><span></span><Checkbox bind:checked={draft.syncScanEdits} label={t('prefs.scan_edits')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.syncLock} label={t('prefs.lock_server')} /></div>

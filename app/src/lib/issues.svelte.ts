@@ -79,9 +79,30 @@ export function keepUnchanged<T extends { updated_at?: string }>(fresh: T[], old
   });
 }
 
+/**
+ * Issues created in the app, by "slug:kind": GitHub's lists and search can
+ * take a while to show a new issue, so it is kept at the top until they do
+ * (for two minutes at most).
+ */
+const created = new Map<string, { item: Item; at: number }[]>();
+
+export function rememberCreated(slug: string, kind: Kind, item: Item): void {
+  const key = `${slug}:${kind}`;
+  created.set(key, [{ item, at: Date.now() }, ...(created.get(key) ?? []).filter((c) => c.item.number !== item.number)]);
+}
+
+/** Open items as listed, plus the ones created here that the list does not show yet. */
+function withCreated(slug: string, kind: Kind, list: Item[]): Item[] {
+  const key = `${slug}:${kind}`;
+  const waiting = (created.get(key) ?? []).filter((c) => Date.now() - c.at < 120_000 && !list.some((i) => i.number === c.item.number));
+  created.set(key, waiting);
+  return waiting.length ? [...waiting.map((c) => c.item), ...list] : list;
+}
+
 export async function listItems(slug: string, kind: Kind, state: 'open' | 'closed'): Promise<Item[]> {
   const items = await api<Item[]>('GET', `${repoPath(slug)}/${kind}?state=${state}&per_page=100&sort=updated&direction=desc`, undefined, true);
-  return kind === 'issues' ? items.filter((i) => !i.pull_request) : items;
+  const list = kind === 'issues' ? items.filter((i) => !i.pull_request) : items;
+  return state === 'open' ? withCreated(slug, kind, list) : list;
 }
 
 export const getPull = (slug: string, n: number) => api<PullDetail>('GET', `${repoPath(slug)}/pulls/${n}`, undefined, true);
@@ -128,6 +149,8 @@ class Counts {
   issues = $state<number | null>(null);
   pulls = $state<number | null>(null);
   #slug = '';
+  /** After creating one here: at least this many until search catches up (a minute). */
+  #floor: { slug: string; kind: Kind; count: number; until: number } | null = null;
 
   async load(slug: string | null): Promise<void> {
     this.#slug = slug ?? '';
@@ -140,9 +163,27 @@ class Counts {
       countItems(slug, 'pulls', 'open').catch(() => null),
     ]);
     if (slug === this.#slug) {
-      this.issues = issues;
-      this.pulls = pulls;
+      this.issues = this.#atLeast(slug, 'issues', issues);
+      this.pulls = this.#atLeast(slug, 'pulls', pulls);
     }
+  }
+
+  #atLeast(slug: string, kind: Kind, n: number | null): number | null {
+    const f = this.#floor;
+    if (n === null || !f || f.slug !== slug || f.kind !== kind || Date.now() > f.until) {
+      return n;
+    }
+    return Math.max(n, f.count);
+  }
+
+  /** One more open item right away, without waiting for GitHub's search. */
+  created(slug: string, kind: Kind): void {
+    if (slug !== this.#slug) {
+      return;
+    }
+    const count = (this[kind] ?? 0) + 1;
+    this[kind] = count;
+    this.#floor = { slug, kind, count, until: Date.now() + 60_000 };
   }
 }
 

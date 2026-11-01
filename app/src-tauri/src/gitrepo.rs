@@ -3,7 +3,7 @@
 
 use git2::{
     BranchType, Oid, Cred, CredentialType, Delta, DiffOptions, ErrorCode, FetchOptions, ProxyOptions, PushOptions,
-    RemoteCallbacks, Repository, Signature, Status, StatusOptions,
+    Rebase, RemoteCallbacks, Repository, RepositoryState, Signature, Status, StatusOptions,
 };
 use serde::Serialize;
 use std::path::Path;
@@ -238,6 +238,7 @@ pub fn commit(dir: &str, paths: &[String], message: &str, name: Option<&str>, em
         return Err("Select at least one file".into());
     }
     let repo = open(dir)?;
+    busy_check(&repo)?;
     let sig = signature(&repo, name, email)?;
     let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
     // Anything staged elsewhere but not selected here is unstaged first, so
@@ -448,6 +449,7 @@ pub fn fetch(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
 /// Refuses on conflicts or when local uncommitted changes would be
 /// overwritten, leaving everything as it was.
 pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&str>, rebase: bool) -> Result<BranchInfo, String> {
+    busy_check(&open(dir)?)?;
     fetch(dir, token)?;
     let repo = open(dir)?;
     let head = repo.head().map_err(msg)?;
@@ -463,9 +465,9 @@ pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&s
         let sig = signature(&repo, name, email)?;
         let upstream = up.trim_start_matches("refs/remotes/");
         if rebase {
-            rebase_onto(&repo, &branch, target, upstream, &sig)?;
+            rebase_onto(dir, &repo, &branch, target, upstream, &sig)?;
         } else {
-            merge(&repo, &branch, local, target, upstream, &sig)?;
+            merge(&repo, &branch, local, target, &up, &sig)?;
         }
         return branch_info(dir);
     }
@@ -481,10 +483,12 @@ pub fn pull(dir: &str, token: Option<&str>, name: Option<&str>, email: Option<&s
 }
 
 /// Replays the branch's own commits on top of `onto` in memory; only when
-/// every commit applies is the result checked out and the branch moved, so a
-/// conflict leaves everything as it was. Authors are kept; the one pulling
-/// becomes the committer, as with `git pull --rebase`.
-fn rebase_onto(repo: &Repository, branch: &str, onto: Oid, upstream: &str, sig: &Signature<'_>) -> Result<(), String> {
+/// every commit applies is the result checked out and the branch moved.
+/// Authors are kept; the one pulling becomes the committer, as with
+/// `git pull --rebase`. On conflicting lines the rebase starts again in the
+/// working tree and stops at the conflict for the user to resolve
+/// (`conflicts`, `resolve`, `conflict_continue`, `conflict_abort`).
+fn rebase_onto(dir: &str, repo: &Repository, branch: &str, onto: Oid, upstream: &str, sig: &Signature<'_>) -> Result<(), String> {
     let head = repo.head().map_err(msg)?;
     let ours = repo.reference_to_annotated_commit(&head).map_err(msg)?;
     let theirs = repo.find_annotated_commit(onto).map_err(msg)?;
@@ -504,10 +508,18 @@ fn rebase_onto(repo: &Repository, branch: &str, onto: Oid, upstream: &str, sig: 
                 .take(8)
                 .collect();
             let _ = rebase.abort();
-            return Err(format!(
-                "{branch} and {upstream} both changed the same lines in {}. Merge them in git or GitHub Desktop, then come back",
-                files.join(", ")
-            ));
+            drop(rebase);
+            // A rebase in the working tree needs a clean one (new files aside).
+            let own = local_edits(dir)?;
+            if !own.is_empty() {
+                return Err(format!(
+                    "{branch} and {upstream} both changed the same lines in {}. To resolve that here, first commit or discard your uncommitted changes ({}), then pull again",
+                    files.join(", "),
+                    own.join(", ")
+                ));
+            }
+            let mut disk = repo.rebase(Some(&ours), Some(&theirs), None, None).map_err(msg)?;
+            return replay(repo, &mut disk, sig);
         }
         let original = repo.find_commit(op.id()).map_err(msg)?;
         let author = original.author();
@@ -536,23 +548,28 @@ fn rebase_onto(repo: &Repository, branch: &str, onto: Oid, upstream: &str, sig: 
 }
 
 /// Merges `theirs` into the current branch without touching anything when
-/// it cannot finish: conflicts, or local edits in the way of the result.
-fn merge(repo: &Repository, branch: &str, ours: Oid, theirs: Oid, upstream: &str, sig: &Signature<'_>) -> Result<(), String> {
+/// local edits are in the way of the result. On conflicting lines the merge
+/// is written to the working tree (conflict markers, MERGE_HEAD) for the
+/// user to resolve.
+fn merge(repo: &Repository, branch: &str, ours: Oid, theirs: Oid, up_ref: &str, sig: &Signature<'_>) -> Result<(), String> {
+    let upstream = up_ref.trim_start_matches("refs/remotes/");
     let our_commit = repo.find_commit(ours).map_err(msg)?;
     let their_commit = repo.find_commit(theirs).map_err(msg)?;
     let mut index = repo.merge_commits(&our_commit, &their_commit, None).map_err(msg)?;
     if index.has_conflicts() {
-        let files: Vec<String> = index
-            .conflicts()
-            .map_err(msg)?
-            .filter_map(Result::ok)
-            .filter_map(|c| c.our.or(c.their).map(|e| String::from_utf8_lossy(&e.path).into_owned()))
-            .take(8)
-            .collect();
-        return Err(format!(
-            "{branch} and {upstream} both changed the same lines in {}. Merge them in git or GitHub Desktop, then come back",
-            files.join(", ")
-        ));
+        let reference = repo.find_reference(up_ref).map_err(msg)?;
+        let annotated = repo.reference_to_annotated_commit(&reference).map_err(msg)?;
+        let mut checkout = git2::build::CheckoutBuilder::new();
+        checkout.safe().allow_conflicts(true).conflict_style_merge(true);
+        // libgit2 refuses before writing anything when uncommitted edits are in the way.
+        return repo.merge(&[&annotated], None, Some(&mut checkout)).map_err(|e| {
+            let _ = repo.cleanup_state();
+            if e.code() == ErrorCode::Conflict {
+                format!("{branch} and {upstream} both changed the same lines, and your uncommitted changes are in the way. Commit or discard them first, then pull again")
+            } else {
+                msg(e)
+            }
+        });
     }
     let tree = repo.find_tree(index.write_tree_to(repo).map_err(msg)?).map_err(msg)?;
     // The working tree first: a safe checkout stops before changing anything
@@ -566,10 +583,280 @@ fn merge(repo: &Repository, branch: &str, ours: Oid, theirs: Oid, upstream: &str
     Ok(())
 }
 
+/// Uncommitted changes to tracked files (new files do not count).
+fn local_edits(dir: &str) -> Result<Vec<String>, String> {
+    Ok(changes(dir)?.into_iter().filter(|c| c.status != "new").map(|c| c.path).take(8).collect())
+}
+
+/// Refuses commits and pulls while a merge or rebase waits for its conflicts.
+fn busy_check(repo: &Repository) -> Result<(), String> {
+    match repo.state() {
+        RepositoryState::Clean => Ok(()),
+        RepositoryState::Merge => Err("A merge is waiting for its conflicts to be resolved. Finish or abort it first".into()),
+        RepositoryState::RebaseMerge => Err("A rebase is waiting for its conflicts to be resolved. Finish or abort it first".into()),
+        _ => Err("Another git operation is in progress in this repository; finish it in git first".into()),
+    }
+}
+
+/// Commits the rebase's current step, keeping the original author; a step
+/// with nothing left to apply (already upstream) is skipped.
+fn commit_step(repo: &Repository, rebase: &mut Rebase<'_>, id: Oid, sig: &Signature<'_>) -> Result<(), String> {
+    let original = repo.find_commit(id).map_err(msg)?;
+    let author = original.author();
+    let committed = rebase.commit(Some(&author), sig, None);
+    match committed {
+        Ok(_) => Ok(()),
+        Err(e) if e.code() == ErrorCode::Applied => Ok(()),
+        Err(e) => Err(msg(e)),
+    }
+}
+
+/// Applies a rebase's remaining steps in the working tree: stops at the
+/// first conflict (left for the user), or finishes and moves the branch.
+fn replay(repo: &Repository, rebase: &mut Rebase<'_>, sig: &Signature<'_>) -> Result<(), String> {
+    while let Some(op) = rebase.next() {
+        let id = op.map_err(msg)?.id();
+        let mut index = repo.index().map_err(msg)?;
+        index.read(true).map_err(msg)?;
+        if index.has_conflicts() {
+            return Ok(());
+        }
+        commit_step(repo, rebase, id, sig)?;
+    }
+    rebase.finish(Some(sig)).map_err(msg)
+}
+
+#[derive(Serialize)]
+pub struct ConflictFile {
+    path: String,
+    /// Conflict blocks ("<<<<<<<" lines) still in the file; 0 = resolved.
+    markers: usize,
+    /// The user's side deleted the file.
+    mine_deleted: bool,
+    /// The other side (the remote) deleted the file.
+    theirs_deleted: bool,
+}
+
+#[derive(Serialize)]
+pub struct Conflicts {
+    /// "merge" or "rebase".
+    op: &'static str,
+    branch: Option<String>,
+    /// What the branch is being joined with, e.g. "origin/main".
+    upstream: Option<String>,
+    files: Vec<ConflictFile>,
+    /// Rebase: the summary of the commit being replayed, and its place among all of them.
+    commit: Option<String>,
+    step: usize,
+    steps: usize,
+}
+
+fn markers_in(path: &Path) -> usize {
+    std::fs::read(path)
+        .map(|b| b.split(|c| *c == b'\n').filter(|l| l.starts_with(b"<<<<<<< ")).count())
+        .unwrap_or(0)
+}
+
+/// Paths of the index's conflicted files.
+fn conflicted_paths(index: &git2::Index) -> Result<Vec<String>, String> {
+    Ok(index
+        .conflicts()
+        .map_err(msg)?
+        .filter_map(Result::ok)
+        .filter_map(|c| c.our.or(c.their).or(c.ancestor).map(|e| String::from_utf8_lossy(&e.path).into_owned()))
+        .collect())
+}
+
+/// The merge or rebase waiting for its conflicts to be resolved, if any.
+pub fn conflicts(dir: &str) -> Result<Option<Conflicts>, String> {
+    let repo = open(dir)?;
+    let rebasing = match repo.state() {
+        RepositoryState::Merge => false,
+        RepositoryState::RebaseMerge => true,
+        _ => return Ok(None),
+    };
+    let workdir = repo.workdir().ok_or("Bare repositories are not supported")?.to_path_buf();
+    let mut index = repo.index().map_err(msg)?;
+    index.read(true).map_err(msg)?;
+    let mut files = Vec::new();
+    for c in index.conflicts().map_err(msg)?.filter_map(Result::ok) {
+        let Some(path) = [&c.our, &c.their, &c.ancestor].into_iter().flatten().next().map(|e| String::from_utf8_lossy(&e.path).into_owned())
+        else {
+            continue;
+        };
+        // In a rebase "ours" is the remote's side and "theirs" the commit being replayed.
+        let (mine, theirs) = if rebasing { (&c.their, &c.our) } else { (&c.our, &c.their) };
+        files.push(ConflictFile {
+            markers: markers_in(&workdir.join(&path)),
+            mine_deleted: mine.is_none(),
+            theirs_deleted: theirs.is_none(),
+            path,
+        });
+    }
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    let (mut branch, mut commit, mut step, mut steps) = (None, None, 0, 0);
+    if rebasing {
+        if let Ok(mut rebase) = repo.open_rebase(None) {
+            branch = rebase.orig_head_name().ok().flatten().map(|n| n.trim_start_matches("refs/heads/").to_owned());
+            steps = rebase.len();
+            if let Some(cur) = rebase.operation_current() {
+                step = cur + 1;
+                let id = rebase.nth(cur).map(|o| o.id());
+                commit = id.and_then(|id| repo.find_commit(id).ok()).and_then(|c| c.summary().ok().flatten().map(str::to_owned));
+            }
+        }
+    } else {
+        branch = repo.head().ok().and_then(|h| h.shorthand().ok().map(str::to_owned));
+    }
+    let upstream = branch.as_deref().and_then(|b| upstream_ref(&repo, b)).map(|u| u.trim_start_matches("refs/remotes/").to_owned());
+    Ok(Some(Conflicts { op: if rebasing { "rebase" } else { "merge" }, branch, upstream, files, commit, step, steps }))
+}
+
+/// Resolves one conflicted file with one side's whole version ("mine" or
+/// "theirs"); a side that deleted the file deletes it. Staged on "Continue".
+pub fn resolve(dir: &str, path: &str, side: &str) -> Result<(), String> {
+    let repo = open(dir)?;
+    let rebasing = match repo.state() {
+        RepositoryState::Merge => false,
+        RepositoryState::RebaseMerge => true,
+        _ => return Err("No merge or rebase is waiting for this file".into()),
+    };
+    let mut index = repo.index().map_err(msg)?;
+    index.read(true).map_err(msg)?;
+    let c = index
+        .conflicts()
+        .map_err(msg)?
+        .filter_map(Result::ok)
+        .find(|c| [&c.our, &c.their, &c.ancestor].into_iter().flatten().any(|e| e.path == path.as_bytes()))
+        .ok_or_else(|| format!("{path} has no conflict any more"))?;
+    // In a rebase the index's "ours" stage is the remote's side.
+    let entry = if (side == "mine") != rebasing { c.our } else { c.their };
+    let file = repo.workdir().ok_or("Bare repositories are not supported")?.join(path);
+    match entry {
+        Some(e) => {
+            let blob = repo.find_blob(e.id).map_err(msg)?;
+            if let Some(parent) = file.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| format!("{path}: {e}"))?;
+            }
+            std::fs::write(&file, blob.content()).map_err(|e| format!("{path}: {e}"))?;
+        }
+        None if file.exists() => std::fs::remove_file(&file).map_err(|e| format!("{path}: {e}"))?,
+        None => {}
+    }
+    Ok(())
+}
+
+/// Stages every conflicted file as it is now; refuses while one still has
+/// conflict markers.
+fn stage_resolved(repo: &Repository) -> Result<(), String> {
+    let workdir = repo.workdir().ok_or("Bare repositories are not supported")?.to_path_buf();
+    let mut index = repo.index().map_err(msg)?;
+    index.read(true).map_err(msg)?;
+    let paths = conflicted_paths(&index)?;
+    let left: Vec<&str> = paths.iter().filter(|p| markers_in(&workdir.join(p)) > 0).map(String::as_str).collect();
+    if !left.is_empty() {
+        return Err(format!("These files still have conflict markers: {}", left.join(", ")));
+    }
+    for p in &paths {
+        if workdir.join(p).exists() {
+            index.add_path(Path::new(p)).map_err(|e| format!("{p}: {}", e.message()))?;
+        } else {
+            index.remove_path(Path::new(p)).map_err(|e| format!("{p}: {}", e.message()))?;
+        }
+    }
+    index.write().map_err(msg)
+}
+
+/// "Continue": commits the resolved merge, or the rebase's current step and
+/// the steps after it (stopping again at the next conflict).
+pub fn conflict_continue(dir: &str, name: Option<&str>, email: Option<&str>) -> Result<(), String> {
+    let repo = open(dir)?;
+    let sig = signature(&repo, name, email)?;
+    match repo.state() {
+        RepositoryState::Merge => {
+            stage_resolved(&repo)?;
+            let head = repo.head().map_err(msg)?;
+            let branch = head.shorthand().map_err(msg)?.to_owned();
+            let mut parents = vec![head.peel_to_commit().map_err(msg)?];
+            let merge_head = std::fs::read_to_string(repo.path().join("MERGE_HEAD")).map_err(|e| format!("MERGE_HEAD: {e}"))?;
+            for line in merge_head.lines().map(str::trim).filter(|l| !l.is_empty()) {
+                let id = Oid::from_str(line).map_err(msg)?;
+                parents.push(repo.find_commit(id).map_err(msg)?);
+            }
+            let message = match upstream_ref(&repo, &branch) {
+                Some(u) => format!("Merge {} into {branch}", u.trim_start_matches("refs/remotes/")),
+                None => repo.message().unwrap_or_else(|_| "Merge".into()).trim().to_owned(),
+            };
+            let mut index = repo.index().map_err(msg)?;
+            let tree = repo.find_tree(index.write_tree().map_err(msg)?).map_err(msg)?;
+            let refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
+            repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &refs).map_err(msg)?;
+            repo.cleanup_state().map_err(msg)
+        }
+        RepositoryState::RebaseMerge => {
+            stage_resolved(&repo)?;
+            let mut rebase = repo.open_rebase(None).map_err(msg)?;
+            let current = rebase.operation_current().and_then(|cur| rebase.nth(cur).map(|o| o.id()));
+            if let Some(id) = current {
+                commit_step(&repo, &mut rebase, id, &sig)?;
+            }
+            replay(&repo, &mut rebase, &sig)
+        }
+        _ => Err("No merge or rebase is waiting".into()),
+    }
+}
+
+/// "Abort": everything back as before the pull. A rebase resets to where the
+/// branch was (it only starts from a clean working tree); a merge puts back
+/// only the files it touched, so other uncommitted changes stay.
+pub fn conflict_abort(dir: &str) -> Result<(), String> {
+    let repo = open(dir)?;
+    match repo.state() {
+        RepositoryState::RebaseMerge => repo.open_rebase(None).and_then(|mut r| r.abort()).map_err(msg),
+        RepositoryState::Merge => {
+            let head = repo.head().map_err(msg)?.peel_to_commit().map_err(msg)?;
+            let tree = head.tree().map_err(msg)?;
+            let mut index = repo.index().map_err(msg)?;
+            index.read(true).map_err(msg)?;
+            let mut paths = conflicted_paths(&index)?;
+            let staged = repo.diff_tree_to_index(Some(&tree), Some(&index), None).map_err(msg)?;
+            for d in staged.deltas() {
+                if let Some(p) = d.new_file().path().or(d.old_file().path()) {
+                    paths.push(p.to_string_lossy().replace('\\', "/"));
+                }
+            }
+            paths.sort();
+            paths.dedup();
+            if !paths.is_empty() {
+                let workdir = repo.workdir().ok_or("Bare repositories are not supported")?.to_path_buf();
+                repo.reset_default(Some(head.as_object()), paths.iter().map(String::as_str)).map_err(msg)?;
+                let mut co = git2::build::CheckoutBuilder::new();
+                co.force().disable_pathspec_match(true);
+                let mut known = 0;
+                for p in &paths {
+                    if tree.get_path(Path::new(p)).is_ok() {
+                        co.path(p.as_str());
+                        known += 1;
+                    } else {
+                        // Added by the merge: it was not here before.
+                        let _ = std::fs::remove_file(workdir.join(p));
+                    }
+                }
+                if known > 0 {
+                    repo.checkout_head(Some(&mut co)).map_err(msg)?;
+                }
+            }
+            repo.cleanup_state().map_err(msg)
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Pushes the current branch to its remote and sets the upstream the first time.
 /// Fetches first: when the remote has commits this branch lacks, it says so
 /// (pull first) instead of letting the server reject the push.
 pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
+    busy_check(&open(dir)?)?;
     let before = fetch(dir, token)?;
     if before.behind > 0 {
         return Err(format!(
@@ -615,4 +902,134 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         }
     }
     branch_info(dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn sig() -> Signature<'static> {
+        Signature::now("Test", "test@example.com").unwrap()
+    }
+
+    fn temp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("parom-test-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn commit_file(dir: &Path, file: &str, text: &str, message: &str) {
+        fs::write(dir.join(file), text).unwrap();
+        let repo = Repository::open(dir).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file)).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig(), &sig(), message, &tree, &parents).unwrap();
+    }
+
+    /// "origin" and a clone that both changed the middle line of a.txt.
+    fn diverged(name: &str) -> (PathBuf, String) {
+        let root = temp(name);
+        let origin = root.join("origin");
+        fs::create_dir_all(&origin).unwrap();
+        Repository::init(&origin).unwrap();
+        commit_file(&origin, "a.txt", "one\ntwo\nthree\n", "start");
+        let local = root.join("local");
+        Repository::clone(origin.to_str().unwrap(), &local).unwrap();
+        commit_file(&origin, "a.txt", "one\nTHEIRS\nthree\n", "theirs");
+        commit_file(&local, "a.txt", "one\nMINE\nthree\n", "mine");
+        let dir = local.to_str().unwrap().to_owned();
+        (root, dir)
+    }
+
+    fn read(dir: &str, file: &str) -> String {
+        fs::read_to_string(Path::new(dir).join(file)).unwrap().replace("\r\n", "\n")
+    }
+
+    #[test]
+    fn rebase_conflict_resolved_with_mine() {
+        let (root, dir) = diverged("rebase");
+        pull(&dir, None, Some("Test"), Some("test@example.com"), true).unwrap();
+        let c = conflicts(&dir).unwrap().expect("a rebase waits for the conflict");
+        assert_eq!(c.op, "rebase");
+        assert!(c.branch.is_some() && c.upstream.is_some(), "branch and upstream named");
+        assert_eq!((c.step, c.steps), (1, 1));
+        assert_eq!(c.commit.as_deref(), Some("mine"));
+        assert_eq!(c.files.len(), 1);
+        assert_eq!(c.files[0].path, "a.txt");
+        assert_eq!(c.files[0].markers, 1);
+        assert!(commit(&dir, &["a.txt".into()], "x", Some("Test"), Some("test@example.com")).is_err());
+        assert!(conflict_continue(&dir, Some("Test"), Some("test@example.com")).is_err(), "markers left");
+        resolve(&dir, "a.txt", "mine").unwrap();
+        assert_eq!(read(&dir, "a.txt"), "one\nMINE\nthree\n");
+        assert_eq!(conflicts(&dir).unwrap().unwrap().files[0].markers, 0);
+        conflict_continue(&dir, Some("Test"), Some("test@example.com")).unwrap();
+        assert!(conflicts(&dir).unwrap().is_none());
+        let info = branch_info(&dir).unwrap();
+        assert!(info.branch.is_some(), "back on the branch");
+        assert_eq!((info.ahead, info.behind), (1, 0), "one line of history: mine on top of theirs");
+        let repo = Repository::open(&dir).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(head.parent_count(), 1);
+        assert_eq!(head.summary().unwrap(), Some("mine"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_conflict_resolved_with_theirs() {
+        let (root, dir) = diverged("merge");
+        pull(&dir, None, Some("Test"), Some("test@example.com"), false).unwrap();
+        let c = conflicts(&dir).unwrap().expect("a merge waits for the conflict");
+        assert_eq!(c.op, "merge");
+        assert!(c.upstream.as_deref().is_some_and(|u| u.starts_with("origin/")));
+        assert_eq!(c.files.len(), 1);
+        resolve(&dir, "a.txt", "theirs").unwrap();
+        assert_eq!(read(&dir, "a.txt"), "one\nTHEIRS\nthree\n");
+        conflict_continue(&dir, Some("Test"), Some("test@example.com")).unwrap();
+        assert!(conflicts(&dir).unwrap().is_none());
+        let repo = Repository::open(&dir).unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(head.parent_count(), 2);
+        assert!(head.summary().unwrap().unwrap().starts_with("Merge "));
+        assert_eq!(branch_info(&dir).unwrap().behind, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn abort_puts_everything_back() {
+        for rebase in [true, false] {
+            let (root, dir) = diverged(if rebase { "abort-rebase" } else { "abort-merge" });
+            let before = branch_info(&dir).unwrap().head;
+            // An unrelated new file must survive the abort.
+            fs::write(Path::new(&dir).join("notes.txt"), "keep").unwrap();
+            pull(&dir, None, Some("Test"), Some("test@example.com"), rebase).unwrap();
+            assert!(conflicts(&dir).unwrap().is_some());
+            conflict_abort(&dir).unwrap();
+            assert!(conflicts(&dir).unwrap().is_none());
+            let after = branch_info(&dir).unwrap();
+            assert_eq!(after.head, before);
+            assert!(after.branch.is_some());
+            assert_eq!(read(&dir, "a.txt"), "one\nMINE\nthree\n");
+            assert_eq!(read(&dir, "notes.txt"), "keep");
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn rebase_conflict_needs_a_clean_tree() {
+        let (root, dir) = diverged("dirty");
+        commit_file(Path::new(&dir), "b.txt", "b\n", "b");
+        fs::write(Path::new(&dir).join("b.txt"), "edited\n").unwrap();
+        let e = pull(&dir, None, Some("Test"), Some("test@example.com"), true).err().expect("refused");
+        assert!(e.contains("b.txt"), "{e}");
+        assert!(conflicts(&dir).unwrap().is_none());
+        assert_eq!(read(&dir, "b.txt"), "edited\n");
+        let _ = fs::remove_dir_all(root);
+    }
 }

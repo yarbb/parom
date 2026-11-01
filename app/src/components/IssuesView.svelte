@@ -19,6 +19,7 @@
     detailCache,
     keepUnchanged,
     listCache,
+    rememberCreated,
     getPull,
     listComments,
     listItems,
@@ -58,11 +59,19 @@
   let confirmMerge = $state(false);
   let creating = $state(false);
 
-  async function created(issue: Item) {
+  /** A new issue shows at the top and opens at once; GitHub's own lists catch up later. */
+  function created(issue: Item) {
+    rememberCreated(slug, kind, issue);
+    const key = `${slug}:${kind}:open`;
+    const list = [issue, ...(listCache.get(key) ?? []).filter((i) => i.number !== issue.number)];
+    listCache.set(key, list);
+    counts.created(slug, kind);
+    query = '';
     filter = 'open';
-    await load();
+    items = list;
     selected = issue.number;
-    void counts.load(slug);
+    // A quiet reload a little later, when GitHub lists it too.
+    setTimeout(refreshQuietly, 5000);
   }
 
   const ms = (iso: string) => Date.parse(iso);

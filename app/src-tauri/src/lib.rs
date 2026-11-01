@@ -398,6 +398,26 @@ async fn repo_commit_files(dir: String, rev: String) -> Result<Vec<gitrepo::Comm
 
 /// fetch, pull (fast-forward only) or push origin, with the GitHub token.
 #[tauri::command]
+async fn repo_conflicts(dir: String) -> Result<Option<gitrepo::Conflicts>, String> {
+    blocking(move || gitrepo::conflicts(&dir)).await
+}
+
+#[tauri::command]
+async fn repo_resolve(dir: String, path: String, side: String) -> Result<(), String> {
+    blocking(move || gitrepo::resolve(&dir, &path, &side)).await
+}
+
+#[tauri::command]
+async fn repo_conflict_continue(dir: String, name: Option<String>, email: Option<String>) -> Result<(), String> {
+    blocking(move || gitrepo::conflict_continue(&dir, name.as_deref(), email.as_deref())).await
+}
+
+#[tauri::command]
+async fn repo_conflict_abort(dir: String) -> Result<(), String> {
+    blocking(move || gitrepo::conflict_abort(&dir)).await
+}
+
+#[tauri::command]
 async fn repo_remote(
     app: tauri::AppHandle,
     dir: String,
@@ -521,6 +541,10 @@ pub fn run() {
             daemon_call,
             instance_beat,
             repo_discard,
+            repo_conflicts,
+            repo_resolve,
+            repo_conflict_continue,
+            repo_conflict_abort,
             repo_watch,
             snap_layouts,
             discord_presence,
