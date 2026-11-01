@@ -153,6 +153,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: VITE_BUILD="${GITHUB_SHA::7}" npx tauri build --bundles nsis
+      # Rust unit tests (git: pull conflicts in throwaway repositories); after
+      # the build, which they need (the frontend) and share compiled crates with.
+      - name: Rust tests
+        working-directory: app/src-tauri
+        run: cargo test --release --lib
       - name: Install silently and self-test
         shell: pwsh
         run: |
