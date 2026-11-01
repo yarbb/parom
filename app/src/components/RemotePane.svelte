@@ -26,6 +26,9 @@
   import { twinColor, twins } from '../lib/twins.svelte';
   import { fileOps } from '../lib/fileops.svelte';
   import { onMount } from 'svelte';
+  import FolderPreview from './FolderPreview.svelte';
+  import { ignoreItems } from '../lib/ignoremenu.svelte';
+  import { relativeTo } from '../lib/browsing';
 
   interface Props {
     onDownload: (items: { name: string; remotePath: string; dir: boolean }[]) => void;
@@ -41,6 +44,20 @@
   $effect(() => {
     typed = connection.remotePath;
   });
+
+  /** The folder clicked last, for the preview under the list; kept while files are clicked. */
+  let previewPath = $state<string | null>(null);
+  $effect(() => {
+    if (selected.length === 1 && selected[0].dir) {
+      previewPath = remoteJoin(connection.remotePath, selected[0].name);
+    }
+  });
+  $effect(() => {
+    if (!connected) {
+      previewPath = null;
+    }
+  });
+  let paneHeight = $state(0);
 
   function download(files: FileRow[]) {
     onDownload(files.map((f) => ({ name: f.name, remotePath: connection.remotePath, dir: f.dir })));
@@ -59,6 +76,7 @@
     const files = rows.filter((r) => !r.dir);
     const size = files.reduce((n, r) => n + Math.max(0, r.size), 0);
     prepared = null;
+    paneDrag.prefetch = null;
     if (!files.length || files.length !== rows.length || size > 200 * 1024 * 1024) {
       return;
     }
@@ -68,12 +86,13 @@
       const sep = dir.includes('\\') ? '\\' : '/';
       const done = await Promise.all(
         files.map((f) =>
-          connection.transfer(true, f.name, { remote_path: remotePath, remote_name: f.name, local: localJoin(dir, f.name, sep), exists: 'overwrite' }),
+          connection.transfer(true, f.name, { remote_path: remotePath, remote_name: f.name, local: localJoin(dir, f.name, sep), exists: 'overwrite' }, false, true),
         ),
       );
       return done.every((tr) => tr.state === 'done') ? files.map((f) => localJoin(dir, f.name, sep)) : null;
     })();
     prepared = { names: files.map((f) => f.name), ready };
+    paneDrag.prefetch = { remotePath, names: prepared.names, ready };
   }
 
   async function finishDragOut(rows: FileRow[]) {
@@ -151,6 +170,19 @@
     }),
   );
 
+  /** .gitignore / .parom-ignore items for rows inside the site's folder, when the site has a repository. */
+  function ignoreFor(rows: FileRow[]): MenuItem[] {
+    const repoDir = connection.site?.localDir.trim();
+    const folder = repoDir && connection.siteRoot ? relativeTo(connection.siteRoot, connection.remotePath) : null;
+    if (!repoDir || folder === null) {
+      return [];
+    }
+    return ignoreItems(
+      repoDir,
+      rows.map((r) => ({ name: r.name, dir: r.dir, rel: folder ? `${folder}/${r.name}` : r.name })),
+    );
+  }
+
   function openMenu(e: MouseEvent, rows: FileRow[]) {
     if (!connected) {
       return;
@@ -183,6 +215,7 @@
         },
         { label: t('fileop.copy_path'), action: () => copyPath(rows) },
         ...(e.shiftKey ? [{ label: t('fileop.copy_url'), action: () => copyUrl(rows) }] : []),
+        ...ignoreFor(rows),
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: hint('refresh'), action: () => command('refresh', rows) },
       ],
@@ -214,6 +247,7 @@
 <section
   class="pane"
   data-pane="server"
+  bind:clientHeight={paneHeight}
   onpointerdowncapture={() => (fileOps.active = 'server')}
   onfocusin={() => (fileOps.active = 'server')}
   class:drop-target={paneDrag.over === 'server' && (paneDrag.active ? paneDrag.active.from === 'local' : paneDrag.external) && connected}
@@ -271,6 +305,19 @@
     onContextMenu={openMenu}
     onCommand={command}
   />
+  {#if prefs.value.serverPreview && connected}
+    <FolderPreview
+      path={previewPath}
+      current={connection.remotePath}
+      list={(p, fresh) => connection.peek(p, fresh)}
+      join={remoteJoin}
+      onOpen={(p) => connection.list(p)}
+      onActivate={(rows, dir) => onDownload(rows.map((r) => ({ name: r.name, remotePath: dir, dir: r.dir })))}
+      unscanned={(p) => !connection.listed.has(p)}
+      pref="serverPreview"
+      max={paneHeight - 200}
+    />
+  {/if}
 </section>
 
 {#if menu}

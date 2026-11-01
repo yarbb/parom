@@ -26,7 +26,7 @@
   import { fly } from 'svelte/transition';
   import { ms } from '../lib/motion';
   import { listLocal, localTrash } from '../lib/local';
-  import { isTauri } from '@tauri-apps/api/core';
+  import { invoke, isTauri } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { joinRelative, normalizePath, relativeTo } from '../lib/browsing';
   import { canSyncBrowse } from '../lib/commands.svelte';
@@ -363,6 +363,38 @@
     upload(items);
   }
 
+  /** Files dropped from the system onto the local pane, waiting for a "name exists" answer. */
+  let localDrop = $state<{ paths: string[]; dir: string; clashes: string[] } | null>(null);
+
+  /** Files or folders dropped from the system file manager onto the local pane: copied into its folder. */
+  async function dropLocal(paths: string[]) {
+    const dir = localPath;
+    if (!dir) {
+      return;
+    }
+    const nameOf = (p: string) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || p;
+    const there = new Set((await listLocal(dir).catch(() => null))?.rows.map((r) => r.name) ?? []);
+    const inPlace = (p: string) => normalizePath(p.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '')) === normalizePath(dir);
+    const clashes = paths.filter((p) => !inPlace(p) && there.has(nameOf(p))).map(nameOf);
+    if (clashes.length) {
+      localDrop = { paths, dir, clashes };
+    } else {
+      void copyLocal(paths, dir, 'skip');
+    }
+  }
+
+  async function copyLocal(paths: string[], dir: string, exists: 'overwrite' | 'skip' | 'rename') {
+    localDrop = null;
+    connection.message = { level: 'status', text: t('drop.copying', { count: paths.length }) };
+    try {
+      const count = await invoke<number>('local_copy', { paths, dir, exists });
+      connection.message = { level: 'status', text: t('drop.copied', { count }) };
+    } catch (e) {
+      connection.message = { level: 'error', text: String(e) };
+    }
+    localPane?.refresh();
+  }
+
   onMount(() => {
     // Rows dragged from one pane to the other transfer like the buttons do.
     paneDrag.onDrop = (from, rows, move) => {
@@ -378,7 +410,7 @@
         if (move) {
           void moveDown(items);
         } else {
-          download(items);
+          void downloadDropped(items);
         }
       }
     };
@@ -398,6 +430,8 @@
             paneDrag.over = null;
             if (side === 'server' && connected && visible) {
               void uploadPaths(p.paths);
+            } else if (side === 'local' && visible) {
+              void dropLocal(p.paths);
             }
           } else {
             paneDrag.external = false;
@@ -410,7 +444,7 @@
     edits.start();
     connection.onTransferDone = (tr) => {
       // Refresh once a batch (e.g. a folder) is through, not after every file.
-      if (tr.state !== 'done' || connection.transfers.some((x) => x.state === 'running')) {
+      if (tr.hidden || tr.state !== 'done' || connection.transfers.some((x) => x.state === 'running')) {
         return;
       }
       if (tr.download) {
@@ -460,6 +494,30 @@
         void connection.transfer(false, f.name, { local: f.local, remote_path: target, remote_name: f.name }, true);
       }
     }
+  }
+
+  /**
+   * Server rows dropped on the local pane: files the drag already fetched (for
+   * dragging out of the window) are copied from the temp folder instead of
+   * being downloaded again, unless a name is taken (the download asks then).
+   */
+  async function downloadDropped(items: { name: string; remotePath: string; dir: boolean }[]) {
+    const pre = paneDrag.prefetch;
+    const target = localPath;
+    const fits =
+      pre && items.length && items.every((f) => !f.dir && f.remotePath === pre.remotePath && pre.names.includes(f.name));
+    if (!fits || !target) {
+      download(items);
+      return;
+    }
+    const there = new Set((await listLocal(target).catch(() => null))?.rows.map((r) => r.name) ?? items.map((f) => f.name));
+    const paths = items.some((f) => there.has(f.name)) ? null : await pre.ready;
+    if (!paths) {
+      download(items);
+      return;
+    }
+    const wanted = paths.filter((p) => items.some((f) => p.replace(/^.*[\\/]/, '') === f.name));
+    await copyLocal(wanted, target, 'skip');
   }
 
   function download(items: { name: string; remotePath: string; dir: boolean }[]) {
@@ -610,6 +668,22 @@
   </Modal>
 {/if}
 
+{#if localDrop}
+  {@const d = localDrop}
+  <Modal title={t('drop.exists.title')} onCancel={() => (localDrop = null)}>
+    <p>{t('drop.exists.body', { count: d.clashes.length })}</p>
+    <ul class="resume-list mono">
+      {#each d.clashes.slice(0, 6) as name, n (n)}<li>{name}</li>{/each}
+      {#if d.clashes.length > 6}<li class="muted">{t('changes.and_more', { count: d.clashes.length - 6 })}</li>{/if}
+    </ul>
+    {#snippet actions()}
+      <button class="control" onclick={() => (localDrop = null)}>{t('common.cancel')}</button>
+      <button class="control" onclick={() => copyLocal(d.paths, d.dir, 'skip')}>{t('drop.exists.skip')}</button>
+      <button class="control" onclick={() => copyLocal(d.paths, d.dir, 'rename')}>{t('drop.exists.rename')}</button>
+      <button class="control primary" onclick={() => copyLocal(d.paths, d.dir, 'overwrite')}>{t('drop.exists.overwrite')}</button>
+    {/snippet}
+  </Modal>
+{/if}
 {#if sitePrompt}
   {@const s = sitePrompt}
   <Modal title={t('dialog.password.title')} onCancel={() => (sitePrompt = null)}>

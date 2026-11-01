@@ -24,6 +24,9 @@ export interface Prefs {
   forwardSlashes: boolean;
   /** Tint folders grey that exist with the same name in both panes. */
   markTwins: boolean;
+  /** A panel under each list shows the folder clicked last (local, server). */
+  localPreview: boolean;
+  serverPreview: boolean;
   /** The first matching folders asked whether to tint them (and to turn on synchronized browsing). */
   twinsAsked: boolean;
   /** Warn when another app window is connected to the same server. */
@@ -90,6 +93,7 @@ export interface Prefs {
   /** Heights in pixels. */
   logHeight: number;
   queueHeight: number;
+  previewHeight: number;
   /** Show the queue while the log is open (otherwise a status bar button opens it). */
   queueWithLog: boolean;
   /** Folder colour labels by folder key (lib/labels.ts). */
@@ -113,6 +117,8 @@ export const defaultPrefs: Prefs = {
   showHidden: true,
   forwardSlashes: false,
   markTwins: false,
+  localPreview: true,
+  serverPreview: true,
   twinsAsked: false,
   warnSharedServer: true,
   snapLayouts: true,
@@ -157,6 +163,7 @@ export const defaultPrefs: Prefs = {
   paneSplit: 50,
   logHeight: 190,
   queueHeight: 160,
+  previewHeight: 180,
   queueWithLog: false,
 };
 

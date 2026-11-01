@@ -330,6 +330,8 @@
           <div class="row"><span></span><Checkbox bind:checked={draft.showHidden} label={t('prefs.show_hidden')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.forwardSlashes} label={t('prefs.forward_slashes')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.markTwins} label={t('prefs.mark_twins')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.localPreview} label={t('prefs.local_preview')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.serverPreview} label={t('prefs.server_preview')} /></div>
           <div class="row"><span></span><Checkbox bind:checked={draft.warnSharedServer} label={t('prefs.warn_shared')} /></div>
         {:else if page === 'file_editing'}
           <div class="row"><span>{t('prefs.default_editor')}</span>

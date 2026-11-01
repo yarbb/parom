@@ -37,6 +37,8 @@ export interface Transfer {
   error?: string;
   /** Daemon session it was handed to (simultaneous transfers use extra sessions). */
   session?: number;
+  /** Not in the queue panel (files fetched for dragging out of the window). */
+  hidden?: boolean;
 }
 
 function isCanceled(e: unknown): boolean {
@@ -96,6 +98,8 @@ class Connection {
 
   requests = $state<EngineRequest[]>([]);
   transfers = $state<Transfer[]>([]);
+  /** Hidden transfers in progress (not in the queue panel). */
+  #background: Transfer[] = [];
   /** The latest engine status line or error, for the status bar. */
   message = $state<{ level: string; text: string } | null>(null);
   /** Recent engine log lines. The array itself is not reactive (it changes
@@ -192,7 +196,7 @@ class Connection {
         break;
       }
       case 'transfer.progress': {
-        const tr = this.transfers.find((x) => x.id === p.id);
+        const tr = this.transfers.find((x) => x.id === p.id) ?? this.#background.find((x) => x.id === p.id);
         if (tr && tr.state === 'running') {
           tr.offset = Number(p.offset);
           tr.total = Number(p.total);
@@ -434,15 +438,15 @@ class Connection {
   }
 
   /**
-   * Folder names inside a server folder, for path suggestions: from the
+   * The rows of a server folder without opening it in the pane: from the
    * listings this session already has, else one listing of that folder (kept
-   * like any other, so it is not asked for again). The pane stays as it is.
+   * like any other, so it is not asked for again). `fresh` lists it anyway.
    */
-  async peekDirs(path: string): Promise<string[] | null> {
+  async peek(path: string, fresh = false): Promise<FileRow[] | null> {
     const dir = path.length > 1 ? path.replace(/\/+$/, '') : path;
     const cached = this.#listings.get(dir);
-    if (cached) {
-      return cached.filter((r) => r.dir).map((r) => r.name);
+    if (cached && !fresh) {
+      return cached;
     }
     const session = this.session;
     if (session === null) {
@@ -453,10 +457,15 @@ class Connection {
       const rows = res.entries.map((e) => ({ name: e.name, size: e.size, dir: e.dir, link: e.link, time: parseRemoteTime(e.time) }));
       this.#listings.set(res.path, rows);
       this.listed.add(res.path);
-      return rows.filter((r) => r.dir).map((r) => r.name);
+      return rows;
     } catch {
       return null;
     }
+  }
+
+  /** Folder names inside a server folder, for path suggestions (see `peek`). */
+  async peekDirs(path: string): Promise<string[] | null> {
+    return (await this.peek(path))?.filter((r) => r.dir).map((r) => r.name) ?? null;
   }
 
   /** Answers a "file exists" question, optionally for every other one in this queue too. */
@@ -480,7 +489,12 @@ class Connection {
   }
 
   /** Adds a row to the queue panel; the transfer starts with #run(). */
-  #addRow(download: boolean, name: string): Transfer {
+  #addRow(download: boolean, name: string, hidden = false): Transfer {
+    if (hidden) {
+      const tr: Transfer = { id: `t${this.#nextTransfer++}`, download, name, offset: 0, total: -1, state: 'running', sent: false, hidden };
+      this.#background.push(tr);
+      return tr;
+    }
     this.transfers.push({ id: `t${this.#nextTransfer++}`, download, name, offset: 0, total: -1, state: 'running', sent: false });
     return this.transfers[this.transfers.length - 1];
   }
@@ -604,7 +618,7 @@ class Connection {
       tr.error = describeError(e);
     }
     this.#busy.set(session, Math.max(0, (this.#busy.get(session) ?? 1) - 1));
-    if (!this.transfers.some((x) => x.state === 'running') && this.walks === 0) {
+    if (!this.transfers.some((x) => x.state === 'running') && !this.#background.some((x) => x !== tr && x.state === 'running') && this.walks === 0) {
       this.existsAll = null;
       // Idle extra sessions are closed before the server times them out.
       if (this.#pool.length && !this.#poolIdle) {
@@ -616,9 +630,13 @@ class Connection {
     return tr;
   }
 
-  /** Queues an upload or download; the daemon runs a session's commands in order. */
-  transfer(download: boolean, name: string, params: Record<string, unknown>, persist = false): Promise<Transfer> {
-    return this.#run(this.#addRow(download, name), params, persist);
+  /** Queues an upload or download; the daemon runs a session's commands in order. `hidden`: kept out of the queue panel. */
+  async transfer(download: boolean, name: string, params: Record<string, unknown>, persist = false, hidden = false): Promise<Transfer> {
+    const tr = await this.#run(this.#addRow(download, name, hidden), params, persist && !hidden);
+    if (hidden) {
+      this.#background = this.#background.filter((x) => x !== tr);
+    }
+    return tr;
   }
 
   /** Cancels one transfer, whether it is moving bytes or still waiting. */
@@ -640,7 +658,7 @@ class Connection {
   /** Cancels everything still running, newest first so nothing new starts meanwhile, and stops folder walks. */
   async cancelAll(): Promise<void> {
     this.#abort++;
-    const running = this.transfers.filter((x) => x.state === 'running').reverse();
+    const running = [...this.#background, ...this.transfers].filter((x) => x.state === 'running').reverse();
     for (const tr of running) {
       await this.cancel(tr);
     }
