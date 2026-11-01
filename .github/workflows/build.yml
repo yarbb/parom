@@ -19,7 +19,35 @@ on:
       - locales/**
       - .github/workflows/build.yml
 jobs:
+  # A release merge bumps the version on main and is followed by its tag,
+  # which builds the same commit again and publishes it. The main build of
+  # that commit is skipped here (a success), so the badge on main stays green
+  # without paying for the same build twice.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - id: check
+        shell: bash
+        run: |
+          build=true
+          if [ "$GITHUB_REF" = refs/heads/main ] && git rev-parse -q --verify HEAD^1 >/dev/null; then
+            now=$(git show HEAD:app/package.json | grep -m1 '"version"')
+            before=$(git show HEAD^1:app/package.json | grep -m1 '"version"')
+            if [ "$now" != "$before" ]; then
+              echo "Version changed ($before -> $now): the tag build covers this commit."
+              build=false
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   windows:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: windows-latest
     defaults:
       run:
@@ -185,6 +213,8 @@ jobs:
   # paromd, then the AppImage. Built on Ubuntu 24.04, so it runs on distros
   # with glibc 2.39 or newer.
   linux:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-24.04
     env:
       FZ: /opt/fz
