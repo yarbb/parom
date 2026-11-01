@@ -129,3 +129,98 @@ pub fn rename(from: &str, to: &str) -> Result<(), String> {
 pub fn trash(paths: &[String]) -> Result<(), String> {
     trash::delete_all(paths).map_err(|e| e.to_string())
 }
+/// A free name in `dir` for `name`: "name (2).ext", "name (3).ext", ...
+fn free_name(dir: &Path, name: &str) -> PathBuf {
+    let (stem, ext) = match name.rfind('.') {
+        Some(i) if i > 0 => (&name[..i], &name[i..]),
+        _ => (name, ""),
+    };
+    (2..)
+        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
+        .find(|p| !p.exists())
+        .expect("a free name")
+}
+
+fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
+    if from.is_dir() {
+        fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+        for entry in fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))? {
+            let entry = entry.map_err(|e| format!("{}: {e}", from.display()))?;
+            copy_tree(&entry.path(), &to.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        fs::copy(from, to).map(|_| ()).map_err(|e| format!("{}: {e}", from.display()))
+    }
+}
+
+/// Copies files and folders into `dir` (files dropped from the system file
+/// manager). Names already there: "overwrite" (folders merge), "skip" or
+/// "rename" (a free "name (2)"). Returns how many were copied.
+pub fn copy_into(paths: &[String], dir: &str, exists: &str) -> Result<usize, String> {
+    let target = Path::new(dir);
+    let mut copied = 0;
+    for p in paths {
+        let from = Path::new(p);
+        let Some(name) = from.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if from.parent() == Some(target) {
+            // Dropped where it already is.
+            continue;
+        }
+        if from.is_dir() && target.starts_with(from) {
+            return Err(format!("{p}: cannot copy a folder into itself"));
+        }
+        let mut to = target.join(name);
+        if to.exists() {
+            match exists {
+                "skip" => continue,
+                "rename" => to = free_name(target, name),
+                _ => {}
+            }
+        }
+        copy_tree(from, &to)?;
+        copied += 1;
+    }
+    Ok(copied)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("parom-copy-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn copies_files_and_folders_with_each_answer() {
+        let src = tmp("src");
+        let dst = tmp("dst");
+        fs::write(src.join("a.txt"), "new").unwrap();
+        fs::create_dir_all(src.join("f/g")).unwrap();
+        fs::write(src.join("f/g/b.txt"), "b").unwrap();
+        fs::write(dst.join("a.txt"), "old").unwrap();
+        let paths = vec![src.join("a.txt").to_string_lossy().into_owned(), src.join("f").to_string_lossy().into_owned()];
+        let d = dst.to_string_lossy().into_owned();
+
+        assert_eq!(copy_into(&paths, &d, "skip").unwrap(), 1);
+        assert_eq!(fs::read_to_string(dst.join("a.txt")).unwrap(), "old");
+        assert_eq!(fs::read_to_string(dst.join("f/g/b.txt")).unwrap(), "b");
+
+        assert_eq!(copy_into(&paths[..1], &d, "rename").unwrap(), 1);
+        assert_eq!(fs::read_to_string(dst.join("a (2).txt")).unwrap(), "new");
+
+        assert_eq!(copy_into(&paths[..1], &d, "overwrite").unwrap(), 1);
+        assert_eq!(fs::read_to_string(dst.join("a.txt")).unwrap(), "new");
+
+        let inside = src.join("f").to_string_lossy().into_owned();
+        assert!(copy_into(&paths[1..], &inside, "overwrite").is_err());
+        let _ = fs::remove_dir_all(&src);
+        let _ = fs::remove_dir_all(&dst);
+    }
+}

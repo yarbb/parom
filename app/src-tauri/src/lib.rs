@@ -61,6 +61,11 @@ fn local_rename(from: String, to: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn local_copy(paths: Vec<String>, dir: String, exists: String) -> Result<usize, String> {
+    blocking(move || local::copy_into(&paths, &dir, &exists)).await
+}
+
+#[tauri::command]
 async fn local_trash(paths: Vec<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || local::trash(&paths))
         .await
@@ -553,6 +558,7 @@ pub fn run() {
             local_mkdir,
             local_rename,
             local_trash,
+            local_copy,
             local_home,
             local_roots,
             secret_get,

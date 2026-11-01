@@ -101,6 +101,8 @@
           { separator: true, label: '' },
           { label: check(ui.log, t('log.title')), hint: hint('log'), action: () => (ui.log = !ui.log) },
           { label: check(ui.syncBrowse, t('files.sync_browse')), hint: hint('syncBrowse'), action: () => (ui.syncBrowse = !ui.syncBrowse) },
+          { label: check(prefs.value.localPreview, t('preview.local')), action: () => void prefs.set('localPreview', !prefs.value.localPreview) },
+          { label: check(prefs.value.serverPreview, t('preview.server')), action: () => void prefs.set('serverPreview', !prefs.value.serverPreview) },
           { label: check(hideAddress, t('files.hide_address')), action: () => (hideAddress = !hideAddress) },
           { separator: true, label: '' },
           { label: check(prefs.value.theme === 'dark', t('prefs.theme.dark')), action: () => setTheme('dark') },

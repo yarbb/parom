@@ -22,6 +22,8 @@ class PaneDrag {
   over = $state<PaneSide | null>(null);
   /** Files dragged in from the system, while over the window. */
   external = $state(false);
+  /** Server files the drag started fetching to a temp folder (for dragging out of the window). */
+  prefetch: { remotePath: string; names: string[]; ready: Promise<string[] | null> } | null = null;
   /** Set by the Files tab: transfers dropped rows to the other pane. */
   onDrop: ((from: PaneSide, rows: FileRow[], move: boolean) => void) | null = null;
 

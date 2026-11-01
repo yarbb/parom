@@ -20,6 +20,10 @@
   import { shownLocal } from '../lib/browsing';
   import { twinColor, twins } from '../lib/twins.svelte';
   import { fileOps } from '../lib/fileops.svelte';
+  import FolderPreview from './FolderPreview.svelte';
+  import { ignoreItems } from '../lib/ignoremenu.svelte';
+  import { inRepo } from '../lib/ignorefiles';
+  import { repo } from '../lib/repo.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -40,6 +44,15 @@
   let error = $state('');
   let typed = $state('');
   let selected = $state<FileRow[]>([]);
+
+  /** The folder clicked last, for the preview under the list; kept while files are clicked. */
+  let previewPath = $state<string | null>(null);
+  $effect(() => {
+    if (selected.length === 1 && selected[0].dir) {
+      previewPath = atRoots ? selected[0].name : localJoin(path, selected[0].name, separator);
+    }
+  });
+  let paneHeight = $state(0);
 
   /** Folder names for path suggestions; nothing for the drive list. */
   async function localFolders(dir: string): Promise<string[] | null> {
@@ -190,6 +203,19 @@
     }),
   );
 
+  /** .gitignore / .parom-ignore items when the rows are inside a repository the app knows. */
+  function ignoreFor(rows: FileRow[]): MenuItem[] {
+    const found = rows.length ? inRepo(repo.choices.map((c) => c.dir), localJoin(path, rows[0].name, separator)) : null;
+    if (!found) {
+      return [];
+    }
+    const folder = found.rel.split('/').slice(0, -1).join('/');
+    return ignoreItems(
+      found.dir,
+      rows.map((r) => ({ name: r.name, dir: r.dir, rel: folder ? `${folder}/${r.name}` : r.name })),
+    );
+  }
+
   function openMenu(e: MouseEvent, rows: FileRow[]) {
     if (atRoots) {
       return;
@@ -227,6 +253,7 @@
               { label: t('github.repo.open'), action: () => void openInEditor(any && rows.length === 1 && rows[0].dir ? localJoin(path, rows[0].name, separator) : path, '') },
             ]
           : []),
+        ...ignoreFor(rows),
         { separator: true, label: '' },
         { label: t('files.refresh'), hint: hint('refresh'), action: refresh },
       ],
@@ -255,9 +282,10 @@
 <section
   class="pane"
   data-pane="local"
+  bind:clientHeight={paneHeight}
   onpointerdowncapture={() => (fileOps.active = 'local')}
   onfocusin={() => (fileOps.active = 'local')}
-  class:drop-target={paneDrag.over === 'local' && paneDrag.active?.from === 'server'}>
+  class:drop-target={paneDrag.over === 'local' && (paneDrag.active ? paneDrag.active.from === 'server' : paneDrag.external)}>
   <div class="section-label head">
     <span>{t('files.local')}<span class="picked">{selectionSummary(selected, (count) => t('files.selected', { count }), prefs.value.sizeUnits === 'decimal')}</span></span>
     <span class="buttons">
@@ -298,6 +326,19 @@
     onContextMenu={openMenu}
     onCommand={command}
   />
+  {#if prefs.value.localPreview}
+    <FolderPreview
+      path={previewPath}
+      current={path}
+      list={async (p) => (await listLocal(p)).rows}
+      join={(dir, name) => localJoin(dir, name, separator)}
+      onOpen={(p) => void load(p)}
+      onActivate={(picked, dir) =>
+        canUpload && onUpload(picked.map((f) => ({ name: f.name, local: localJoin(dir, f.name, separator), dir: f.dir })))}
+      pref="localPreview"
+      max={paneHeight - 200}
+    />
+  {/if}
 </section>
 
 {#if menu}
