@@ -223,6 +223,8 @@
   "changes.copy_path": "Copy file path",
   "changes.copy_relative": "Copy relative file path",
   "changes.open_default": "Open with default program",
+  "changes.renamed_from": "Moved from {path}",
+  "changes.renamed_same": "Same content: only the place changed.",
   "empty.first.title": "Connect your first server",
   "empty.first.text": "Save it as a site to keep its password, folders and sync settings, or type an address in the bar above for a quick connection.",
   "empty.first.create": "Create a site",

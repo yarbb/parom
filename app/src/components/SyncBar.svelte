@@ -41,7 +41,11 @@
         <span class="item" class:status-modified={warn} class:status-new={c.state === 'up-to-date' && !warn}>{stateText}</span>
         {#if c.dirtyManaged.length}
           <!-- Short here; the files and what it means are in the tooltip, and a dot marks the GitHub tab. -->
-          <span class="status-modified item" title={`${t('sync.uncommitted_hint')}\n${c.dirtyManaged.join('\n')}`}>
+          <span class="status-modified item" title={[
+            t('sync.uncommitted_hint'),
+            ...c.dirtyManaged.slice(0, 20),
+            ...(c.dirtyManaged.length > 20 ? [t('changes.and_more', { count: c.dirtyManaged.length - 20 })] : []),
+          ].join('\n')}>
             {t('sync.uncommitted', { count: c.dirtyManaged.length })}
           </span>
         {/if}

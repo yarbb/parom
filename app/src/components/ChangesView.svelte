@@ -2,9 +2,9 @@
   import EmptyState from './EmptyState.svelte';
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import FileDiffIcon from '@lucide/svelte/icons/file-diff';
-  import { SvelteSet } from 'svelte/reactivity';
   import { t } from '../lib/i18n';
-  import { fileDiff, repo, type FileChange, type FileDiff } from '../lib/repo.svelte';
+  import { changePaths, fileDiff, repo, type FileChange, type FileDiff } from '../lib/repo.svelte';
+  import { visibleRange } from '../lib/files';
   import Checkbox from './Checkbox.svelte';
   import DiffView from './DiffView.svelte';
   import Splitter from './Splitter.svelte';
@@ -15,8 +15,8 @@
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
 
   // Board Bd: uncommitted files with checkboxes, commit box, diff.
-  /** Unticked files; everything else is part of the next commit. */
-  const excluded = new SvelteSet<string>();
+  /** Unticked files; everything else is part of the next commit. Replaced, not changed in place. */
+  let excluded = $state.raw(new Set<string>());
   let selected = $state('');
   let summary = $state('');
   let description = $state('');
@@ -24,17 +24,29 @@
   let diffError = $state('');
   let loading = $state(false);
 
-  const letter: Record<FileChange['status'], string> = { new: 'A', modified: 'M', deleted: 'D' };
-  const tone: Record<FileChange['status'], string> = { new: 'status-new', modified: 'status-modified', deleted: 'status-removed' };
+  const letter: Record<FileChange['status'], string> = { new: 'A', modified: 'M', deleted: 'D', renamed: 'R' };
+  const tone: Record<FileChange['status'], string> = {
+    new: 'status-new',
+    modified: 'status-modified',
+    deleted: 'status-removed',
+    renamed: 'status-modified',
+  };
 
   let included = $derived(repo.changes.filter((c) => !excluded.has(c.path)));
   let allChecked = $derived(repo.changes.length > 0 && included.length === repo.changes.length);
+  let current = $derived(repo.changes.find((c) => c.path === selected));
+
+  // Only the rows in view and some above and below are drawn, as GitHub
+  // Desktop does: a moved folder can list tens of thousands of files.
+  const ROW = 30;
+  let scrollTop = $state(0);
+  let height = $state(0);
+  let range = $derived(visibleRange(scrollTop, height, ROW, repo.changes.length, 20));
 
   // Keep a valid selection as the list changes.
   $effect(() => {
-    const paths = repo.changes.map((c) => c.path);
-    if (!paths.includes(selected)) {
-      selected = paths[0] ?? '';
+    if (!current) {
+      selected = repo.changes[0]?.path ?? '';
     }
   });
 
@@ -45,7 +57,7 @@
     const path = selected;
     void repo.changes;
     void repo.touched;
-    if (!path) {
+    if (!path || current?.status === 'renamed') {
       diff = null;
       shownPath = '';
       return;
@@ -64,18 +76,17 @@
   });
 
   function toggleAll(on: boolean) {
-    excluded.clear();
-    if (!on) {
-      repo.changes.forEach((c) => excluded.add(c.path));
-    }
+    excluded = on ? new Set() : new Set(repo.changes.map((c) => c.path));
   }
 
   function toggle(path: string, on: boolean) {
+    const next = new Set(excluded);
     if (on) {
-      excluded.delete(path);
+      next.delete(path);
     } else {
-      excluded.add(path);
+      next.add(path);
     }
+    excluded = next;
   }
 
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -100,12 +111,12 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: t('changes.discard'), danger: true, action: () => (discarding = [c.path]) },
+        { label: t('changes.discard'), danger: true, action: () => (discarding = changePaths(c)) },
         {
           label: t('changes.discard_all'),
           danger: true,
           disabled: repo.changes.length < 2,
-          action: () => (discarding = repo.changes.map((x) => x.path)),
+          action: () => (discarding = repo.changes.flatMap(changePaths)),
         },
         { separator: true, label: '' },
         { label: t('changes.ignore_file'), disabled: c.path === '.gitignore', action: () => void ignore(`/${c.path}`) },
@@ -127,17 +138,17 @@
     const paths = discarding ?? [];
     discarding = null;
     if (await repo.discard(paths)) {
-      paths.forEach((p) => excluded.delete(p));
+      excluded = new Set([...excluded].filter((p) => !paths.includes(p)));
     }
   }
 
   async function commit(e: SubmitEvent) {
     e.preventDefault();
     const message = description.trim() ? `${summary.trim()}\n\n${description.trim()}` : summary.trim();
-    if (await repo.commit(included.map((c) => c.path), message)) {
+    if (await repo.commit(included.flatMap(changePaths), message)) {
       summary = '';
       description = '';
-      excluded.clear();
+      excluded = new Set();
     }
   }
 </script>
@@ -151,32 +162,38 @@
         disabled={!repo.changes.length}
       />
     </div>
-    <div class="list">
-      {#each repo.changes as c (c.path)}
-        <div
-          class="row"
-          class:selected={c.path === selected}
-          role="presentation"
-          onclick={() => (selected = c.path)}
-          oncontextmenu={(e) => openMenu(e, c)}
-        >
-          <span class="tick" role="presentation" onclick={(e) => e.stopPropagation()}>
-            <Checkbox bind:checked={() => !excluded.has(c.path), (on) => toggle(c.path, on)} label="" title={c.path} />
-          </span>
-          <span class="mono letter {tone[c.status]}">{letter[c.status]}</span>
-          {#if prefs.value.changesFullPaths}
-            <span class="mono path" title={c.path}>{c.path}</span>
-          {:else}
-            <!-- The name first, its folder after it (GitHub Desktop cuts long paths in the middle instead). -->
-            <span class="path" title={c.path}>
-              <span class="mono name">{c.path.split('/').pop()}</span>
-              {#if c.path.includes('/')}<span class="mono folder">{c.path.slice(0, c.path.lastIndexOf('/'))}</span>{/if}
-            </span>
-          {/if}
+    <div class="list" bind:clientHeight={height} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
+      {#if repo.changes.length}
+        <div class="spacer" style:height="{repo.changes.length * ROW}px">
+          {#each repo.changes.slice(range.start, range.end) as c, k (c.path)}
+            {@const title = c.old_path ? `${c.old_path} → ${c.path}` : c.path}
+            <div
+              class="row"
+              class:selected={c.path === selected}
+              role="presentation"
+              style:transform="translateY({(range.start + k) * ROW}px)"
+              onclick={() => (selected = c.path)}
+              oncontextmenu={(e) => openMenu(e, c)}
+            >
+              <span class="tick" role="presentation" onclick={(e) => e.stopPropagation()}>
+                <Checkbox bind:checked={() => !excluded.has(c.path), (on) => toggle(c.path, on)} label="" title={c.path} />
+              </span>
+              <span class="mono letter {tone[c.status]}">{letter[c.status]}</span>
+              {#if prefs.value.changesFullPaths}
+                <span class="mono path" {title}>{title}</span>
+              {:else}
+                <!-- The name first, its folder after it (GitHub Desktop cuts long paths in the middle instead). -->
+                <span class="path" {title}>
+                  <span class="mono name">{c.path.split('/').pop()}</span>
+                  {#if c.path.includes('/')}<span class="mono folder">{c.path.slice(0, c.path.lastIndexOf('/'))}</span>{/if}
+                </span>
+              {/if}
+            </div>
+          {/each}
         </div>
       {:else}
         <p class="muted empty">{t('github.no_changes')}</p>
-      {/each}
+      {/if}
     </div>
     <form class="commit" onsubmit={commit}>
       <input class="field" placeholder={t('github.summary')} aria-label={t('github.summary')} bind:value={summary} />
@@ -194,7 +211,11 @@
     onEnd={() => prefs.persist()}
     onReset={() => resetCol('ghChanges')}
   />
-  {#if selected}
+  {#if current?.old_path}
+    <div class="placeholder">
+      <EmptyState icon={FileDiffIcon} title={t('changes.renamed_from', { path: current.old_path })} text={t('changes.renamed_same')} />
+    </div>
+  {:else if selected}
     {#key selected}<DiffView path={selected} {diff} {loading} error={diffError} />{/key}
   {:else}
     <div class="placeholder">
@@ -253,8 +274,15 @@
     overflow: auto;
   }
 
-  .row {
+  .spacer {
     position: relative;
+  }
+
+  .row {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     gap: 10px;

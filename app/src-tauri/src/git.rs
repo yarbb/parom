@@ -67,10 +67,13 @@ pub(crate) fn only_line_endings(repo: &Repository, head: Option<&git2::Tree<'_>>
     let Ok(bytes) = std::fs::read(workdir.join(path)) else {
         return false;
     };
+    blob_ids(&bytes).contains(&Some(entry.id()))
+}
+
+/// Blob ids of a working file's bytes: as they are, and with CRLF turned
+/// into LF (what git stores with `core.autocrlf`).
+pub(crate) fn blob_ids(bytes: &[u8]) -> [Option<Oid>; 2] {
     let hash = |data: &[u8]| Oid::hash_object(ObjectType::Blob, data).ok();
-    if hash(&bytes) == Some(entry.id()) {
-        return true;
-    }
     let mut lf = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
@@ -81,7 +84,7 @@ pub(crate) fn only_line_endings(repo: &Repository, head: Option<&git2::Tree<'_>>
         lf.push(bytes[i]);
         i += 1;
     }
-    hash(&lf) == Some(entry.id())
+    [hash(bytes), hash(&lf)]
 }
 
 #[derive(Serialize)]
