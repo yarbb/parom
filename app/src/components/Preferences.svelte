@@ -500,6 +500,8 @@
             <button class="control" disabled={updates.checking} onclick={() => void updates.check(true)}>{t('menu.check_updates')}</button>
           </div>
           <div class="row"><span></span><Checkbox bind:checked={draft.checkUpdates} label={t('prefs.check_updates')} /></div>
+          <div class="row"><span></span><Checkbox bind:checked={draft.autoUpdate} label={t('prefs.auto_update')} /></div>
+          <p class="muted">{t('prefs.auto_update_hint')}</p>
           <p class="muted">{t('prefs.updates_source')}</p>
         {/if}
         </div>

@@ -39,8 +39,12 @@ export interface Prefs {
   discordPresence: boolean;
   /** Also the repository's name, for public GitHub repositories only. */
   discordShowRepo: boolean;
-  /** Look for a new version at start and once a day (installing always asks). */
+  /** Look for a new version at start and once a day. */
   checkUpdates: boolean;
+  /** Download new versions in the background and install them when the app closes (off by default). */
+  autoUpdate: boolean;
+  /** Notes of the version installed when the app closed, shown once at the next start. */
+  updatedTo: { version: string; notes: string } | null;
   /** Shortcut changes by command id (lib/keys.ts); "" removes a shortcut. */
   keybindings: Record<string, string>;
   /** Pull when both sides have new commits: replay mine on top (rebase) or a merge commit. */
@@ -126,6 +130,8 @@ export const defaultPrefs: Prefs = {
   discordPresence: false,
   discordShowRepo: false,
   checkUpdates: true,
+  autoUpdate: false,
+  updatedTo: null,
   keybindings: {},
   pullMode: 'rebase',
   changesFullPaths: false,
