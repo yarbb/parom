@@ -19,6 +19,7 @@
   import FileIcon from './FileIcon.svelte';
   import { dragThreshold, paneDrag, type PaneSide } from '../lib/panedrag.svelte';
   import { outsideWindow } from '../lib/dragout';
+  import { trackErrors } from '../lib/errors.svelte';
 
   interface Props {
     rows: FileRow[];
@@ -75,6 +76,8 @@
     onDragStart,
     onDragOut,
   }: Props = $props();
+  // Listing errors also go to the error window's list.
+  trackErrors('files', () => error);
 
   // Only the rows in view are in the DOM, so 100k entries stay cheap.
   let rowHeight = $derived(prefs.value.density === 'compact' ? 24 : 30);

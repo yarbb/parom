@@ -5,6 +5,7 @@ import { github } from './github.svelte';
 import { prefs } from './prefs.svelte';
 import { repoRoots } from './reporoot.svelte';
 import { sites } from './sites.svelte';
+import { errors } from './errors.svelte';
 
 export interface BranchInfo {
   branch: string | null;
@@ -100,8 +101,6 @@ class Repo {
   log = $state<LogEntry[]>([]);
   /** The last failure; kept until closed or the next action succeeds (refreshes do not clear it). */
   error = $state('');
-  /** The error's own window is open (long errors open it by themselves). */
-  errorOpen = $state(false);
   #errorFromRefresh = false;
   /** "fetch" / "pull" / "push" / "commit" / "continue" / "abort" while running. */
   busy = $state('');
@@ -274,14 +273,12 @@ class Repo {
 
   /** Shows an action's failure: a short one in the toolbar, a long one in its own window. */
   fail(e: unknown): void {
-    this.error = String(e).replace(/^Error: /, '');
+    this.error = errors.report('github', e);
     this.#errorFromRefresh = false;
-    this.errorOpen = this.error.length > 90 || this.error.includes('\n');
   }
 
   dismissError(): void {
     this.error = '';
-    this.errorOpen = false;
   }
 
   /** Throws away the changes of `paths`: HEAD's version back, new files to the Recycle Bin. */

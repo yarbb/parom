@@ -10,6 +10,7 @@
   import { backupsRoot, host, joinLocal } from '../lib/sync/host';
   import type { Site } from '../lib/sites.svelte';
   import Modal from './Modal.svelte';
+  import { trackErrors } from '../lib/errors.svelte';
 
   // Board Bk: backups of a site, kept on this computer. Restoring needs a
   // connection to that site; the list works without one.
@@ -29,6 +30,7 @@
   let folder = $state('');
   let loading = $state(true);
   let error = $state('');
+  trackErrors('sync', () => error);
   let confirm = $state<{ kind: 'restore' | 'delete'; backup: Backup } | null>(null);
 
   async function load() {

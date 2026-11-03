@@ -22,6 +22,9 @@
   import Preferences from './components/Preferences.svelte';
   import SignInDialogs from './components/SignInDialogs.svelte';
   import AboutDialog from './components/AboutDialog.svelte';
+  import ErrorDialog from './components/ErrorDialog.svelte';
+  import { trackErrors } from './lib/errors.svelte';
+  import { edits } from './lib/edits.svelte';
   import { shortcut } from './lib/commands.svelte';
   import { repo } from './lib/repo.svelte';
   import LogPanel from './components/LogPanel.svelte';
@@ -42,6 +45,14 @@
       githubSeen = true;
     }
   });
+
+  // Errors shown in a line somewhere also go to the error window's list
+  // (long ones open it). Server replies only go to the list.
+  trackErrors('sync', () => sync.error);
+  trackErrors('connection', () => connection.error);
+  trackErrors('editor', () => edits.error);
+  trackErrors('update', () => updates.error);
+  trackErrors('server', () => (connection.message?.level === 'error' || connection.message?.level === 'reply' ? connection.message.text : ''), false);
 
   /** After the rename: passwords saved under the old name are copied once. */
   async function moveOldPasswords() {
@@ -147,6 +158,7 @@
 {#if ui.about}
   <AboutDialog onClose={() => (ui.about = false)} />
 {/if}
+<ErrorDialog />
 
 <style>
   .app {

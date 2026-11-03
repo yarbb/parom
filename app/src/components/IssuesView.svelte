@@ -39,6 +39,7 @@
   import Modal from './Modal.svelte';
   import Splitter from './Splitter.svelte';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
+  import { trackErrors } from '../lib/errors.svelte';
 
   // Boards Ix and Pr: list (search, open / closed) and the selected item with
   // its comments, a comment box, close / reopen and (pull requests) merge.
@@ -56,6 +57,7 @@
   let loading = $state(false);
   let busy = $state(false);
   let error = $state('');
+  trackErrors('github', () => error);
   let confirmMerge = $state(false);
   let creating = $state(false);
 

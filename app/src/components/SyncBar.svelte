@@ -3,6 +3,7 @@
   import { t } from '../lib/i18n';
   import { sync } from '../lib/sync/engine.svelte';
   import BackupsDialog from './BackupsDialog.svelte';
+  import { errors } from '../lib/errors.svelte';
 
   // One line under the connect bar for sites with a local repository:
   // target folder, server and local commit, state, and "Sync with server".
@@ -53,7 +54,9 @@
       {#if activity}
         <span class="muted item">{activity}</span>
       {:else if sync.error}
-        <span class="status-removed item cut" title={sync.error}>{sync.error}</span>
+        <button class="error status-removed item cut" title={t('error.details')} onclick={() => errors.show({ source: 'sync', text: sync.error })}>
+          {sync.error}
+        </button>
       {/if}
       {#if c?.moved != null}
         <span class="status-modified item cut" title={t('sync.moved_hint', { folder: c.moved })}>{t('sync.moved', { folder: c.moved })}</span>
@@ -126,5 +129,19 @@
 
   .buttons button {
     white-space: nowrap;
+  }
+
+  button.error {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  button.error:hover {
+    text-decoration: underline;
   }
 </style>
