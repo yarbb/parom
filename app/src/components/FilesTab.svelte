@@ -33,6 +33,7 @@
   import { twins } from '../lib/twins.svelte';
   import { instances } from '../lib/instances.svelte';
   import { queueStore, type SavedTransfer } from '../lib/queuestore.svelte';
+  import { siteUsesRepo } from '../lib/reporoot.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -304,8 +305,7 @@
     }
     untrack(() => {
       localPane?.refresh();
-      const dir = connection.site?.localDir.trim().toLowerCase();
-      if (sync.active && dir === repo.dir.toLowerCase() && !sync.run && !sync.preparing) {
+      if (sync.active && siteUsesRepo(connection.site, repo.dir) && !sync.run && !sync.preparing) {
         void sync.refresh({ skipEdits: true });
       }
     });

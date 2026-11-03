@@ -2,6 +2,7 @@
 // ("sites"); passwords live in the OS credential store under "site:<id>".
 import { call } from './daemon';
 import { deleteSecret } from './secrets';
+import { repoRoots } from './reporoot.svelte';
 
 export type Protocol = 'sftp' | 'ftp' | 'ftps' | 'ftpes' | 'ftp-insecure';
 export type Logon = 'normal' | 'ask' | 'key' | 'anonymous';
@@ -91,9 +92,20 @@ class Sites {
     await call('store.set', { name: 'sites', value: doc });
     this.folders = doc.folders;
     this.list = doc.sites;
+    // A local folder may have changed: find its repository again.
+    repoRoots.forget();
     for (const s of removed) {
       void deleteSecret(siteSecretKey(s)).catch(() => {});
     }
+  }
+
+  /** Changes some fields of one site and saves the list; returns the saved site. */
+  async update(id: string, patch: Partial<Site>): Promise<Site | undefined> {
+    await this.save(
+      this.folders,
+      this.list.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    );
+    return this.list.find((s) => s.id === id);
   }
 }
 

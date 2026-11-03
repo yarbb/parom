@@ -120,6 +120,11 @@ async fn git_status(dir: String) -> Result<git::RepoStatus, String> {
 }
 
 #[tauri::command]
+async fn git_locate(dir: String) -> Result<git::Location, String> {
+    blocking(move || git::locate(&dir)).await
+}
+
+#[tauri::command]
 async fn git_tree(dir: String, rev: String) -> Result<Vec<git::TreeFile>, String> {
     blocking(move || git::tree(&dir, &rev)).await
 }
@@ -573,6 +578,7 @@ pub fn run() {
             edit_unwatch,
             edit_cleanup,
             git_status,
+            git_locate,
             git_tree,
             git_has_commit,
             git_is_ancestor,

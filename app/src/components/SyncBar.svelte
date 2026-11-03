@@ -55,8 +55,16 @@
       {:else if sync.error}
         <span class="status-removed item cut" title={sync.error}>{sync.error}</span>
       {/if}
+      {#if c?.moved != null}
+        <span class="status-modified item cut" title={t('sync.moved_hint', { folder: c.moved })}>{t('sync.moved', { folder: c.moved })}</span>
+      {/if}
     </div>
     <div class="buttons">
+      {#if c?.moved != null}
+        <button class="control small primary" disabled={busy} onclick={() => sync.followMove()}>{t('sync.follow_move', { folder: c.moved })}</button>
+      {:else if sync.missing}
+        <button class="control small primary" disabled={busy} onclick={() => sync.relocate()}>{t('sync.locate')}</button>
+      {/if}
       <button class="control small" onclick={() => (backups = true)}>{t('backups.button')}</button>
       <button class="control small" disabled={busy} onclick={() => sync.refresh()}>{t('sync.check')}</button>
       <button class="control small" disabled={busy} title={t('sync.scan_edits_hint')} onclick={() => sync.refresh({ scanEdits: true })}>
@@ -65,7 +73,8 @@
       {#if sync.preparing || sync.checking}
         <button class="control small primary" onclick={() => sync.stopWalk()}>{t(sync.preparing ? 'sync.cancel_sync' : 'sync.cancel_check')}</button>
       {:else}
-        <button class="control small primary" disabled={!c || busy || connection.state !== 'connected'} onclick={() => (sync.choosing = true)}>
+        <button class="control small primary" disabled={!c || busy || connection.state !== 'connected' || c.moved != null}
+          onclick={() => (sync.choosing = true)}>
           {t('sync.sync_with_server')}
         </button>
       {/if}

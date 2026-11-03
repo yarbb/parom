@@ -27,6 +27,7 @@
   import SyncBar from './SyncBar.svelte';
   import Splitter from './Splitter.svelte';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
+  import { repoRoots, siteUsesRepo } from '../lib/reporoot.svelte';
 
   // Boards Bd, Hi, Ix, Pr, Bk: toolbar (repository, branch, fetch / pull /
   // push), sidebar, and the page. Changes and History work without signing in.
@@ -64,7 +65,8 @@
 
   // Connecting to a site with a repository shows that repository.
   $effect(() => {
-    const dir = connection.site?.localDir.trim();
+    const loc = connection.site ? repoRoots.location(connection.site.localDir) : null;
+    const dir = loc === undefined ? '' : (loc?.root ?? connection.site?.localDir.trim());
     if (dir && dir !== repo.dir) {
       void repo.select(dir);
     }
@@ -144,9 +146,9 @@
   });
 
   /** Sites that deploy this repository (their backups are listed). */
-  let repoSites = $derived(sites.list.filter((s) => s.localDir.trim() && s.localDir.trim().toLowerCase() === repo.dir.toLowerCase()));
+  let repoSites = $derived(sites.list.filter((s) => siteUsesRepo(s, repo.dir)));
 
-  let showSyncBar = $derived(sync.active && connection.site?.localDir.trim().toLowerCase() === repo.dir.toLowerCase());
+  let showSyncBar = $derived(sync.active && siteUsesRepo(connection.site, repo.dir));
 </script>
 
 <svelte:window onclick={onWindowClick} />

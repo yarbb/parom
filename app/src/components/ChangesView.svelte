@@ -5,6 +5,11 @@
   import { t } from '../lib/i18n';
   import { changePaths, fileDiff, repo, type FileChange, type FileDiff } from '../lib/repo.svelte';
   import { visibleRange } from '../lib/files';
+  import { repoRoots, siteUsesRepo } from '../lib/reporoot.svelte';
+  import { sites } from '../lib/sites.svelte';
+  import { connection } from '../lib/connection.svelte';
+  import { movedFolder } from '../lib/sync/moved';
+  import { joinLocal } from '../lib/sync/host';
   import Checkbox from './Checkbox.svelte';
   import DiffView from './DiffView.svelte';
   import Splitter from './Splitter.svelte';
@@ -42,6 +47,41 @@
   let scrollTop = $state(0);
   let height = $state(0);
   let range = $derived(visibleRange(scrollTop, height, ROW, repo.changes.length, 20));
+
+  /** "No" on a move offer, by site and folder, for this session. */
+  let declined = $state.raw(new Set<string>());
+
+  /**
+   * A site whose files were moved to another folder of the repository (not
+   * committed yet): offer to point the site there before a sync uploads the
+   * new folder next to the real files.
+   */
+  let move = $derived.by(() => {
+    if (!repo.changes.some((c) => c.status === 'deleted' || c.status === 'renamed')) {
+      return null;
+    }
+    const deleted = repo.changes.flatMap((c) => (c.status === 'deleted' ? [c.path] : c.old_path ? [c.old_path] : []));
+    const added = repo.changes.filter((c) => c.status === 'new' || c.status === 'renamed').map((c) => c.path);
+    for (const site of sites.list.filter((s) => siteUsesRepo(s, repo.dir))) {
+      const loc = repoRoots.location(site.localDir);
+      const folder = loc ? movedFolder(loc.sub, deleted, added) : null;
+      if (loc && folder !== null && !declined.has(`${site.id}:${folder}`)) {
+        return { site, folder, dir: folder ? joinLocal(loc.root, folder) : loc.root };
+      }
+    }
+    return null;
+  });
+
+  async function followMove() {
+    const m = move;
+    if (!m) {
+      return;
+    }
+    const saved = await sites.update(m.site.id, { localDir: m.dir }).catch((e) => void repo.fail(e));
+    if (saved && connection.site?.id === saved.id) {
+      connection.site = saved;
+    }
+  }
 
   // Keep a valid selection as the list changes.
   $effect(() => {
@@ -162,6 +202,16 @@
         disabled={!repo.changes.length}
       />
     </div>
+    {#if move}
+      {@const m = move}
+      <div class="move-offer">
+        <p>{t('changes.moved', { site: m.site.name, folder: m.folder || '/' })}</p>
+        <div class="move-buttons">
+          <button class="control small primary" onclick={followMove}>{t('changes.moved_use')}</button>
+          <button class="control small" onclick={() => (declined = new Set([...declined, `${m.site.id}:${m.folder}`]))}>{t('common.no')}</button>
+        </div>
+      </div>
+    {/if}
     <div class="list" bind:clientHeight={height} onscroll={(e) => (scrollTop = e.currentTarget.scrollTop)}>
       {#if repo.changes.length}
         <div class="spacer" style:height="{repo.changes.length * ROW}px">
@@ -272,6 +322,22 @@
   .list {
     flex: 1;
     overflow: auto;
+  }
+
+  .move-offer {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    font-size: 12px;
+  }
+
+  .move-offer p {
+    margin: 0 0 8px;
+  }
+
+  .move-buttons {
+    display: flex;
+    gap: 6px;
   }
 
   .spacer {
