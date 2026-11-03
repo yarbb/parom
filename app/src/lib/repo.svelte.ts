@@ -20,8 +20,13 @@ export interface BranchInfo {
 
 export interface FileChange {
   path: string;
-  status: 'new' | 'modified' | 'deleted';
+  status: 'new' | 'modified' | 'deleted' | 'renamed';
+  /** Renamed: where the file was (same content). */
+  old_path?: string;
 }
+
+/** The paths a change touches: both of a rename. */
+export const changePaths = (c: FileChange) => (c.old_path ? [c.path, c.old_path] : [c.path]);
 
 export interface DiffLine {
   kind: '+' | '-' | ' ' | '@';
@@ -48,7 +53,7 @@ export interface LogEntry {
 
 export interface CommitFile {
   path: string;
-  status: FileChange['status'];
+  status: 'new' | 'modified' | 'deleted';
   additions: number;
   deletions: number;
 }
@@ -89,7 +94,8 @@ export const repoName = (dir: string) => dir.replace(/[\\/]+$/, '').split(/[\\/]
 
 class Repo {
   info = $state<BranchInfo | null>(null);
-  changes = $state<FileChange[]>([]);
+  // Raw: replaced as a whole, never changed in place (tens of thousands of rows after a big move).
+  changes = $state.raw<FileChange[]>([]);
   log = $state<LogEntry[]>([]);
   /** The last failure; kept until closed or the next action succeeds (refreshes do not clear it). */
   error = $state('');
@@ -213,12 +219,24 @@ class Repo {
     }
   }
 
-  /** Status and branch only (cheap): after file changes on disk. */
+  #refreshing = false;
+  #refreshAgain = false;
+
+  /**
+   * Status and branch only (cheap): after file changes on disk. One at a
+   * time: while files keep changing (a big move) the next one waits for this
+   * one, and many requests in between make one more refresh.
+   */
   async refreshChanges(): Promise<void> {
     const dir = this.dir;
     if (!dir || this.busy) {
       return;
     }
+    if (this.#refreshing) {
+      this.#refreshAgain = true;
+      return;
+    }
+    this.#refreshing = true;
     try {
       const [info, changes, conflicts] = await Promise.all([
         invoke<BranchInfo>('repo_info', { dir }),
@@ -242,6 +260,12 @@ class Repo {
       }
     } catch {
       // The next full refresh shows the error.
+    } finally {
+      this.#refreshing = false;
+      if (this.#refreshAgain) {
+        this.#refreshAgain = false;
+        void this.refreshChanges();
+      }
     }
   }
 

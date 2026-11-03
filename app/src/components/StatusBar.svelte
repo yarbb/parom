@@ -40,7 +40,7 @@
     {#if updates.available}
       <!-- A newer version: the button opens what is new and installs it. -->
       <button class="log-button mono update" onclick={() => (updates.dialog = true)}>
-        <span class="update-text">{t('update.button', { version: updates.available.version })}<span class="blob"></span></span>
+        <span class="blob" aria-hidden="true"></span>{t('update.button', { version: updates.available.version })}
       </button>
     {/if}
     {version}
@@ -96,11 +96,17 @@
     white-space: nowrap;
   }
 
+  /* The dot sits inside the button, before the text, centred: on the corner it was cut off. */
   .update {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: middle;
     color: var(--modified);
   }
 
-  .update-text {
-    position: relative;
+  .update .blob {
+    position: static;
+    flex: none;
   }
 </style>

@@ -6,7 +6,10 @@ use git2::{
     Rebase, RemoteCallbacks, Repository, RepositoryState, Signature, Status, StatusOptions,
 };
 use serde::Serialize;
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 fn open(dir: &str) -> Result<Repository, String> {
     Repository::open(dir).map_err(|e| format!("{dir}: {}", e.message()))
@@ -118,14 +121,89 @@ pub fn branch_info(dir: &str) -> Result<BranchInfo, String> {
 #[derive(Serialize)]
 pub struct FileChange {
     path: String,
-    /// "new", "modified", "deleted".
+    /// "new", "modified", "deleted", "renamed".
     status: &'static str,
+    /// Renamed: where the file was (same content).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    old_path: Option<String>,
+}
+
+impl FileChange {
+    /// Both paths of a rename; one path otherwise.
+    fn paths(self) -> impl Iterator<Item = String> {
+        std::iter::once(self.path).chain(self.old_path)
+    }
+}
+
+/// Blob ids of new files by path, while their size and modification time stay.
+type HashCache = HashMap<PathBuf, (u64, Option<SystemTime>, [Option<Oid>; 2])>;
+static HASHES: OnceLock<Mutex<HashCache>> = OnceLock::new();
+
+/// Pairs deleted files with new files of the same content (a folder moved or
+/// a file renamed) into one "renamed" row, as GitHub Desktop shows them, so a
+/// moved folder does not list every file twice. Exact copies only; a new file
+/// is read only when a deleted one had its size, and its hash is kept.
+fn pair_renames(repo: &Repository, out: &mut Vec<FileChange>) {
+    let (Ok(index), Some(workdir)) = (repo.index(), repo.workdir()) else { return };
+    // Deleted files still in the index, by size: (position in `out`, blob id).
+    let mut gone: HashMap<u32, Vec<(usize, Oid)>> = HashMap::new();
+    for (i, c) in out.iter().enumerate() {
+        if c.status == "deleted" {
+            if let Some(e) = index.get_path(Path::new(&c.path), 0) {
+                gone.entry(e.file_size).or_default().push((i, e.id));
+            }
+        }
+    }
+    if gone.is_empty() {
+        return;
+    }
+    let mut cache = HASHES.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    let mut taken = vec![false; out.len()];
+    let mut pairs = Vec::new();
+    for (i, c) in out.iter().enumerate() {
+        if c.status != "new" {
+            continue;
+        }
+        let full = workdir.join(&c.path);
+        let Ok(meta) = std::fs::metadata(&full) else { continue };
+        // The index keeps the low 32 bits of the size.
+        let Some(candidates) = gone.get(&(meta.len() as u32)) else { continue };
+        let modified = meta.modified().ok();
+        let ids = match cache.get(&full) {
+            Some((len, time, ids)) if *len == meta.len() && *time == modified => *ids,
+            _ => {
+                let Ok(bytes) = std::fs::read(&full) else { continue };
+                let ids = crate::git::blob_ids(&bytes);
+                cache.insert(full, (meta.len(), modified, ids));
+                ids
+            }
+        };
+        if let Some(&(j, _)) = candidates.iter().find(|(j, id)| !taken[*j] && ids.contains(&Some(*id))) {
+            taken[j] = true;
+            pairs.push((i, j));
+        }
+    }
+    for &(i, j) in &pairs {
+        out[i].status = "renamed";
+        out[i].old_path = Some(out[j].path.clone());
+    }
+    let mut n = 0;
+    out.retain(|_| {
+        n += 1;
+        !taken[n - 1]
+    });
 }
 
 /// Uncommitted changes, untracked files included (line-ending-only changes
-/// are left out, like the sync bar does).
+/// are left out, like the sync bar does); moved files as renames.
 pub fn changes(dir: &str) -> Result<Vec<FileChange>, String> {
     let repo = open(dir)?;
+    let mut out = raw_changes(&repo)?;
+    pair_renames(&repo, &mut out);
+    Ok(out)
+}
+
+fn raw_changes(repo: &Repository) -> Result<Vec<FileChange>, String> {
     let mut opts = StatusOptions::new();
     opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false);
     let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
@@ -137,7 +215,7 @@ pub fn changes(dir: &str) -> Result<Vec<FileChange>, String> {
         if st.is_conflicted() || st == Status::CURRENT || st.is_ignored() {
             continue;
         }
-        if crate::git::only_line_endings(&repo, head_tree.as_ref(), path, st) {
+        if crate::git::only_line_endings(repo, head_tree.as_ref(), path, st) {
             continue;
         }
         let status = if st.intersects(Status::WT_NEW | Status::INDEX_NEW) && !st.intersects(Status::WT_DELETED) {
@@ -147,7 +225,7 @@ pub fn changes(dir: &str) -> Result<Vec<FileChange>, String> {
         } else {
             "modified"
         };
-        out.push(FileChange { path: path.to_owned(), status });
+        out.push(FileChange { path: path.to_owned(), status, old_path: None });
     }
     out.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(out)
@@ -245,7 +323,7 @@ pub fn commit(dir: &str, paths: &[String], message: &str, name: Option<&str>, em
     // the commit holds only what the user ticked.
     if let Some(p) = parent.as_ref() {
         let selected: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
-        let staged: Vec<String> = changes(dir)?.into_iter().map(|c| c.path).filter(|p| !selected.contains(p.as_str())).collect();
+        let staged: Vec<String> = raw_changes(&repo)?.into_iter().flat_map(FileChange::paths).filter(|p| !selected.contains(p.as_str())).collect();
         if !staged.is_empty() {
             repo.reset_default(Some(p.as_object()), staged.iter().map(String::as_str)).map_err(msg)?;
         }
@@ -1030,6 +1108,36 @@ mod tests {
         assert!(e.contains("b.txt"), "{e}");
         assert!(conflicts(&dir).unwrap().is_none());
         assert_eq!(read(&dir, "b.txt"), "edited\n");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn moved_files_show_as_renames() {
+        let root = temp("renames");
+        Repository::init(&root).unwrap();
+        fs::create_dir_all(root.join("lua")).unwrap();
+        commit_file(&root, "lua/a.lua", "print(1)\n", "a");
+        commit_file(&root, "lua/b.lua", "print(2)\n", "b");
+        fs::create_dir_all(root.join("server/lua")).unwrap();
+        fs::rename(root.join("lua/a.lua"), root.join("server/lua/a.lua")).unwrap();
+        fs::write(root.join("lua/b.lua"), "print(3)\n").unwrap();
+        fs::write(root.join("c.txt"), "new\n").unwrap();
+        let dir = root.to_str().unwrap();
+        let listed = |dir: &str| -> Vec<(String, &'static str, Option<String>)> {
+            changes(dir).unwrap().into_iter().map(|c| (c.path, c.status, c.old_path)).collect()
+        };
+        assert_eq!(
+            listed(dir),
+            vec![
+                ("c.txt".into(), "new", None),
+                ("lua/b.lua".into(), "modified", None),
+                ("server/lua/a.lua".into(), "renamed", Some("lua/a.lua".into())),
+            ]
+        );
+        // A rename is committed with both of its paths.
+        let paths = ["server/lua/a.lua".to_owned(), "lua/a.lua".to_owned()];
+        commit(dir, &paths, "move", Some("Test"), Some("test@example.com")).unwrap();
+        assert_eq!(listed(dir), vec![("c.txt".into(), "new", None), ("lua/b.lua".into(), "modified", None)]);
         let _ = fs::remove_dir_all(root);
     }
 }
