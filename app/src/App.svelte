@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import { getName, getVersion } from '@tauri-apps/api/app';
   import { isTauri } from '@tauri-apps/api/core';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import TopBar from './components/TopBar.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import FilesTab from './components/FilesTab.svelte';
@@ -70,12 +71,19 @@
 
   onMount(() => {
     const stopWatching = watchSystemTheme(loadTheme);
-    void prefs.load().then(() => (hideAddress = prefs.value.hideAddress));
+    void prefs.load().then(async () => {
+      hideAddress = prefs.value.hideAddress;
+      // "Updated to X" once, after an update installed when the app last closed.
+      if (isTauri()) {
+        await updates.announce(await getVersion());
+      }
+    });
     void queueStore.load();
     // App shortcuts (Ctrl+, Ctrl+S, Ctrl+1/2, Ctrl+L, Ctrl+R, Ctrl+D, zoom); see the menus.
     const onKey = (e: KeyboardEvent) => void shortcut(e);
     window.addEventListener('keydown', onKey);
     let stopExit = () => {};
+    let stopClose = () => {};
 
     if (isTauri()) {
       getName().then((n) => {
@@ -85,6 +93,19 @@
       });
       getVersion().then((v) => (version = v));
       onExit(() => (engine = 'unavailable')).then((un) => (stopExit = un));
+      // A downloaded update installs when the window closes, unless work is still going on.
+      void getCurrentWindow()
+        .onCloseRequested(async (event) => {
+          const busy = connection.transfers.some((x) => x.state === 'running') || !!sync.run || sync.preparing || !!repo.conflicts;
+          if (!updates.ready || busy) {
+            return;
+          }
+          event.preventDefault();
+          if (await updates.installOnClose()) {
+            await getCurrentWindow().destroy();
+          }
+        })
+        .then((un) => (stopClose = un));
     }
     call('daemon.hello')
       .then(async () => {
@@ -106,6 +127,7 @@
       stopUpdates();
       stopWatching();
       stopExit();
+      stopClose();
       window.removeEventListener('keydown', onKey);
     };
   });
@@ -145,7 +167,7 @@
 </div>
 {/if}
 
-{#if updates.dialog}
+{#if updates.dialog || updates.updated}
   <UpdateDialog />
 {/if}
 {#if ui.siteManager}

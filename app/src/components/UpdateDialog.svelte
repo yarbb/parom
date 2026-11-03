@@ -16,15 +16,26 @@
   function close() {
     if (!updates.progress) {
       updates.dialog = false;
+      updates.updated = null;
     }
   }
 </script>
 
 <Modal
-  title={updates.available ? t('update.available', { name: ui.appName, version: updates.available.version }) : t('update.title')}
+  title={updates.updated
+    ? t('update.updated', { name: ui.appName, version: updates.updated.version })
+    : updates.available
+      ? t('update.available', { name: ui.appName, version: updates.available.version })
+      : t('update.title')}
   onCancel={close}
 >
-  {#if updates.checking}
+  {#if updates.updated}
+    <!-- Installed automatically when the app last closed: what is new, once. -->
+    {#if updates.updated.notes.trim()}
+      <div class="label">{t('update.whats_new')}</div>
+      <div class="notes"><Markdown html={notesToHtml(updates.updated.notes.trim())} text={updates.updated.notes.trim()} /></div>
+    {/if}
+  {:else if updates.checking}
     <p class="muted">{t('update.checking')}</p>
   {:else if updates.available}
     {#if updates.available.notes.trim()}
@@ -46,7 +57,9 @@
   {/if}
   {#if updates.error}<p class="status-removed small">{updates.error}</p>{/if}
   {#snippet actions()}
-    {#if updates.available}
+    {#if updates.updated}
+      <button class="control primary" onclick={close}>{t('common.ok')}</button>
+    {:else if updates.available}
       <button class="control" disabled={!!updates.progress} onclick={close}>{t('update.later')}</button>
       <button class="control primary" disabled={!!updates.progress} onclick={() => void updates.install()}>{t('update.install')}</button>
     {:else}
