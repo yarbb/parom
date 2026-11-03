@@ -11,6 +11,7 @@
   import Avatar from './Avatar.svelte';
   import Person from './Person.svelte';
   import { avatars, coAuthors } from '../lib/people.svelte';
+  import { siteUsesRepo } from '../lib/reporoot.svelte';
 
   // Board Hi: commits with "local HEAD" and "on server" badges, the files a
   // commit changed, and the diff of one of them.
@@ -23,7 +24,7 @@
 
   /** The deployed commit, when the connected site deploys this repository. */
   let serverSha = $derived(
-    connection.site?.localDir.trim().toLowerCase() === repo.dir.toLowerCase() ? (sync.check?.marker?.sha ?? null) : null,
+    siteUsesRepo(connection.site, repo.dir) ? (sync.check?.marker?.sha ?? null) : null,
   );
   let serverIndex = $derived(serverSha ? repo.log.findIndex((c) => c.sha === serverSha) : -1);
   let commit = $derived(repo.log.find((c) => c.sha === selected) ?? null);

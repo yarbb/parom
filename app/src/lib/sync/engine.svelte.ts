@@ -11,6 +11,10 @@ import { repo, type LogEntry } from '../repo.svelte';
 import { ui } from '../ui.svelte';
 import { backupsRoot, git, host, joinLocal, type RepoStatus } from './host';
 import { classify, ignoreName, legacyIgnoreName, parseRules, type Rules } from './managed';
+import { movedFolder } from './moved';
+import { listLocal } from '../local';
+import { open } from '@tauri-apps/plugin-dialog';
+import { t } from '../i18n';
 import { legacyMarkerName, lockActive, markerName, newNonce, parseMarker, partSuffix, serializeMarker, treeFingerprint, type Marker } from './marker';
 import {
   detectServerEdits,
@@ -50,6 +54,12 @@ export interface Check {
   /** Managed files with uncommitted changes; a sync deploys the commit, not these. */
   dirtyManaged: string[];
   rules: Rules;
+  /**
+   * The folder (inside the site's local folder, "/" separated) the deployed
+   * files moved to since the last sync; a sync would upload that folder
+   * next to them, so it waits until the site follows them.
+   */
+  moved: string | null;
 }
 
 export interface Preview {
@@ -109,11 +119,16 @@ const parse = (time?: string) => {
   return Number.isNaN(ms) ? null : ms;
 };
 
+/** Why a sync waits after the site's files moved inside the repository. */
+const movedError = (folder: string) => t('sync.moved_refuse', { folder });
+
 class SyncEngine {
   /** Result of the last check for the connected site; null if it has no repository. */
   check = $state<Check | null>(null);
   checking = $state(false);
   error = $state('');
+  /** The site's local folder is gone (renamed or moved on disk). */
+  missing = $state(false);
   /** Set when the server has no marker and the site says "ask". */
   offerMarker = $state(false);
   /** Set when "Versions differ" must be confirmed before syncing. */
@@ -142,6 +157,7 @@ class SyncEngine {
   reset(): void {
     this.check = null;
     this.error = '';
+    this.missing = false;
     this.offerMarker = false;
     this.choosing = false;
     void this.cancelPreview();
@@ -323,6 +339,7 @@ class SyncEngine {
     const before = this.check;
     this.checking = true;
     this.error = '';
+    this.missing = false;
     try {
       const dir = site.localDir.trim();
       const repo = await git.status(dir);
@@ -345,6 +362,12 @@ class SyncEngine {
         edits = detectServerEdits(deployed, server, mtime, rules);
       }
       const behind = state === 'behind' && marker?.sha ? await git.commitsBetween(dir, marker.sha, repo.head) : 0;
+      let moved: string | null = null;
+      if (known && marker?.sha && state !== 'up-to-date') {
+        const changes = await git.diff(dir, marker.sha, repo.head);
+        const paths = (status: string) => changes.filter((c) => c.status === status).map((c) => c.path);
+        moved = movedFolder('', paths('deleted'), paths('added'));
+      }
       this.check = {
         site,
         root,
@@ -356,6 +379,7 @@ class SyncEngine {
         behind,
         dirtyManaged: repo.dirty.filter((p) => classify(p, rules) === 'managed'),
         rules,
+        moved,
       };
       if (state === 'no-marker' && site.marker === 'ask' && !this.#askedThisSession.has(site.id)) {
         this.#askedThisSession.add(site.id);
@@ -367,6 +391,7 @@ class SyncEngine {
       // A canceled walk keeps the last result instead of an error.
       this.check = this.#stopWalk ? before : null;
       this.error = this.#stopWalk ? '' : describeError(e);
+      this.missing = !this.#stopWalk && (await listLocal(site.localDir.trim()).then(() => false, () => true));
     } finally {
       this.checking = false;
       if (!this.preparing) {
@@ -399,9 +424,49 @@ class SyncEngine {
     if (!site) {
       return;
     }
-    const list = sites.list.map((s) => (s.id === site.id ? { ...s, marker: choice } : s));
-    await sites.save(sites.folders, list);
-    connection.site = list.find((s) => s.id === site.id) ?? site;
+    connection.site = (await sites.update(site.id, { marker: choice })) ?? site;
+  }
+
+  /** Points the site at the folder its files moved to in the repository. */
+  async followMove(): Promise<void> {
+    const site = connection.site;
+    const moved = this.check?.moved;
+    if (!site || moved == null) {
+      return;
+    }
+    connection.site = (await sites.update(site.id, { localDir: joinLocal(site.localDir.trim(), moved) })) ?? site;
+    await this.refresh();
+  }
+
+  /**
+   * The site's local folder is gone: pick where it is now. The picker opens
+   * in a known repository with the site's GitHub repository, if there is one.
+   */
+  async relocate(): Promise<void> {
+    const site = connection.site;
+    if (!site) {
+      return;
+    }
+    const old = site.localDir.trim();
+    let start: string | undefined = old.replace(/[\\/][^\\/]*$/, '') || undefined;
+    if (site.repo.trim()) {
+      for (const choice of repo.choices) {
+        if (choice.dir.toLowerCase() === old.toLowerCase()) {
+          continue;
+        }
+        const info = await invoke<{ github: string | null }>('repo_info', { dir: choice.dir }).catch(() => null);
+        if (info?.github?.toLowerCase() === site.repo.trim().toLowerCase()) {
+          start = choice.dir;
+          break;
+        }
+      }
+    }
+    const picked = await open({ directory: true, multiple: false, defaultPath: start });
+    if (typeof picked !== 'string') {
+      return;
+    }
+    connection.site = (await sites.update(site.id, { localDir: picked })) ?? site;
+    await this.refresh();
   }
 
   async #plan(c: Check): Promise<Plan> {
@@ -448,6 +513,9 @@ class SyncEngine {
     const c = this.check;
     if (!c || this.run || this.#stopWalk) {
       return;
+    }
+    if (c.moved !== null) {
+      throw new Error(movedError(c.moved));
     }
 
     const plan = await this.#plan(c);
@@ -582,6 +650,9 @@ class SyncEngine {
     const c = this.check;
     if (!c || this.run || this.#stopWalk) {
       return;
+    }
+    if (c.moved !== null) {
+      throw new Error(movedError(c.moved));
     }
     const dir = c.site.localDir.trim();
     // "Changed on the server" means changed since the deployed commit: a server

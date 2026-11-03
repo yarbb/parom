@@ -15,6 +15,8 @@
   import Ferry from './Ferry.svelte';
   import { fly } from 'svelte/transition';
   import { ms } from '../lib/motion';
+  import { repoRoots } from '../lib/reporoot.svelte';
+  import { repoName } from '../lib/repo.svelte';
 
   // Board Sm: a tree of sites and folders on the left, the selected site's
   // settings in tabs on the right. Edits a copy; OK or Connect saves it.
@@ -320,6 +322,11 @@
               <label><span>{t('sites.local_dir')}</span>
                 <span class="with-button"><input class="field mono" bind:value={site.localDir} /><button class="control" onclick={browseLocal}>{t('files.browse')}</button></span>
               </label>
+              {#if repoRoots.location(site.localDir)?.sub}
+                {@const loc = repoRoots.location(site.localDir)!}
+                <!-- A folder inside a repository: sync and synchronized browsing use this folder, the GitHub tab the repository. -->
+                <p class="muted folder-note">{t('sites.repo_sub', { repo: repoName(loc.root), folder: loc.sub })}</p>
+              {/if}
             {:else if tab === 'advanced'}
               <label><span>{t('sites.timeout')}</span>
                 <input class="field mono small-input" inputmode="numeric" value={site.timeout ?? ''} placeholder="20" oninput={(e) => (site.timeout = port(e.currentTarget.value))} />
@@ -501,6 +508,11 @@
     background: var(--selected-bg);
     box-shadow: inset 2px 0 0 var(--selected-mark);
     color: var(--text-strong);
+  }
+
+  .folder-note {
+    margin: -4px 0 0;
+    font-size: 11.5px;
   }
 
   .empty,

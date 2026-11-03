@@ -3,6 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { github } from './github.svelte';
 import { prefs } from './prefs.svelte';
+import { repoRoots } from './reporoot.svelte';
 import { sites } from './sites.svelte';
 
 export interface BranchInfo {
@@ -121,7 +122,9 @@ class Repo {
     const seen = new Set<string>();
     const hidden = new Set(prefs.value.hiddenRepos.map((d) => d.toLowerCase()));
     for (const s of sites.list) {
-      const dir = s.localDir.trim();
+      // A site's folder may be inside its repository: the repository is listed.
+      const loc = repoRoots.location(s.localDir);
+      const dir = loc === undefined ? '' : (loc?.root ?? s.localDir.trim());
       if (dir && !seen.has(dir.toLowerCase()) && !hidden.has(dir.toLowerCase())) {
         seen.add(dir.toLowerCase());
         out.push({ dir, site: s.name });
