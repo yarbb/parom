@@ -13,6 +13,10 @@
   import { avatars, coAuthors } from '../lib/people.svelte';
   import { siteUsesRepo } from '../lib/reporoot.svelte';
   import { trackErrors } from '../lib/errors.svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
+  import Modal from './Modal.svelte';
+  import Select from './Select.svelte';
 
   // Board Hi: commits with "local HEAD" and "on server" badges, the files a
   // commit changed, and the diff of one of them.
@@ -87,17 +91,101 @@
   }
 
   const tone: Record<CommitFile['status'], string> = { new: 'status-new', modified: 'status-modified', deleted: 'status-removed' };
+
+  // Right-click menu on a commit, as in GitHub Desktop. Branches, tags and
+  // the commits not pushed yet decide which items apply.
+  let refs = $state<{ branches: string[]; tags: [string, string][]; unpushed: string[] }>({ branches: [], tags: [], unpushed: [] });
+  $effect(() => {
+    const dir = repo.dir;
+    void repo.log;
+    if (!dir) {
+      return;
+    }
+    invoke<typeof refs>('repo_refs', { dir })
+      .then((r) => dir === repo.dir && (refs = r))
+      .catch(() => undefined);
+  });
+  let local = $derived(new Set(refs.unpushed));
+  const tagsOf = (sha: string) => refs.tags.filter(([, at]) => at === sha).map(([name]) => name);
+
+  let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  /** A dialog asking for a name (branch, tag), a branch (cherry-pick) or a yes (reset). */
+  let asking = $state<{ op: 'branch' | 'tag' | 'cherry_pick' | 'reset'; sha: string; value: string } | null>(null);
+
+  function openMenu(e: MouseEvent, i: number) {
+    e.preventDefault();
+    const c = repo.log[i];
+    selected = c.sha;
+    const head = c.sha === repo.info?.head;
+    const onBranch = !!repo.info?.branch;
+    // Reset only drops commits that are not pushed yet.
+    const newerLocal = repo.log.slice(0, i).every((x) => local.has(x.sha));
+    const tags = tagsOf(c.sha);
+    const others = refs.branches.filter((b) => b !== repo.info?.branch);
+    const run = (op: string, arg?: string) => () => void repo.history(op, c.sha, arg);
+    menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: t('history.amend'), disabled: !head || !local.has(c.sha) || !onBranch || i === repo.log.length - 1, action: run('amend') },
+        { label: t('history.reset'), disabled: head || !newerLocal || !onBranch, action: () => (asking = { op: 'reset', sha: c.sha, value: '' }) },
+        { label: t('history.checkout'), disabled: head, action: run('checkout') },
+        { label: t('history.move_up'), disabled: !onBranch || !local.has(c.sha) || i === 0 || !local.has(repo.log[i - 1]?.sha), action: run('move_up') },
+        {
+          label: t('history.move_down'),
+          disabled: !onBranch || !local.has(c.sha) || !repo.log[i + 1] || !local.has(repo.log[i + 1].sha),
+          action: run('move_down'),
+        },
+        { label: t('history.revert'), disabled: !onBranch, action: run('revert') },
+        { separator: true, label: '' },
+        { label: t('history.branch'), action: () => (asking = { op: 'branch', sha: c.sha, value: '' }) },
+        { label: t('history.tag'), action: () => (asking = { op: 'tag', sha: c.sha, value: '' }) },
+        { label: t('history.cherry_pick'), disabled: !others.length, action: () => (asking = { op: 'cherry_pick', sha: c.sha, value: others[0] ?? '' }) },
+        { separator: true, label: '' },
+        { label: t('github.copy_sha'), action: () => void navigator.clipboard?.writeText(c.sha) },
+        { label: t('history.copy_tag'), disabled: !tags.length, action: () => void navigator.clipboard?.writeText(tags.join(' ')) },
+        {
+          label: t('github.view_on_github'),
+          disabled: !repo.info?.github,
+          action: () => openGitHub(`https://github.com/${repo.info!.github}/commit/${c.sha}`),
+        },
+      ],
+    };
+  }
+
+  function answer() {
+    const a = asking;
+    if (!a || (a.op !== 'reset' && !a.value.trim())) {
+      return;
+    }
+    asking = null;
+    void repo.history(a.op, a.sha, a.value.trim() || undefined);
+  }
 </script>
 
 <div class="history">
   <div class="commits" style:width="{colWidth('ghHistory', 420)}px">
     <div class="section-label">{t('github.commits', { branch: repo.info?.branch ?? 'HEAD', count: repo.log.length })}</div>
+    {#if repo.info && !repo.info.branch && repo.info.head}
+      <!-- After "Checkout commit": not on a branch until one is checked out again. -->
+      <div class="detached">
+        <span class="muted">{t('history.detached', { sha: repo.info.head.slice(0, 7) })}</span>
+        {#if repo.lastBranch || refs.branches[0]}
+          {@const back = repo.lastBranch ?? refs.branches[0]}
+          <button class="control small" disabled={!!repo.busy} onclick={() => void repo.history('checkout_branch', '', back)}>
+            {t('history.back_to', { branch: back })}
+          </button>
+        {/if}
+      </div>
+    {/if}
     <div class="list">
-      {#each repo.log as c (c.sha)}
+      {#each repo.log as c, i (c.sha)}
         {@const co = people.get(c.sha)?.people ?? []}
-        <button class="row" class:selected={c.sha === selected} onclick={() => (selected = c.sha)}>
+        <button class="row" class:selected={c.sha === selected} onclick={() => (selected = c.sha)} oncontextmenu={(e) => openMenu(e, i)}>
           <span class="line1">
             <span class="summary">{c.summary}</span>
+            {#each tagsOf(c.sha) as tag (tag)}<span class="badge mono">{tag}</span>{/each}
+            {#if local.has(c.sha) && repo.info?.upstream}<span class="badge" title={t('history.unpushed_hint')}>↑</span>{/if}
             {#if c.sha === repo.info?.head}<span class="badge">{t('github.badge.head')}</span>{/if}
             {#if c.sha === serverSha}<span class="badge server">{t('github.badge.server')}</span>{/if}
           </span>
@@ -163,7 +251,61 @@
   {/if}
 </div>
 
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}
+
+{#if asking}
+  {@const a = asking}
+  {@const c = repo.log.find((x) => x.sha === a.sha)}
+  <Modal title={t(`history.${a.op}_title`)} onCancel={() => (asking = null)}>
+    <form
+      class="ask"
+      onsubmit={(e) => {
+        e.preventDefault();
+        answer();
+      }}
+    >
+      <p class="muted"><span class="mono">{a.sha.slice(0, 7)}</span> {c?.summary ?? ''}</p>
+      {#if a.op === 'reset'}
+        <p>{t('history.reset_body')}</p>
+      {:else if a.op === 'cherry_pick'}
+        <Select
+          bind:value={asking.value}
+          options={refs.branches.filter((b) => b !== repo.info?.branch).map((b) => ({ value: b, label: b }))}
+        />
+      {:else}
+        <!-- svelte-ignore a11y_autofocus -->
+        <input class="field mono" autofocus placeholder={t(`history.${a.op}_name`)} aria-label={t(`history.${a.op}_name`)} bind:value={asking.value} />
+      {/if}
+    </form>
+    {#snippet actions()}
+      <button class="control" onclick={() => (asking = null)}>{t('common.cancel')}</button>
+      <button class="control primary" class:danger={a.op === 'reset'} disabled={a.op !== 'reset' && !a.value.trim()} onclick={answer}>
+        {t(`history.${a.op}_confirm`)}
+      </button>
+    {/snippet}
+  </Modal>
+{/if}
+
 <style>
+  .detached {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+
+  .ask p {
+    margin: 0 0 10px;
+  }
+
+  .ask .field {
+    width: 100%;
+  }
+
   .history {
     flex: 1;
     min-height: 0;

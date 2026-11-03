@@ -65,6 +65,13 @@
 
   trackErrors('github', () => addError);
 
+  // "Amend" in History shows the commit's changes and message in Changes.
+  $effect(() => {
+    if (repo.showChanges) {
+      page = 'changes';
+    }
+  });
+
   // Connecting to a site with a repository shows that repository.
   $effect(() => {
     const loc = connection.site ? repoRoots.location(connection.site.localDir) : null;

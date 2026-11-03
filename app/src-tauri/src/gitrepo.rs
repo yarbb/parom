@@ -6,7 +6,7 @@ use git2::{
     Rebase, RemoteCallbacks, Repository, RepositoryState, Signature, Status, StatusOptions,
 };
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
@@ -401,7 +401,8 @@ pub fn log(dir: &str, limit: usize) -> Result<Vec<LogEntry>, String> {
     if walk.push_head().is_err() {
         return Ok(Vec::new()); // no commits yet
     }
-    walk.set_sorting(git2::Sort::TIME).map_err(msg)?;
+    // Parents after children even within one second, then newest first.
+    walk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME).map_err(msg)?;
     let mut out = Vec::new();
     for oid in walk.take(limit) {
         let Ok(c) = oid.and_then(|o| repo.find_commit(o)) else { continue };
@@ -953,7 +954,18 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         let mut remote = current_remote(&repo)?;
         let remote_name = remote.name().ok().flatten().unwrap_or("origin").to_owned();
         let url = remote.url().unwrap_or("").to_owned();
-        let spec = format!("refs/heads/{branch}:refs/heads/{branch}");
+        let mut specs = vec![format!("refs/heads/{branch}:refs/heads/{branch}")];
+        // Tags made in the History menu go along (GitHub Desktop does the same).
+        let tags: Vec<String> = repo
+            .config()
+            .and_then(|c| c.get_string(PUSH_TAGS))
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter(|t| repo.find_reference(&format!("refs/tags/{t}")).is_ok())
+            .map(str::to_owned)
+            .collect();
+        specs.extend(tags.iter().map(|t| format!("refs/tags/{t}:refs/tags/{t}")));
+        let specs: Vec<&str> = specs.iter().map(String::as_str).collect();
         let rejected = with_credentials(token, &url, |t| {
             let rejected = std::cell::RefCell::new(None::<String>);
             {
@@ -966,12 +978,15 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
                 });
                 let mut opts = PushOptions::new();
                 opts.remote_callbacks(cb).proxy_options(proxy());
-                remote.push(&[spec.as_str()], Some(&mut opts))?;
+                remote.push(&specs, Some(&mut opts))?;
             }
             Ok(rejected.into_inner())
         })?;
         if let Some(reason) = rejected {
             return Err(format!("Push rejected: {reason}. Fetch and pull first"));
+        }
+        if let Ok(mut config) = repo.config() {
+            let _ = config.remove(PUSH_TAGS);
         }
         if repo.branch_upstream_name(&format!("refs/heads/{branch}")).is_err() {
             if let Ok(mut b) = repo.find_branch(&branch, BranchType::Local) {
@@ -980,6 +995,287 @@ pub fn push(dir: &str, token: Option<&str>) -> Result<BranchInfo, String> {
         }
     }
     branch_info(dir)
+}
+
+// History: the right-click menu on a commit, as in GitHub Desktop. Anything
+// that rewrites commits works only on commits no remote branch has yet.
+
+/// Commits reachable from HEAD that no remote branch has (not pushed yet).
+fn unpushed(repo: &Repository) -> Result<HashSet<Oid>, String> {
+    let mut walk = repo.revwalk().map_err(msg)?;
+    if walk.push_head().is_err() {
+        return Ok(HashSet::new());
+    }
+    let _ = walk.hide_glob("refs/remotes/*");
+    walk.map(|o| o.map_err(msg)).collect()
+}
+
+fn find<'r>(repo: &'r Repository, sha: &str) -> Result<git2::Commit<'r>, String> {
+    repo.revparse_single(sha).and_then(|o| o.peel_to_commit()).map_err(|e| format!("{sha}: {}", e.message()))
+}
+
+/// The current branch's ref name; operations that move a branch refuse a detached HEAD.
+fn branch_ref(repo: &Repository) -> Result<String, String> {
+    let head = repo.head().map_err(msg)?;
+    if !head.is_branch() {
+        return Err("HEAD is not on a branch; check out a branch first".into());
+    }
+    Ok(String::from_utf8_lossy(head.name_bytes()).into_owned())
+}
+
+/// Local branches, tags (name and commit) and the commits not pushed yet.
+#[derive(Serialize)]
+pub struct Refs {
+    branches: Vec<String>,
+    tags: Vec<(String, String)>,
+    unpushed: Vec<String>,
+}
+
+pub fn refs(dir: &str) -> Result<Refs, String> {
+    let repo = open(dir)?;
+    let mut branches = Vec::new();
+    for b in repo.branches(Some(BranchType::Local)).map_err(msg)? {
+        let (b, _) = b.map_err(msg)?;
+        branches.push(String::from_utf8_lossy(b.name_bytes().map_err(msg)?).into_owned());
+    }
+    branches.sort();
+    let mut tags = Vec::new();
+    repo.tag_foreach(|id, name| {
+        let target = repo.find_object(id, None).and_then(|o| o.peel_to_commit()).map(|c| c.id()).unwrap_or(id);
+        let name = String::from_utf8_lossy(name);
+        tags.push((name.trim_start_matches("refs/tags/").to_owned(), target.to_string()));
+        true
+    })
+    .map_err(msg)?;
+    tags.sort();
+    let unpushed = unpushed(&repo)?.into_iter().map(|o| o.to_string()).collect();
+    Ok(Refs { branches, tags, unpushed })
+}
+
+/// "Amend": the last commit is undone and its changes go back to Changes;
+/// returns its message for the commit box.
+pub fn amend(dir: &str) -> Result<String, String> {
+    let repo = open(dir)?;
+    busy_check(&repo)?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(msg)?;
+    if !unpushed(&repo)?.contains(&head.id()) {
+        return Err("This commit is already pushed; amending it would rewrite the remote's history".into());
+    }
+    let parent = head.parent(0).map_err(|_| "The first commit of a repository cannot be amended here".to_owned())?;
+    repo.reset(parent.as_object(), git2::ResetType::Soft, None).map_err(msg)?;
+    Ok(String::from_utf8_lossy(head.message_bytes()).trim().to_owned())
+}
+
+/// "Reset to commit": the commits after it are undone, their changes kept as uncommitted.
+pub fn reset_to(dir: &str, sha: &str) -> Result<(), String> {
+    let repo = open(dir)?;
+    busy_check(&repo)?;
+    let target = find(&repo, sha)?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(msg)?;
+    if target.id() == head.id() {
+        return Ok(());
+    }
+    if !repo.graph_descendant_of(head.id(), target.id()).map_err(msg)? {
+        return Err("This commit is not in the current branch".into());
+    }
+    let mut walk = repo.revwalk().map_err(msg)?;
+    walk.push(head.id()).map_err(msg)?;
+    walk.hide(target.id()).map_err(msg)?;
+    let local = unpushed(&repo)?;
+    for id in walk {
+        if !local.contains(&id.map_err(msg)?) {
+            return Err("Commits after this one are already pushed; resetting would rewrite the remote's history".into());
+        }
+    }
+    repo.reset(target.as_object(), git2::ResetType::Mixed, None).map_err(msg)
+}
+
+/// Checks out a commit (detached HEAD) or, with `branch`, a local branch.
+/// Uncommitted edits that would be overwritten stop it.
+pub fn checkout(dir: &str, sha: Option<&str>, branch: Option<&str>) -> Result<(), String> {
+    let repo = open(dir)?;
+    busy_check(&repo)?;
+    let (commit, refname) = match (sha, branch) {
+        (_, Some(b)) => {
+            let r = repo.find_branch(b, BranchType::Local).map_err(|e| format!("{b}: {}", e.message()))?;
+            let name = String::from_utf8_lossy(r.get().name_bytes()).into_owned();
+            (r.get().peel_to_commit().map_err(msg)?, Some(name))
+        }
+        (Some(s), None) => (find(&repo, s)?, None),
+        _ => return Err("Nothing to check out".into()),
+    };
+    let mut co = git2::build::CheckoutBuilder::new();
+    co.safe();
+    repo.checkout_tree(commit.as_object(), Some(&mut co)).map_err(|e| {
+        if e.code() == ErrorCode::Conflict {
+            "Uncommitted changes would be overwritten; commit or discard them first".to_owned()
+        } else {
+            msg(e)
+        }
+    })?;
+    match refname {
+        Some(name) => repo.set_head(&name),
+        None => repo.set_head_detached(commit.id()),
+    }
+    .map_err(msg)
+}
+
+/// "Create branch from commit", then switches to it.
+pub fn create_branch(dir: &str, name: &str, sha: &str) -> Result<(), String> {
+    let name = name.trim();
+    {
+        let repo = open(dir)?;
+        if !git2::Branch::name_is_valid(name).unwrap_or(false) {
+            return Err(format!("\"{name}\" is not a valid branch name"));
+        }
+        let commit = find(&repo, sha)?;
+        repo.branch(name, &commit, false).map_err(msg)?;
+    }
+    checkout(dir, None, Some(name))
+}
+
+/// Tags made in the app that the next push sends (git config, space separated).
+const PUSH_TAGS: &str = "parom.pushtags";
+
+/// A tag on the commit (lightweight); the next push takes it to the remote.
+pub fn create_tag(dir: &str, name: &str, sha: &str) -> Result<(), String> {
+    let repo = open(dir)?;
+    let name = name.trim();
+    if name.is_empty() || name.contains(' ') || !git2::Reference::is_valid_name(&format!("refs/tags/{name}")) {
+        return Err(format!("\"{name}\" is not a valid tag name"));
+    }
+    let commit = find(&repo, sha)?;
+    repo.tag_lightweight(name, commit.as_object(), false).map_err(msg)?;
+    let mut config = repo.config().map_err(msg)?;
+    let pending = config.get_string(PUSH_TAGS).unwrap_or_default();
+    config.set_str(PUSH_TAGS, format!("{pending} {name}").trim()).map_err(msg)
+}
+
+/// Commits `tree` on HEAD and brings the working tree's copies of the files
+/// it changed up to date; refuses when those files have uncommitted edits.
+fn commit_on_head(repo: &Repository, dir: &str, tree: Oid, message: &str, sig: &Signature<'_>) -> Result<(), String> {
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(msg)?;
+    let new_tree = repo.find_tree(tree).map_err(msg)?;
+    let diff = repo.diff_tree_to_tree(Some(&head.tree().map_err(msg)?), Some(&new_tree), None).map_err(msg)?;
+    let touched: Vec<String> = diff
+        .deltas()
+        .flat_map(|d| [d.old_file().path().map(Path::to_path_buf), d.new_file().path().map(Path::to_path_buf)])
+        .flatten()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    if touched.is_empty() {
+        return Err("Nothing changes: the result is the same as the last commit".into());
+    }
+    let edited: HashSet<String> = changes(dir)?.into_iter().flat_map(FileChange::paths).collect();
+    let blocked: Vec<&str> = touched.iter().filter(|p| edited.contains(*p)).take(8).map(String::as_str).collect();
+    if !blocked.is_empty() {
+        return Err(format!("These files have uncommitted changes; commit or discard them first:\n{}", blocked.join("\n")));
+    }
+    repo.commit(Some("HEAD"), sig, sig, message, &new_tree, &[&head]).map_err(msg)?;
+    let mut co = git2::build::CheckoutBuilder::new();
+    co.force().disable_pathspec_match(true);
+    for p in &touched {
+        co.path(p.as_str());
+    }
+    repo.checkout_head(Some(&mut co)).map_err(msg)
+}
+
+fn conflict_list(index: &git2::Index) -> String {
+    conflicted_paths(index).map(|p| p.into_iter().take(8).collect::<Vec<_>>().join("\n")).unwrap_or_default()
+}
+
+/// "Revert changes in commit": a new commit that undoes it.
+pub fn revert(dir: &str, sha: &str, name: Option<&str>, email: Option<&str>) -> Result<(), String> {
+    let repo = open(dir)?;
+    busy_check(&repo)?;
+    let sig = signature(&repo, name, email)?;
+    let commit = find(&repo, sha)?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(msg)?;
+    let mainline = if commit.parent_count() > 1 { 1 } else { 0 };
+    let mut index = repo.revert_commit(&commit, &head, mainline, None).map_err(msg)?;
+    if index.has_conflicts() {
+        return Err(format!("Later commits changed the same lines, so this one cannot be reverted by itself:\n{}", conflict_list(&index)));
+    }
+    let tree = index.write_tree_to(&repo).map_err(msg)?;
+    let summary = commit.summary().ok().flatten().unwrap_or("").to_owned();
+    let message = format!("Revert \"{summary}\"\n\nThis reverts commit {}.", commit.id());
+    commit_on_head(&repo, dir, tree, &message, &sig)
+}
+
+/// "Cherry-pick commit": a copy of it on another local branch (that branch
+/// moves; the current one and the files here stay as they are).
+pub fn cherry_pick(dir: &str, sha: &str, branch: &str, name: Option<&str>, email: Option<&str>) -> Result<(), String> {
+    let repo = open(dir)?;
+    busy_check(&repo)?;
+    let sig = signature(&repo, name, email)?;
+    let commit = find(&repo, sha)?;
+    let target = repo.find_branch(branch, BranchType::Local).map_err(|e| format!("{branch}: {}", e.message()))?;
+    let refname = String::from_utf8_lossy(target.get().name_bytes()).into_owned();
+    if repo.head().map(|h| h.name_bytes() == refname.as_bytes()).unwrap_or(false) {
+        return Err(format!("{branch} is the current branch"));
+    }
+    let onto = target.get().peel_to_commit().map_err(msg)?;
+    let mainline = if commit.parent_count() > 1 { 1 } else { 0 };
+    let mut index = repo.cherrypick_commit(&commit, &onto, mainline, None).map_err(msg)?;
+    if index.has_conflicts() {
+        return Err(format!("{branch} changed the same lines differently:\n{}", conflict_list(&index)));
+    }
+    let tree = repo.find_tree(index.write_tree_to(&repo).map_err(msg)?).map_err(msg)?;
+    if tree.id() == onto.tree_id() {
+        return Err(format!("{branch} already has these changes"));
+    }
+    let message = String::from_utf8_lossy(commit.message_bytes()).into_owned();
+    repo.commit(Some(&refname), &commit.author(), &sig, &message, &tree, &[&onto]).map_err(msg)?;
+    Ok(())
+}
+
+/// "Reorder": swaps an unpushed commit with the one after it (`up`, newer)
+/// or before it. The commits are replayed in the new order on top of the
+/// last pushed one; the files end up the same, so nothing on disk changes.
+pub fn move_commit(dir: &str, sha: &str, up: bool) -> Result<(), String> {
+    let repo = open(dir)?;
+    busy_check(&repo)?;
+    let refname = branch_ref(&repo)?;
+    let local = unpushed(&repo)?;
+    // The unpushed run from HEAD down, first parents only, no merges.
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(msg)?;
+    let mut chain = Vec::new();
+    let mut at = Some(head.clone());
+    while let Some(c) = at.take().filter(|c| local.contains(&c.id()) && c.parent_count() < 2) {
+        at = c.parent(0).ok();
+        chain.push(c);
+    }
+    let id = find(&repo, sha)?.id();
+    let i = chain.iter().position(|c| c.id() == id).ok_or("Only commits that are not pushed yet can be moved")?;
+    let j = if up { i.checked_sub(1) } else { Some(i + 1) }
+        .filter(|&j| j < chain.len())
+        .ok_or("There is no unpushed commit to swap with on that side")?;
+    chain.swap(i, j);
+    let mut tip = chain.last().and_then(|c| c.parent(0).ok());
+    for c in chain.iter().rev() {
+        let tree = match tip.as_ref() {
+            Some(onto) => {
+                let mut index = repo.cherrypick_commit(c, onto, 0, None).map_err(msg)?;
+                if index.has_conflicts() {
+                    return Err(format!("These two commits change the same lines, so they cannot swap:\n{}", conflict_list(&index)));
+                }
+                repo.find_tree(index.write_tree_to(&repo).map_err(msg)?).map_err(msg)?
+            }
+            None => c.tree().map_err(msg)?,
+        };
+        let parents: Vec<&git2::Commit<'_>> = tip.iter().collect();
+        let message = String::from_utf8_lossy(c.message_bytes()).into_owned();
+        let new = repo.commit(None, &c.author(), &c.committer(), &message, &tree, &parents).map_err(msg)?;
+        tip = Some(repo.find_commit(new).map_err(msg)?);
+    }
+    let tip = tip.ok_or("Nothing to move")?;
+    if tip.tree_id() != head.tree_id() {
+        return Err("Swapping these commits would change the files; left as they were".into());
+    }
+    repo.reference(&refname, tip.id(), true, "parom: reorder commits").map_err(msg)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1138,6 +1434,53 @@ mod tests {
         let paths = ["server/lua/a.lua".to_owned(), "lua/a.lua".to_owned()];
         commit(dir, &paths, "move", Some("Test"), Some("test@example.com")).unwrap();
         assert_eq!(listed(dir), vec![("c.txt".into(), "new", None), ("lua/b.lua".into(), "modified", None)]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn history_menu_rewrites_only_local_commits() {
+        let root = temp("history");
+        Repository::init(&root).unwrap();
+        commit_file(&root, "a.txt", "1\n", "one");
+        commit_file(&root, "b.txt", "1\n", "two");
+        commit_file(&root, "c.txt", "1\n", "three");
+        let dir = root.to_str().unwrap();
+        let main = branch_info(dir).unwrap().branch.unwrap();
+        let ids: Vec<String> = log(dir, 10).unwrap().into_iter().map(|c| c.sha).collect();
+        let summaries = || log(dir, 10).unwrap().into_iter().map(|c| c.summary).collect::<Vec<_>>();
+
+        // Reorder: "three" moves below "two"; the files stay the same.
+        move_commit(dir, &ids[0], false).unwrap();
+        assert_eq!(summaries(), vec!["two", "three", "one"]);
+        assert!(changes(dir).unwrap().is_empty());
+
+        // Revert "two": b.txt goes away in a new commit.
+        let two = log(dir, 10).unwrap()[0].sha.clone();
+        revert(dir, &two, Some("Test"), Some("test@example.com")).unwrap();
+        assert!(!root.join("b.txt").exists());
+        assert_eq!(summaries()[0], "Revert \"two\"");
+
+        // Amend: the revert goes back to Changes with its message.
+        let message = amend(dir).unwrap();
+        assert!(message.starts_with("Revert \"two\""));
+        assert_eq!(summaries()[0], "two");
+
+        // Branch and tag from the first commit; cherry-pick "three" onto that branch.
+        let first = ids[2].clone();
+        create_tag(dir, "v1", &first).unwrap();
+        create_branch(dir, "side", &first).unwrap();
+        assert_eq!(branch_info(dir).unwrap().branch.as_deref(), Some("side"));
+        checkout(dir, None, Some(&main)).unwrap();
+        let three = log(dir, 10).unwrap().into_iter().find(|c| c.summary == "three").unwrap().sha;
+        cherry_pick(dir, &three, "side", Some("Test"), Some("test@example.com")).unwrap();
+        let r = refs(dir).unwrap();
+        assert_eq!(r.tags, vec![("v1".to_owned(), first.clone())]);
+        assert!(r.branches.contains(&"side".to_owned()));
+
+        // Reset to the first commit keeps the later files as changes.
+        reset_to(dir, &first).unwrap();
+        let left: Vec<String> = changes(dir).unwrap().into_iter().map(|c| c.path).collect();
+        assert_eq!(left, vec!["b.txt", "c.txt"]);
         let _ = fs::remove_dir_all(root);
     }
 }

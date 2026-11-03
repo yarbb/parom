@@ -408,6 +408,41 @@ async fn repo_commit_files(dir: String, rev: String) -> Result<Vec<gitrepo::Comm
     blocking(move || gitrepo::commit_files(&dir, &rev)).await
 }
 
+#[tauri::command]
+async fn repo_refs(dir: String) -> Result<gitrepo::Refs, String> {
+    blocking(move || gitrepo::refs(&dir)).await
+}
+
+/// The History menu on a commit; returns the message for "amend", else "".
+#[tauri::command]
+async fn repo_history(
+    dir: String,
+    op: String,
+    sha: String,
+    arg: Option<String>,
+    name: Option<String>,
+    email: Option<String>,
+) -> Result<String, String> {
+    blocking(move || {
+        let arg = arg.as_deref().unwrap_or("");
+        let (name, email) = (name.as_deref(), email.as_deref());
+        match op.as_str() {
+            "amend" => return gitrepo::amend(&dir),
+            "reset" => gitrepo::reset_to(&dir, &sha),
+            "checkout" => gitrepo::checkout(&dir, Some(&sha), None),
+            "checkout_branch" => gitrepo::checkout(&dir, None, Some(arg)),
+            "branch" => gitrepo::create_branch(&dir, arg, &sha),
+            "tag" => gitrepo::create_tag(&dir, arg, &sha),
+            "revert" => gitrepo::revert(&dir, &sha, name, email),
+            "cherry_pick" => gitrepo::cherry_pick(&dir, &sha, arg, name, email),
+            "move_up" | "move_down" => gitrepo::move_commit(&dir, &sha, op == "move_up"),
+            _ => Err(format!("Unknown operation {op}")),
+        }
+        .map(|()| String::new())
+    })
+    .await
+}
+
 /// fetch, pull (fast-forward only) or push origin, with the GitHub token.
 #[tauri::command]
 async fn repo_conflicts(dir: String) -> Result<Option<gitrepo::Conflicts>, String> {
@@ -609,6 +644,8 @@ pub fn run() {
             repo_commit,
             repo_log,
             repo_commit_files,
+            repo_refs,
+            repo_history,
             repo_remote
         ])
         .build(context)
