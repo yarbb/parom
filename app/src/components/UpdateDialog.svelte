@@ -3,6 +3,8 @@
   import { ui } from '../lib/ui.svelte';
   import { updates } from '../lib/updates.svelte';
   import Modal from './Modal.svelte';
+  import Markdown from './Markdown.svelte';
+  import { notesToHtml } from '../lib/notes';
 
   // "Check for updates" result, and the update itself: what is new, then
   // download, install and restart.
@@ -27,7 +29,7 @@
   {:else if updates.available}
     {#if updates.available.notes.trim()}
       <div class="label">{t('update.whats_new')}</div>
-      <pre class="notes">{updates.available.notes.trim()}</pre>
+      <div class="notes"><Markdown html={notesToHtml(updates.available.notes.trim())} text={updates.available.notes.trim()} /></div>
     {/if}
     {#if updates.progress}
       <div class="bar" role="progressbar" aria-valuenow={percent ?? undefined} aria-valuemin={0} aria-valuemax={100}>
@@ -73,7 +75,23 @@
     font-family: var(--font-ui);
     font-size: 12px;
     line-height: 1.5;
-    white-space: pre-wrap;
+  }
+
+  .notes :global(p),
+  .notes :global(ul) {
+    margin: 0 0 8px;
+  }
+
+  .notes :global(ul) {
+    padding-left: 18px;
+  }
+
+  .notes :global(li + li) {
+    margin-top: 4px;
+  }
+
+  .notes :global(:last-child) {
+    margin-bottom: 0;
   }
 
   .bar {

@@ -71,16 +71,34 @@ pub fn home() -> String {
         .unwrap_or_else(|| roots().into_iter().next().unwrap_or_else(|| "/".into()))
 }
 
-/// File system roots: drive letters on Windows, "/" elsewhere.
+/// File system roots: drive letters on Windows, "/" elsewhere. Each letter is
+/// checked on its own thread: a mapped network drive whose server is asleep or
+/// gone can take seconds to answer, so a letter still busy after a short wait
+/// is listed anyway (missing letters answer at once).
 pub fn roots() -> Vec<String> {
-    if cfg!(windows) {
-        (b'A'..=b'Z')
-            .map(|c| format!("{}:\\", c as char))
-            .filter(|r| Path::new(r).is_dir())
-            .collect()
-    } else {
-        vec!["/".into()]
+    if !cfg!(windows) {
+        return vec!["/".into()];
     }
+    let (tx, rx) = std::sync::mpsc::channel();
+    for c in b'A'..=b'Z' {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send((c, Path::new(&format!("{}:\\", c as char)).is_dir()));
+        });
+    }
+    drop(tx);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
+    let mut answered = [None::<bool>; 26];
+    while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+        match rx.recv_timeout(left) {
+            Ok((c, ok)) => answered[(c - b'A') as usize] = Some(ok),
+            Err(_) => break,
+        }
+    }
+    (b'A'..=b'Z')
+        .filter(|c| answered[(c - b'A') as usize] != Some(false))
+        .map(|c| format!("{}:\\", c as char))
+        .collect()
 }
 
 #[derive(Serialize, Default)]
@@ -195,6 +213,14 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn roots_answer_quickly() {
+        let started = std::time::Instant::now();
+        let r = roots();
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        assert!(r.iter().any(|x| Path::new(x).is_dir()));
     }
 
     #[test]
