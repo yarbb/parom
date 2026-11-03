@@ -22,12 +22,12 @@
   import ContextMenu, { type MenuItem } from './ContextMenu.svelte';
   import { counts } from '../lib/issues.svelte';
   import SignedOut from './SignedOut.svelte';
-  import ErrorDialog from './ErrorDialog.svelte';
   import ConflictsDialog from './ConflictsDialog.svelte';
   import SyncBar from './SyncBar.svelte';
   import Splitter from './Splitter.svelte';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
   import { repoRoots, siteUsesRepo } from '../lib/reporoot.svelte';
+  import { errors, trackErrors } from '../lib/errors.svelte';
 
   // Boards Bd, Hi, Ix, Pr, Bk: toolbar (repository, branch, fetch / pull /
   // push), sidebar, and the page. Changes and History work without signing in.
@@ -62,6 +62,8 @@
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   });
+
+  trackErrors('github', () => addError);
 
   // Connecting to a site with a repository shows that repository.
   $effect(() => {
@@ -193,10 +195,10 @@
   {/if}
   {#if repo.error}
     <!-- One line here; the whole text in its own window (click), until closed. -->
-    <button class="error status-removed" title={t('error.details')} onclick={() => (repo.errorOpen = true)}>{repo.error}</button>
+    <button class="error status-removed" title={t('error.details')} onclick={() => errors.show({ source: 'github', text: repo.error })}>{repo.error}</button>
     <button class="dismiss" title={t('common.close')} aria-label={t('common.close')} onclick={() => repo.dismissError()}>×</button>
   {:else if addError}
-    <span class="error status-removed" title={addError}>{addError}</span>
+    <button class="error status-removed" title={t('error.details')} onclick={() => errors.show({ source: 'github', text: addError })}>{addError}</button>
   {/if}
 </div>
 
@@ -206,9 +208,6 @@
   <ConflictsDialog onClose={() => (repo.conflictsOpen = false)} />
 {/if}
 
-{#if repo.errorOpen && repo.error}
-  <ErrorDialog title={t('error.title')} message={repo.error} onClose={() => (repo.errorOpen = false)} />
-{/if}
 
 {#if context}
   <ContextMenu x={context.x} y={context.y} items={context.items} onClose={() => (context = null)} />

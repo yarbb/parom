@@ -34,6 +34,7 @@
   import { instances } from '../lib/instances.svelte';
   import { queueStore, type SavedTransfer } from '../lib/queuestore.svelte';
   import { siteUsesRepo } from '../lib/reporoot.svelte';
+  import { errors } from '../lib/errors.svelte';
 
   let { engine, visible = true }: { engine: EngineState; visible?: boolean } = $props();
 
@@ -575,7 +576,13 @@
     </button>
   {/if}
   {#if connection.error || edits.error}
-    <span class="error status-removed" title={connection.error || edits.error}>{connection.error || edits.error}</span>
+    <button
+      class="error status-removed"
+      title={t('error.details')}
+      onclick={() => errors.show({ source: connection.error ? 'connection' : 'editor', text: connection.error || edits.error })}
+    >
+      {connection.error || edits.error}
+    </button>
   {/if}
 </form>
 
@@ -785,5 +792,19 @@
 
   .panes > :global(.pane:first-child) {
     flex: 0 0 var(--split);
+  }
+
+  button.error {
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  button.error:hover {
+    text-decoration: underline;
   }
 </style>

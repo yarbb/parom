@@ -12,6 +12,7 @@
   import Person from './Person.svelte';
   import { avatars, coAuthors } from '../lib/people.svelte';
   import { siteUsesRepo } from '../lib/reporoot.svelte';
+  import { trackErrors } from '../lib/errors.svelte';
 
   // Board Hi: commits with "local HEAD" and "on server" badges, the files a
   // commit changed, and the diff of one of them.
@@ -20,6 +21,7 @@
   let file = $state('');
   let diff = $state<FileDiff | null>(null);
   let error = $state('');
+  trackErrors('github', () => error);
   let copied = $state(false);
 
   /** The deployed commit, when the connected site deploys this repository. */

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../lib/i18n';
   import { updates } from '../lib/updates.svelte';
+  import { errors } from '../lib/errors.svelte';
 
   interface Props {
     state: string;
@@ -29,12 +30,22 @@
   <span class="side"><span class:status-removed={error} class:status-new={ok} aria-hidden="true">●</span>
     {#if parts}{parts[0]}<span class="secret">{secret}</span>{parts.slice(1).join(secret ?? "")}{:else}{state}{/if}</span
   >
-  <span class="message" class:status-removed={message?.level === 'error' || message?.level === 'reply'} title={message?.text ?? ''}>
-    {logOpen ? '' : (message?.text ?? '')}
-  </span>
+  {#if !logOpen && message && (message.level === 'error' || message.level === 'reply')}
+    <!-- A server error: the whole text in the error window. -->
+    <button class="message status-removed mono" title={t('error.details')} onclick={() => errors.show({ source: 'server', text: message.text })}>
+      {message.text}
+    </button>
+  {:else}
+    <span class="message" title={message?.text ?? ''}>{logOpen ? '' : (message?.text ?? '')}</span>
+  {/if}
   <span class="side right">
     {#if onQueue && queued}
       <button class="log-button mono" class:open={queueOpen} onclick={onQueue}>{t('queue.button', { count: queued })}</button>
+    {/if}
+    {#if errors.recent.length}
+      <button class="log-button mono" class:status-removed={errors.unseen > 0} onclick={() => errors.showRecent()}>
+        {t('error.button', { count: errors.unseen || errors.recent.length })}
+      </button>
     {/if}
     {#if onLog}<button class="log-button mono" class:open={logOpen} onclick={onLog}>{logLabel}</button>{/if}
     {#if updates.available}
@@ -86,6 +97,18 @@
   .log-button.open,
   .log-button:hover {
     color: var(--text-strong);
+  }
+
+  button.message {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: inherit;
+    cursor: pointer;
+  }
+
+  button.message:hover {
+    text-decoration: underline;
   }
 
   .message {
