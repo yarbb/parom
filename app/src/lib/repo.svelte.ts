@@ -114,6 +114,12 @@ class Repo {
   conflictsOpen = $state(false);
   /** When the remote was last fetched in this session (ms). */
   fetchedAt = $state<number | null>(null);
+  /** A commit message "Amend" put back, for the commit box. */
+  draft = $state<string | null>(null);
+  /** Bumped when Changes should be shown (after "Amend"). */
+  showChanges = $state(0);
+  /** The branch before "Checkout commit", to go back to. */
+  lastBranch = $state<string | null>(null);
 
   /** Repositories linked to sites, then ones added by hand. */
   get choices(): RepoChoice[] {
@@ -390,6 +396,42 @@ class Repo {
       return false;
     } finally {
       this.busy = '';
+    }
+  }
+
+  /**
+   * The History menu on a commit (gitrepo.rs): amend, reset, checkout,
+   * branch, tag, revert, cherry-pick, move. Returns the operation's text
+   * ("Amend": the commit message), or null when it failed.
+   */
+  async history(op: string, sha: string, arg?: string): Promise<string | null> {
+    this.busy = 'history';
+    try {
+      const author = github.author;
+      if (op === 'checkout' && this.info?.branch) {
+        this.lastBranch = this.info.branch;
+      }
+      const out = await invoke<string>('repo_history', {
+        dir: this.dir,
+        op,
+        sha,
+        arg: arg ?? null,
+        name: author?.name ?? null,
+        email: author?.email ?? null,
+      });
+      this.dismissError();
+      this.changed++;
+      if (op === 'amend') {
+        this.draft = out;
+        this.showChanges++;
+      }
+      return out;
+    } catch (e) {
+      this.fail(e);
+      return null;
+    } finally {
+      this.busy = '';
+      await this.refresh();
     }
   }
 

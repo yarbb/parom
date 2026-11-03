@@ -83,6 +83,17 @@
     }
   }
 
+  // "Amend" in History: the commit's message comes back to the commit box.
+  $effect(() => {
+    const message = repo.draft;
+    if (message !== null) {
+      const [first, ...rest] = message.split('\n');
+      summary = first;
+      description = rest.join('\n').trim();
+      repo.draft = null;
+    }
+  });
+
   // Keep a valid selection as the list changes.
   $effect(() => {
     if (!current) {
