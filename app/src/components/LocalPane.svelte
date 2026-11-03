@@ -265,7 +265,8 @@
       error = t('files.error.desktop_only');
       return;
     }
-    roots = await localRoots();
+    // The folder does not wait for the drive list (a network drive can be slow to answer).
+    void localRoots().then((r) => (roots = r));
     const last = prefs.value.rememberDirs ? prefs.value.lastLocalDir : '';
     await load(last || (await localHome()));
     if (error && last) {

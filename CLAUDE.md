@@ -39,6 +39,7 @@ C++ process wrapping the engine. Owns the transfer queue (SQLite), sites, settin
 
 ## UI: Tauri
 - Tauri (WebView2 on Windows) + web UI. File lists are virtualized: 100k rows must scroll smoothly.
+- Commands that touch the disk are `async` (`blocking()`): a synchronous `#[tauri::command] fn` runs on the window's main thread, and a slow disk (a mapped network drive whose server sleeps) then freezes the window. The drive list checks letters in parallel and lists a letter still busy after 300 ms; the local pane opens its folder without waiting for it.
 - GitHub features live in the app layer: OAuth device-flow sign-in (prefer a GitHub App with fine-grained permissions: contents read, issues read/write, pull requests read), token in the OS credential store, REST for issues/PRs, libgit2 (git2-rs) for local git.
 
 ### Screens

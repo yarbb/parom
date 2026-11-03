@@ -51,13 +51,13 @@ async fn local_walk(path: String) -> Result<local::LocalTree, String> {
 }
 
 #[tauri::command]
-fn local_mkdir(path: String) -> Result<(), String> {
-    local::mkdir(&path)
+async fn local_mkdir(path: String) -> Result<(), String> {
+    blocking(move || local::mkdir(&path)).await
 }
 
 #[tauri::command]
-fn local_rename(from: String, to: String) -> Result<(), String> {
-    local::rename(&from, &to)
+async fn local_rename(from: String, to: String) -> Result<(), String> {
+    blocking(move || local::rename(&from, &to)).await
 }
 
 #[tauri::command]
@@ -72,14 +72,16 @@ async fn local_trash(paths: Vec<String>) -> Result<(), String> {
         .map_err(|e| e.to_string())?
 }
 
+// File system commands run off the main thread: a slow disk (a mapped
+// network drive, a sleeping one) must not freeze the window.
 #[tauri::command]
-fn local_home() -> String {
-    local::home()
+async fn local_home() -> Result<String, String> {
+    blocking(|| Ok(local::home())).await
 }
 
 #[tauri::command]
-fn local_roots() -> Vec<String> {
-    local::roots()
+async fn local_roots() -> Result<Vec<String>, String> {
+    blocking(|| Ok(local::roots())).await
 }
 
 #[tauri::command]
@@ -174,18 +176,18 @@ fn instance_beat(app: tauri::AppHandle, server: Option<String>) -> Result<Vec<St
 }
 
 #[tauri::command]
-fn read_small_file(path: String) -> Result<String, String> {
-    support::read_small(&path)
+async fn read_small_file(path: String) -> Result<String, String> {
+    blocking(move || support::read_small(&path)).await
 }
 
 #[tauri::command]
-fn write_small_file(path: String, content: String) -> Result<(), String> {
-    support::write_small(&path, &content)
+async fn write_small_file(path: String, content: String) -> Result<(), String> {
+    blocking(move || support::write_small(&path, &content)).await
 }
 
 #[tauri::command]
-fn append_line(path: String, line: String) -> Result<(), String> {
-    support::append_line(&path, &line)
+async fn append_line(path: String, line: String) -> Result<(), String> {
+    blocking(move || support::append_line(&path, &line)).await
 }
 
 #[tauri::command]
