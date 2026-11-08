@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { closeLayer, openLayer } from '../lib/layers';
   import { indicator } from '../lib/indicator';
   import { ui } from '../lib/ui.svelte';
   import { open } from '@tauri-apps/plugin-dialog';
@@ -223,9 +225,13 @@
       s.remoteDir = a.path;
     }
   }
+
+  // Drawn above windows opened before it (lib/layers.ts).
+  const layer = openLayer();
+  onDestroy(closeLayer);
 </script>
 
-<div class="backdrop">
+<div class="backdrop" style:z-index={layer}>
   <div class="window" role="dialog" aria-modal="true" aria-label={t('sites.title')} tabindex="-1" {onkeydown}>
     <header>
       <h2>{t('sites.title')}</h2>

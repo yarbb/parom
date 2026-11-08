@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { closeLayer, openLayer } from '../lib/layers';
   import { comboOf, keyCommands, keyOf } from '../lib/keys';
   import { updates } from '../lib/updates.svelte';
   import { indicator } from '../lib/indicator';
@@ -243,10 +245,15 @@
     const n = Number(v);
     return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback;
   };
+
+  // Drawn above windows opened before it (lib/layers.ts).
+  const layer = openLayer();
+  onDestroy(closeLayer);
 </script>
 
 <div
   class="backdrop"
+  style:z-index={layer}
   role="presentation"
   onmousedown={(e) => (pressedOutside = e.target === e.currentTarget)}
   onclick={(e) => e.target === e.currentTarget && pressedOutside && requestClose()}

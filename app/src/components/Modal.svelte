@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { closeLayer, openLayer } from '../lib/layers';
   import type { Snippet } from 'svelte';
 
   interface Props {
@@ -28,9 +30,13 @@
       onCancel();
     }
   }
+
+  // Drawn above windows opened before it (lib/layers.ts).
+  const layer = openLayer();
+  onDestroy(closeLayer);
 </script>
 
-<div class="backdrop">
+<div class="backdrop" style:z-index={layer}>
   <div class="dialog" class:wide role="dialog" aria-modal="true" aria-label={title} tabindex="-1" bind:this={dialog} {onkeydown}>
     <h2>{title}</h2>
     <div class="body">{@render children()}</div>
