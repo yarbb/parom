@@ -121,7 +121,9 @@ pub fn branch_info(dir: &str) -> Result<BranchInfo, String> {
 #[derive(Serialize)]
 pub struct FileChange {
     path: String,
-    /// "new", "modified", "deleted", "renamed".
+    /// "new", "modified", "deleted", "renamed", or "repository": a folder
+    /// that is a git repository of its own (git does not look inside it, and
+    /// its files cannot be committed here).
     status: &'static str,
     /// Renamed: where the file was (same content).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -216,6 +218,11 @@ fn raw_changes(repo: &Repository) -> Result<Vec<FileChange>, String> {
             continue;
         }
         if crate::git::only_line_endings(repo, head_tree.as_ref(), path, st) {
+            continue;
+        }
+        // libgit2 lists a folder holding its own .git as "folder/" and does not go in.
+        if let Some(folder) = path.strip_suffix('/') {
+            out.push(FileChange { path: folder.to_owned(), status: "repository", old_path: None });
             continue;
         }
         let status = if st.intersects(Status::WT_NEW | Status::INDEX_NEW) && !st.intersects(Status::WT_DELETED) {
@@ -331,7 +338,12 @@ pub fn commit(dir: &str, paths: &[String], message: &str, name: Option<&str>, em
     let workdir = repo.workdir().ok_or("Bare repositories are not supported")?.to_path_buf();
     let mut index = repo.index().map_err(msg)?;
     for path in paths {
-        let rel = Path::new(path);
+        let rel = Path::new(path.trim_end_matches('/'));
+        if workdir.join(rel).join(".git").exists() {
+            return Err(format!(
+                "{path} is a git repository of its own, so its files cannot be committed here. Untick it, delete its .git folder to commit the files, or add it to .gitignore"
+            ));
+        }
         if workdir.join(rel).exists() {
             index.add_path(rel).map_err(|e| format!("{path}: {}", e.message()))?;
         } else {
@@ -362,6 +374,9 @@ pub fn discard(dir: &str, paths: &[String]) -> Result<Vec<String>, String> {
     let repo = open(dir)?;
     let head = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
     let tree = head.as_ref().and_then(|c| c.tree().ok());
+    if let Some(p) = paths.iter().find(|p| repo.workdir().is_some_and(|w| w.join(p.trim_end_matches('/')).join(".git").exists())) {
+        return Err(format!("{p} is a git repository of its own; it is not discarded"));
+    }
     let (tracked, untracked): (Vec<&String>, Vec<&String>) =
         paths.iter().partition(|p| tree.as_ref().is_some_and(|t| t.get_path(Path::new(p.as_str())).is_ok()));
     if let (Some(commit), false) = (head.as_ref(), tracked.is_empty()) {
@@ -664,7 +679,7 @@ fn merge(repo: &Repository, branch: &str, ours: Oid, theirs: Oid, up_ref: &str, 
 
 /// Uncommitted changes to tracked files (new files do not count).
 fn local_edits(dir: &str) -> Result<Vec<String>, String> {
-    Ok(changes(dir)?.into_iter().filter(|c| c.status != "new").map(|c| c.path).take(8).collect())
+    Ok(changes(dir)?.into_iter().filter(|c| c.status != "new" && c.status != "repository").map(|c| c.path).take(8).collect())
 }
 
 /// Refuses commits and pulls while a merge or rebase waits for its conflicts.
@@ -1481,6 +1496,27 @@ mod tests {
         reset_to(dir, &first).unwrap();
         let left: Vec<String> = changes(dir).unwrap().into_iter().map(|c| c.path).collect();
         assert_eq!(left, vec!["b.txt", "c.txt"]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_repository_inside_is_listed_but_not_committed() {
+        let root = temp("nested");
+        Repository::init(&root).unwrap();
+        commit_file(&root, "a.txt", "a\n", "start");
+        fs::create_dir_all(root.join("addons/lib")).unwrap();
+        Repository::init(root.join("addons/lib")).unwrap();
+        fs::write(root.join("addons/lib/x.lua"), "x\n").unwrap();
+        fs::write(root.join("b.txt"), "b\n").unwrap();
+        let dir = root.to_str().unwrap();
+        let listed: Vec<(String, &str)> = changes(dir).unwrap().into_iter().map(|c| (c.path, c.status)).collect();
+        assert_eq!(listed, vec![("addons/lib".to_owned(), "repository"), ("b.txt".to_owned(), "new")]);
+        let e = commit(dir, &["addons/lib".to_owned(), "b.txt".to_owned()], "both", Some("Test"), Some("test@example.com")).unwrap_err();
+        assert!(e.contains("addons/lib"), "{e}");
+        assert!(discard(dir, &["addons/lib".to_owned()]).is_err());
+        commit(dir, &["b.txt".to_owned()], "b", Some("Test"), Some("test@example.com")).unwrap();
+        let left: Vec<String> = changes(dir).unwrap().into_iter().map(|c| c.path).collect();
+        assert_eq!(left, vec!["addons/lib"]);
         let _ = fs::remove_dir_all(root);
     }
 }

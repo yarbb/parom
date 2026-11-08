@@ -22,7 +22,8 @@ export interface BranchInfo {
 
 export interface FileChange {
   path: string;
-  status: 'new' | 'modified' | 'deleted' | 'renamed';
+  /** "repository": a folder with its own .git; listed, never committed here. */
+  status: 'new' | 'modified' | 'deleted' | 'renamed' | 'repository';
   /** Renamed: where the file was (same content). */
   old_path?: string;
 }
