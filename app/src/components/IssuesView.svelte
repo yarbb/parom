@@ -58,6 +58,8 @@
   let busy = $state(false);
   let error = $state('');
   trackErrors('github', () => error);
+  /** A background refresh failed (offline, timed out): the last list stays, with a quiet note. */
+  let stale = $state(false);
   let confirmMerge = $state(false);
   let creating = $state(false);
 
@@ -78,7 +80,8 @@
 
   const ms = (iso: string) => Date.parse(iso);
 
-  async function load() {
+  /** `quiet`: a background refresh; failing keeps what is shown instead of an error. */
+  async function load(quiet = false) {
     const want = { kind, slug, filter };
     const key = `${slug}:${kind}:${filter}`;
     const cached = listCache.get(key);
@@ -90,7 +93,9 @@
       }
     }
     loading = !cached;
-    error = '';
+    if (!quiet) {
+      error = '';
+    }
     try {
       const list = keepUnchanged(await listItems(slug, kind, filter), listCache.get(key), (i) => i.number);
       listCache.set(key, list);
@@ -100,10 +105,16 @@
           selected = list[0]?.number ?? null;
         }
       }
+      stale = false;
     } catch (e) {
-      error = String(e);
-      items = [];
-      selected = null;
+      if (quiet || cached) {
+        // Keep the list shown; the next refresh tries again.
+        stale = true;
+      } else {
+        error = String(e);
+        items = [];
+        selected = null;
+      }
     } finally {
       loading = false;
     }
@@ -148,10 +159,10 @@
     if (busy) {
       return;
     }
-    void load();
+    void load(true);
     void counts.load(slug);
     if (selected !== null) {
-      void loadDetail(selected);
+      void loadDetail(selected, true);
     }
   }
 
@@ -164,7 +175,7 @@
 
   const detailKey = (n: number) => `${slug}:${kind}:${n}`;
 
-  async function loadDetail(n: number) {
+  async function loadDetail(n: number, quiet = false) {
     const cached = detailCache.get(detailKey(n));
     comments = cached?.comments ?? [];
     pull = cached?.pull ?? null;
@@ -185,7 +196,11 @@
         checks = runs;
       }
     } catch (e) {
-      error = String(e);
+      if (quiet) {
+        stale = true;
+      } else {
+        error = String(e);
+      }
     }
   }
 
@@ -330,6 +345,9 @@
         </button>
       </div>
     </div>
+    {#if stale}
+      <p class="muted stale" title={t('github.refresh_failed_hint')}>{t('github.refresh_failed')}</p>
+    {/if}
     {#key filter}
     <div class="list">
       {#each shown as i (i.number)}
@@ -688,5 +706,12 @@
   .note {
     padding: 12px 14px;
     margin: 0;
+  }
+
+  .stale {
+    margin: 0;
+    padding: 4px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 11.5px;
   }
 </style>
