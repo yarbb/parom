@@ -252,6 +252,8 @@
   "changes.open_default": "Open with default program",
   "changes.renamed_from": "Moved from {path}",
   "changes.renamed_same": "Same content: only the place changed.",
+  "changes.nested_repo": "A separate git repository",
+  "changes.nested_repo_body": "{path} has its own .git folder, so git does not look inside it and its files are not committed here. To commit its files, delete {path}/.git; to leave it out, right-click → ignore it.",
   "changes.moved": "The files of site {site} moved to {folder} in this repository. Use that folder for the site? Until then a sync would upload the new folder next to them.",
   "changes.moved_use": "Update the site",
   "empty.first.title": "Connect your first server",

@@ -29,16 +29,19 @@
   let diffError = $state('');
   let loading = $state(false);
 
-  const letter: Record<FileChange['status'], string> = { new: 'A', modified: 'M', deleted: 'D', renamed: 'R' };
+  const letter: Record<FileChange['status'], string> = { new: 'A', modified: 'M', deleted: 'D', renamed: 'R', repository: 'G' };
   const tone: Record<FileChange['status'], string> = {
     new: 'status-new',
     modified: 'status-modified',
     deleted: 'status-removed',
     renamed: 'status-modified',
+    repository: 'muted',
   };
 
-  let included = $derived(repo.changes.filter((c) => !excluded.has(c.path)));
-  let allChecked = $derived(repo.changes.length > 0 && included.length === repo.changes.length);
+  /** Folders that are repositories of their own are listed but never committed here. */
+  let committable = $derived(repo.changes.filter((c) => c.status !== 'repository'));
+  let included = $derived(committable.filter((c) => !excluded.has(c.path)));
+  let allChecked = $derived(committable.length > 0 && included.length === committable.length);
   let current = $derived(repo.changes.find((c) => c.path === selected));
 
   // Only the rows in view and some above and below are drawn, as GitHub
@@ -108,7 +111,7 @@
     const path = selected;
     void repo.changes;
     void repo.touched;
-    if (!path || current?.status === 'renamed') {
+    if (!path || current?.status === 'renamed' || current?.status === 'repository') {
       diff = null;
       shownPath = '';
       return;
@@ -127,7 +130,7 @@
   });
 
   function toggleAll(on: boolean) {
-    excluded = on ? new Set() : new Set(repo.changes.map((c) => c.path));
+    excluded = on ? new Set() : new Set(committable.map((c) => c.path));
   }
 
   function toggle(path: string, on: boolean) {
@@ -162,15 +165,15 @@
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: t('changes.discard'), danger: true, action: () => (discarding = changePaths(c)) },
+        { label: t('changes.discard'), danger: true, disabled: c.status === 'repository', action: () => (discarding = changePaths(c)) },
         {
           label: t('changes.discard_all'),
           danger: true,
-          disabled: repo.changes.length < 2,
-          action: () => (discarding = repo.changes.flatMap(changePaths)),
+          disabled: committable.length < 2,
+          action: () => (discarding = committable.flatMap(changePaths)),
         },
         { separator: true, label: '' },
-        { label: t('changes.ignore_file'), disabled: c.path === '.gitignore', action: () => void ignore(`/${c.path}`) },
+        { label: t('changes.ignore_file'), disabled: c.path === '.gitignore', action: () => void ignore(c.status === 'repository' ? `/${c.path}/` : `/${c.path}`) },
         ...(ext ? [{ label: t('changes.ignore_ext', { ext }), action: () => void ignore(`*${ext}`) }] : []),
         { separator: true, label: '' },
         { label: t('changes.copy_path'), action: () => void navigator.clipboard?.writeText(full(c.path)) },
@@ -237,7 +240,12 @@
               oncontextmenu={(e) => openMenu(e, c)}
             >
               <span class="tick" role="presentation" onclick={(e) => e.stopPropagation()}>
-                <Checkbox bind:checked={() => !excluded.has(c.path), (on) => toggle(c.path, on)} label="" title={c.path} />
+                <Checkbox
+                  bind:checked={() => c.status !== 'repository' && !excluded.has(c.path), (on) => toggle(c.path, on)}
+                  label=""
+                  title={c.status === 'repository' ? t('changes.nested_repo') : c.path}
+                  disabled={c.status === 'repository'}
+                />
               </span>
               <span class="mono letter {tone[c.status]}">{letter[c.status]}</span>
               {#if prefs.value.changesFullPaths}
@@ -272,7 +280,11 @@
     onEnd={() => prefs.persist()}
     onReset={() => resetCol('ghChanges')}
   />
-  {#if current?.old_path}
+  {#if current?.status === 'repository'}
+    <div class="placeholder">
+      <EmptyState icon={FileDiffIcon} title={t('changes.nested_repo')} text={t('changes.nested_repo_body', { path: current.path })} />
+    </div>
+  {:else if current?.old_path}
     <div class="placeholder">
       <EmptyState icon={FileDiffIcon} title={t('changes.renamed_from', { path: current.old_path })} text={t('changes.renamed_same')} />
     </div>
