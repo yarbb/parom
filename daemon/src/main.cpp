@@ -44,6 +44,10 @@ int main(int argc, char** argv)
 	}
 
 	std::ios::sync_with_stdio(false);
+	// std::cin is tied to std::cout: every read flushes std::cout first, from
+	// the reader thread and outside StdoutOutput's lock. Racing the main
+	// thread's writes, that flush could send a reply twice.
+	std::cin.tie(nullptr);
 
 	StdoutOutput out;
 	paromd::Daemon daemon(out);
