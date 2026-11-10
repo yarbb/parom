@@ -23,6 +23,7 @@ import {
   planSync,
   pullCandidates,
   serverState,
+  type Change,
   type Edits,
   type ListedFile,
   type Plan,
@@ -60,6 +61,8 @@ export interface Check {
    * next to them, so it waits until the site follows them.
    */
   moved: string | null;
+  /** Managed files committed since the deployed commit (not on the server yet), relative to the site's folder. */
+  undeployed: Change[];
 }
 
 export interface Preview {
@@ -363,10 +366,12 @@ class SyncEngine {
       }
       const behind = state === 'behind' && marker?.sha ? await git.commitsBetween(dir, marker.sha, repo.head) : 0;
       let moved: string | null = null;
+      let undeployed: Change[] = [];
       if (known && marker?.sha && state !== 'up-to-date') {
         const changes = await git.diff(dir, marker.sha, repo.head);
         const paths = (status: string) => changes.filter((c) => c.status === status).map((c) => c.path);
         moved = movedFolder('', paths('deleted'), paths('added'));
+        undeployed = changes.filter((c) => c.status !== 'deleted' && classify(c.path, rules) === 'managed');
       }
       this.check = {
         site,
@@ -380,6 +385,7 @@ class SyncEngine {
         dirtyManaged: repo.dirty.filter((p) => classify(p, rules) === 'managed'),
         rules,
         moved,
+        undeployed,
       };
       if (state === 'no-marker' && site.marker === 'ask' && !this.#askedThisSession.has(site.id)) {
         this.#askedThisSession.add(site.id);
