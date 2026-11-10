@@ -20,6 +20,13 @@ class Ui {
   log = $state(false);
   /** Open sign-in dialog: device flow ("browser") or personal access token. */
   githubSignIn = $state<'' | 'browser' | 'token'>('');
+  /** "Show in Files tab": the local pane opens `dir` (or the nearest folder above it that exists) and selects `name`. */
+  revealLocal = $state<{ dir: string; name: string; n: number } | null>(null);
+
+  showInFiles(dir: string, name: string) {
+    this.revealLocal = { dir, name, n: (this.revealLocal?.n ?? 0) + 1 };
+    this.tab = 'files';
+  }
   /** Synchronized browsing (Ctrl+Y): both panes follow each other inside the site's folders; remembered in prefs. */
   get syncBrowse(): boolean {
     return prefs.value.syncBrowse;

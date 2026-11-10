@@ -24,6 +24,8 @@ export interface Prefs {
   forwardSlashes: boolean;
   /** Tint folders grey that exist with the same name in both panes. */
   markTwins: boolean;
+  /** Local files with uncommitted changes or not deployed yet are coloured (and folders holding them get a dot). */
+  markChanged: boolean;
   /** A panel under each list shows the folder clicked last (local, server). */
   localPreview: boolean;
   serverPreview: boolean;
@@ -121,6 +123,7 @@ export const defaultPrefs: Prefs = {
   showHidden: true,
   forwardSlashes: false,
   markTwins: false,
+  markChanged: true,
   localPreview: true,
   serverPreview: true,
   twinsAsked: false,

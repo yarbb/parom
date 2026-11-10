@@ -17,6 +17,7 @@
   import Modal from './Modal.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { openInEditor } from '../lib/local';
+  import { ui } from '../lib/ui.svelte';
   import { colWidth, prefs, resetCol, resizeCol } from '../lib/prefs.svelte';
 
   // Board Bd: uncommitted files with checkboxes, commit box, diff.
@@ -178,6 +179,7 @@
         { separator: true, label: '' },
         { label: t('changes.copy_path'), action: () => void navigator.clipboard?.writeText(full(c.path)) },
         { label: t('changes.copy_relative'), action: () => void navigator.clipboard?.writeText(c.path) },
+        { label: t('changes.show_in_files'), action: () => ui.showInFiles(folderOf(c.path), c.path.replace(/^.*\//, '')) },
         { label: t('github.repo.open'), action: () => void openInEditor(folderOf(c.path), '') },
         {
           label: t('changes.open_default'),

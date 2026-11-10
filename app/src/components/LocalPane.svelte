@@ -3,7 +3,7 @@
   import { hint } from '../lib/keys';
   import EmptyState from './EmptyState.svelte';
   import FolderOpen from '@lucide/svelte/icons/folder-open';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { invoke, isTauri } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import { localJoin, selectionSummary, type FileRow } from '../lib/files';
@@ -24,6 +24,8 @@
   import { ignoreItems } from '../lib/ignoremenu.svelte';
   import { inRepo } from '../lib/ignorefiles';
   import { repo } from '../lib/repo.svelte';
+  import { changed } from '../lib/changed.svelte';
+  import { ui } from '../lib/ui.svelte';
 
   interface Props {
     /** Current directory and separator, for downloads into it. */
@@ -69,14 +71,21 @@
     }
   });
 
+  /** Each load counts; an older one that answers late (the start-up folder) does not replace a newer one. */
+  let loads = 0;
+
   /** Opens a folder; `quiet` (synchronized browsing) leaves the pane as it is when that fails. */
   export async function load(dir: string, quiet = false) {
+    const mine = ++loads;
     loading = true;
     if (!quiet) {
       error = '';
     }
     try {
       const res = await listLocal(dir);
+      if (mine !== loads) {
+        return;
+      }
       path = res.path;
       parent = res.parent;
       separator = res.separator;
@@ -86,12 +95,56 @@
         void prefs.set('lastLocalDir', res.path);
       }
     } catch (e) {
-      if (!quiet) {
+      if (!quiet && mine === loads) {
         error = String(e);
       }
     } finally {
-      loading = false;
+      if (mine === loads) {
+        loading = false;
+      }
     }
+  }
+
+  /** The row to select after "Show in Files tab". */
+  let focusName = $state<{ name: string; n: number } | null>(null);
+
+  // "Show in Files tab" from Changes: the file's folder, or the nearest one
+  // above it that still exists (a deleted file's folder may be gone).
+  $effect(() => {
+    const want = ui.revealLocal;
+    if (!want) {
+      return;
+    }
+    untrack(() => void revealLocal(want));
+  });
+
+  async function revealLocal(want: { dir: string; name: string; n: number }) {
+    let dir = want.dir;
+    let name = want.name;
+    for (;;) {
+      const ok = await listLocal(dir).then(
+        () => true,
+        () => false,
+      );
+      if (ok || ui.revealLocal?.n !== want.n) {
+        break;
+      }
+      const up = dir.replace(/[\\/]+$/, '');
+      const cut = Math.max(up.lastIndexOf('/'), up.lastIndexOf('\\'));
+      if (cut < 0 || /^[A-Za-z]:$/.test(up)) {
+        return;
+      }
+      name = up.slice(cut + 1);
+      dir = up.slice(0, cut) || '/';
+      if (/^[A-Za-z]:$/.test(dir)) {
+        dir += '\\';
+      }
+    }
+    if (ui.revealLocal?.n !== want.n) {
+      return;
+    }
+    focusName = { name, n: want.n };
+    await load(dir);
   }
 
   export function refresh() {
@@ -132,6 +185,16 @@
   let op = $state<FileOp | null>(null);
   let labeling = $state<{ keys: string[]; names: string[] } | null>(null);
   const remoteDirs = $derived(new Set(twins.remote));
+  /** Files that still need uploading (lib/changed.svelte.ts). */
+  const changedMark = (row: FileRow): { tone: 'modified' | 'new' | 'folder'; note: string } | null => {
+    if (row.dir) {
+      const kind = changed.folder(path, row.name);
+      return kind ? { tone: 'folder', note: t('files.changed_inside') } : null;
+    }
+    const m = changed.file(path, row.name);
+    return m ? { tone: m.status, note: t(m.kind === 'uncommitted' ? 'files.changed_uncommitted' : 'files.changed_undeployed') } : null;
+  };
+
   const folderLabel = (row: FileRow) => {
     const c = labelOf(localLabelKey(localJoin(path, row.name, separator)));
     return c ? labelColors[c] : !atRoots && prefs.value.markTwins && remoteDirs.has(row.name) ? twinColor : null;
@@ -314,6 +377,8 @@
     onActivate={upload}
     folder={path}
     labelOf={folderLabel}
+    markOf={atRoots ? undefined : changedMark}
+    {focusName}
     onDragOut={(rows) =>
       void dragOut(
         rows.map((r) => localJoin(path, r.name, separator)),

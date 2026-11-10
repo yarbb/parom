@@ -49,6 +49,10 @@
     unscanned?: (row: FileRow) => boolean;
     /** Colour label of a folder, if any. */
     labelOf?: (row: FileRow) => string | null;
+    /** Files that still need uploading are coloured, folders holding them get a dot; `note` goes in the tooltip. */
+    markOf?: (row: FileRow) => { tone: 'modified' | 'new' | 'folder'; note: string } | null;
+    /** Select and scroll to this row once it is listed (e.g. "Show in Files tab"); `n` repeats a request. */
+    focusName?: { name: string; n: number } | null;
     /** A row drag started (e.g. to prepare server files for dragging out). */
     onDragStart?: (rows: FileRow[]) => void;
     /** A row drag left the window: hand the rows to the system's drag and drop. */
@@ -73,6 +77,8 @@
     folder = '',
     unscanned,
     labelOf,
+    markOf,
+    focusName = null,
     onDragStart,
     onDragOut,
   }: Props = $props();
@@ -142,6 +148,34 @@
       }
     });
     previous = { folder, rows: now, selected: new Set() };
+  });
+
+  // "Show in Files tab": select the named row once the listing has it.
+  let focusedN = -1;
+  $effect(() => {
+    const want = focusName;
+    const rows = sorted;
+    if (!want || want.n === focusedN) {
+      return;
+    }
+    const at = rows.findIndex((r) => r.name === want.name);
+    if (at < 0) {
+      return;
+    }
+    focusedN = want.n;
+    untrack(() => {
+      const i = at + offset;
+      selection = new Set([i]);
+      anchor = i;
+      focusIndex = i;
+      if (viewport) {
+        const top = i * rowHeight;
+        if (top < viewport.scrollTop || top + rowHeight > viewport.scrollTop + height) {
+          viewport.scrollTop = Math.max(0, top - height / 3);
+          scrollTop = viewport.scrollTop;
+        }
+      }
+    });
   });
 
   $effect(() => {
@@ -399,7 +433,8 @@
           onkeydown={() => {}}
         >
           {#if row}
-            <span class="col name mono" title={row.name}><FileIcon name={row.name} dir={row.dir} link={row.link} unknown={!!unscanned?.(row)} color={row.dir ? (labelOf?.(row) ?? null) : null} /><span class="label">{row.name}</span></span>
+            {@const mark = markOf?.(row) ?? null}
+            <span class="col name mono" title={mark ? `${row.name} — ${mark.note}` : row.name}><FileIcon name={row.name} dir={row.dir} link={row.link} unknown={!!unscanned?.(row)} color={row.dir ? (labelOf?.(row) ?? null) : null} /><span class="label" class:status-modified={mark?.tone === 'modified'} class:status-new={mark?.tone === 'new'}>{row.name}</span>{#if mark?.tone === 'folder'}<span class="changed-dot" aria-hidden="true"></span>{/if}</span>
             <span class="col size mono muted">{row.dir ? '' : formatSize(row.size, decimal)}</span>
             <span class="col time mono muted" title={formatFullTime(row.time)}>{formatTime(row.time, Date.now(), iso)}</span>
           {:else}
@@ -518,6 +553,15 @@
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .changed-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    margin-left: -2px;
+    border-radius: 50%;
+    background: var(--modified);
   }
 
   .file-icon-up {
